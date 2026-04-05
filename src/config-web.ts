@@ -9,7 +9,6 @@ import type { Config } from "./config.js";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
 import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig } from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
-import { getConfigWebLandingHtml } from "./config-web-page.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
 import { createLogger } from "./logger.js";
@@ -905,8 +904,10 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
 
       if (request.method === "GET" && requestUrl.pathname === "/") {
         if (tryServeDashboardStatic(requestUrl, request, response, mergeCors)) return;
-        response.writeHead(200, mergeCors(request, { "content-type": "text/html; charset=utf-8" }));
-        response.end(getConfigWebLandingHtml());
+        response.writeHead(503, mergeCors(request, { "content-type": "text/plain; charset=utf-8" }));
+        response.end(
+          "open-im: web/dist is missing. Run npm run build in the repository root, then restart.\n",
+        );
         return;
       }
 
@@ -1174,7 +1175,7 @@ export async function runWebConfigFlow(options: { mode: WebFlowMode; cwd: string
   if (getWebDistDir()) {
     log.info("Full dashboard UI is bundled (same origin as API).");
   } else {
-    log.info(`API base: ${apiUrl} — install has no web/dist; minimal landing page only.`);
+    log.info(`API base: ${apiUrl} — install has no web/dist; GET / returns 503 until you run npm run build.`);
   }
   if (started.loginUrl) {
     log.info(`Remote login (first visit): ${started.loginUrl}`);

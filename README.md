@@ -58,13 +58,13 @@ The published npm package includes **`web/dist`**. `open-im start` or `open-im d
 - Default dashboard URL: **`http://127.0.0.1:39282`** (respects **`OPEN_IM_WEB_PORT`**)
 - Override the URL shown/opened by the CLI with **`OPEN_IM_PUBLIC_WEB_URL`** (e.g. behind a reverse proxy)
 
-If you install from source without running `npm run web:build`, `web/dist` may be missing and **`GET /`** falls back to a minimal landing page only.
+If you install from source without running **`npm run build`** (which runs `web:build` + `tsc`), `web/dist` may be missing and **`GET /`** returns **503** until you build. Use **`npm run build:ts`** for TypeScript-only iteration (skips the web bundle).
 
 ### Local HTTP service
 
 The running process listens on **`OPEN_IM_WEB_PORT`** (default **39282**):
 
-- **`GET /`** — built-in dashboard when `web/dist` is present; otherwise a minimal landing page
+- **`GET /`** — built-in dashboard when `web/dist` is present; otherwise **503** with a short plain-text hint
 - **`/assets/*`** — static assets for the bundled SPA (when present)
 - **`/api/*`** — JSON API used by the dashboard
 
@@ -88,7 +88,9 @@ In the repository:
 
 ```bash
 npm run web:dev    # Vite dev server; proxies /api to 127.0.0.1:39282
-npm run web:build  # Production build → web/dist (included in `npm publish` via `files`)
+npm run build      # web:build + tsc (use before running the compiled CLI with dashboard)
+npm run build:ts   # tsc only (no web/dist refresh)
+npm run web:build  # web/dist only
 ```
 
 More detail: [CLAUDE.md](./CLAUDE.md), [AGENTS.md](./AGENTS.md).

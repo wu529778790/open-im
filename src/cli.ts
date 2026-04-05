@@ -158,7 +158,7 @@ async function cmdDashboard(): Promise<void> {
   const publicUrl = getPublicWebDashboardUrl();
   console.log(`\nWeb dashboard: ${publicUrl}`);
   if (!getWebDistDir()) {
-    console.log("Note: web/dist not found — only minimal landing page at GET /. Run npm run web:build or use the published npm package.");
+    console.log("Note: web/dist not found — GET / returns 503 until you run npm run build (or npm run web:build), or use the published npm package.");
   }
   if (server.loginUrl) {
     console.log(`Remote login: ${server.loginUrl}`);

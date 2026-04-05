@@ -16,11 +16,13 @@ const MIME: Record<string, string> = {
   ".map": "application/json",
 };
 
-/** npm 包内 `web/dist`（与 dist/*.js 相对路径固定） */
+/** npm 包内 `web/dist`（相对本文件 `../web/dist`；开发时亦可匹配 `process.cwd()/web/dist`） */
 export function getWebDistDir(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
-  const candidate = join(here, "..", "web", "dist");
-  if (existsSync(join(candidate, "index.html"))) return candidate;
+  const fromPackage = join(here, "..", "web", "dist");
+  if (existsSync(join(fromPackage, "index.html"))) return fromPackage;
+  const fromCwd = join(process.cwd(), "web", "dist");
+  if (resolve(fromCwd) !== resolve(fromPackage) && existsSync(join(fromCwd, "index.html"))) return fromCwd;
   return null;
 }
 

@@ -184,8 +184,6 @@ jobs:
 
           npm pkg set version="$VERSION"
 
-      - run: npm run web:build
-
       - run: npm run build
 
       - run: npm test

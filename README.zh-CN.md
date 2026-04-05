@@ -58,13 +58,13 @@ open-im start
 - 默认控制台地址：本机 **`http://127.0.0.1:39282`**（随 **`OPEN_IM_WEB_PORT`** 变化）
 - 若需自定义打开的链接（例如反向代理后的地址），可设置 **`OPEN_IM_PUBLIC_WEB_URL`**
 
-若从源码安装且未执行 `npm run web:build`，可能没有 `web/dist`，此时 **`GET /`** 仅为极简落地页。
+若从源码安装且未执行 **`npm run build`**（内含 `web:build`），可能没有 `web/dist`，此时 **`GET /`** 会返回 **503** 直至构建完成。仅改 TypeScript 时可使用 **`npm run build:ts`** 跳过前端构建。
 
 ### 本机 HTTP 服务
 
 进程监听 **`OPEN_IM_WEB_PORT`**（默认 **39282**）：
 
-- **`GET /`** — 有 `web/dist` 时返回内置仪表盘；否则为极简落地页
+- **`GET /`** — 有 `web/dist` 时返回内置仪表盘；否则 **503** 纯文本提示
 - **`/assets/*`** — 内置前端静态资源（有构建产物时）
 - **`/api/*`** — JSON API
 
@@ -86,7 +86,9 @@ export OPEN_IM_WEB_HOST=0.0.0.0
 
 ```bash
 npm run web:dev    # Vite；将 /api 代理到 127.0.0.1:39282
-npm run web:build  # 构建到 web/dist（`npm publish` 时会随包打入）
+npm run build      # web:build + tsc；发布前与日常请用此命令
+npm run build:ts   # 仅 tsc（不更新 web/dist）
+npm run web:build  # 仅构建 web/dist
 ```
 
 更多开发说明见 [CLAUDE.md](./CLAUDE.md)、[AGENTS.md](./AGENTS.md)。

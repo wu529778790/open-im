@@ -14,7 +14,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run web:build && tsc",
+    "build:ts": "tsc",
     "dev": "tsx src/index.ts",
     "init": "tsx src/cli.ts init",
     "start": "node dist/cli.js start",
@@ -26,7 +27,7 @@
     "lint": "eslint src",
     "web:build": "npm --prefix web run build",
     "web:dev": "npm --prefix web run dev",
-    "prepublishOnly": "npm run web:build && npm run build"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "dingtalk",
