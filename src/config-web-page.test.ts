@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getConfigWebLandingHtml } from "./config-web-page.js";
-import { getPublicWebDashboardUrl, PUBLIC_WEB_DASHBOARD_DEFAULT } from "./constants.js";
+import { getDefaultLocalDashboardUrl, getPublicWebDashboardUrl } from "./constants.js";
 
 describe("config web landing page", () => {
   it("does not embed legacy full-dashboard markers", () => {
@@ -10,11 +10,11 @@ describe("config web landing page", () => {
     expect(html).not.toContain("Local AI bridge");
   });
 
-  it("links to the public web dashboard URL", () => {
+  it("links to the dashboard URL and explains missing bundle", () => {
     const url = getPublicWebDashboardUrl();
     const html = getConfigWebLandingHtml();
     expect(html).toContain(url);
-    expect(url).toContain("open-im");
+    expect(html).toContain("web/dist");
   });
 
   it("includes API origin script hook", () => {
@@ -23,7 +23,8 @@ describe("config web landing page", () => {
     expect(html).toContain("location.origin");
   });
 
-  it("defaults public dashboard host", () => {
-    expect(PUBLIC_WEB_DASHBOARD_DEFAULT).toBe("https://open-im.shenzjd.com");
+  it("defaults public dashboard to local http", () => {
+    expect(getDefaultLocalDashboardUrl()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(getPublicWebDashboardUrl()).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   });
 });

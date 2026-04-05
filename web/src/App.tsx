@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createRequest, normalizeServerUrl } from "./api.js";
+import {
+  createRequest,
+  isLoopbackHttpApi,
+  isRemoteHttpsPage,
+  normalizeServerUrl,
+} from "./api.js";
 import { ApiProvider } from "./context/ApiContext.js";
 import { DEFAULT_SERVER_URL, STORAGE_KEY_SERVER } from "./constants.js";
 import { Dashboard } from "./Dashboard.js";
 
+/** 非本机 HTTPS 页（如第三方托管）无法默认连本机 HTTP */
+function defaultServerUrlForPage(): string {
+  if (typeof window === "undefined") return DEFAULT_SERVER_URL;
+  if (isRemoteHttpsPage()) return "";
+  return DEFAULT_SERVER_URL;
+}
+
 function initialServerUrl(): string {
-  if (typeof localStorage === "undefined") return DEFAULT_SERVER_URL;
-  return localStorage.getItem(STORAGE_KEY_SERVER) ?? DEFAULT_SERVER_URL;
+  if (typeof localStorage === "undefined") return defaultServerUrlForPage();
+  const saved = localStorage.getItem(STORAGE_KEY_SERVER);
+  if (saved && !(isRemoteHttpsPage() && isLoopbackHttpApi(saved))) return saved;
+  return defaultServerUrlForPage();
 }
 
 export function App() {
@@ -18,6 +32,15 @@ export function App() {
 
   const connectWithUrl = useCallback(async (raw: string) => {
     const url = normalizeServerUrl(raw);
+    if (isRemoteHttpsPage() && url && isLoopbackHttpApi(url)) {
+      setConnMsg({
+        text:
+          "HTTPS 页面不能直连 http://127.0.0.1。请使用 open-im 内置页面（http://127.0.0.1:39282）或 HTTPS 隧道 URL。",
+        ok: false,
+      });
+      setApiBase("");
+      return;
+    }
     if (!url && !import.meta.env.DEV) {
       setConnMsg({ text: "Enter server URL (e.g. http://127.0.0.1:39282)", ok: false });
       return;
@@ -42,7 +65,9 @@ export function App() {
   };
 
   useEffect(() => {
-    void connectWithUrl(initialServerUrl());
+    const raw = initialServerUrl();
+    if (!raw.trim()) return;
+    void connectWithUrl(raw);
   }, [connectWithUrl]);
 
   return (
@@ -56,7 +81,7 @@ export function App() {
             id="serverUrlInput"
             className="connection-input"
             type="text"
-            placeholder={DEFAULT_SERVER_URL}
+            placeholder={isRemoteHttpsPage() ? "https://… (tunnel) or open built-in http://127.0.0.1:39282" : DEFAULT_SERVER_URL}
             autoComplete="url"
             spellCheck={false}
             defaultValue={initialServerUrl()}

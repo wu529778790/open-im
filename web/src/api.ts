@@ -24,3 +24,27 @@ export function normalizeServerUrl(raw: string): string {
   if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
   return s.replace(/\/$/, "");
 }
+
+/**
+ * 当前页为 https 且主机不是本机（例如第三方托管的静态页）。
+ * 此类页面无法向 `http://127.0.0.1` 发请求（混合内容），与 CORS 无关。
+ */
+export function isRemoteHttpsPage(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.location.protocol !== "https:") return false;
+  const h = window.location.hostname;
+  return h !== "localhost" && h !== "127.0.0.1";
+}
+
+/** 是否为指向本机环回的 HTTP API（浏览器在 https 页面上会拦截） */
+export function isLoopbackHttpApi(url: string): boolean {
+  const n = normalizeServerUrl(url);
+  if (!n) return false;
+  try {
+    const u = new URL(n);
+    if (u.protocol !== "http:") return false;
+    return u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}

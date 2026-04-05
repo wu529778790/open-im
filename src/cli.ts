@@ -4,6 +4,7 @@ import { main, needsSetup, runInteractiveSetup } from "./index.js";
 import { loadConfig } from "./config.js";
 import { checkAndUpdate } from "./check-update.js";
 import { getPublicWebDashboardUrl } from "./constants.js";
+import { getWebDistDir } from "./config-web-static.js";
 import { getWebConfigUrl, runWebConfigFlow } from "./config-web.js";
 import { getManagerStatus, startManagerProcess, stopManagerProcess } from "./manager-control.js";
 import { stopBackgroundService } from "./service-control.js";
@@ -146,9 +147,13 @@ async function cmdDashboard(): Promise<void> {
   const { startWebConfigServer } = await import("./config-web.js");
   const server = await startWebConfigServer({ mode: "dev", cwd: process.cwd(), persistent: true });
   const publicUrl = getPublicWebDashboardUrl();
-  const apiUrl = server.loginUrl ?? server.url;
   console.log(`\nWeb dashboard: ${publicUrl}`);
-  console.log(`Local API: ${apiUrl}`);
+  if (!getWebDistDir()) {
+    console.log("Note: web/dist not found — only minimal landing page at GET /. Run npm run web:build or use the published npm package.");
+  }
+  if (server.loginUrl) {
+    console.log(`Remote login: ${server.loginUrl}`);
+  }
   console.log("Press Ctrl+C to close.\n");
   await server.waitForResult;
 }
@@ -165,13 +170,11 @@ Commands:
   dev       Run in the foreground for debugging
   dashboard Open the web dashboard (keeps running until Ctrl+C)
 
-Web dashboard (full UI):
-  ${getPublicWebDashboardUrl()}
-  Local API (paste in dashboard):
-  http://127.0.0.1:39282
-  - "start" keeps the API available while the service runs
-  - "dashboard" runs the API server only (use web dashboard + local API URL)
-  - "dev" opens web console during initial setup
+Web dashboard (bundled SPA when web/dist is installed):
+  ${getPublicWebDashboardUrl()}  (same origin as API; default port 39282)
+  - "start" keeps the dashboard and API available while the service runs
+  - "dashboard" runs only the web config server (no bridge)
+  - "dev" may open the browser during initial setup
 
 Options:
   -h, --help    Show this help message

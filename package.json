@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "web/dist",
     "README.md",
     "LICENSE"
   ],
@@ -25,7 +26,7 @@
     "lint": "eslint src",
     "web:build": "npm --prefix web run build",
     "web:dev": "npm --prefix web run dev",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run web:build && npm run build"
   },
   "keywords": [
     "dingtalk",

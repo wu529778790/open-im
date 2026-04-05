@@ -12,7 +12,7 @@ Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, Ding
 - **Streaming replies** — live AI output where the platform supports it
 - **Media** — images, files, voice, and video for analysis (platform-dependent)
 - **Session isolation** — per-user state; `/new` resets the AI session
-- **Web configuration** — full UI on the hosted dashboard; local process exposes HTTP API on port `39282`
+- **Web configuration** — full dashboard **bundled in the npm package** (`web/dist`), served from **`http://127.0.0.1:39282`** (same origin as the API)
 - **Chat commands** — `/help`, `/new`, `/sessions`, `/resume`, `/cd`, `/pwd`, `/status`, `/allow`, `/deny`
 
 ## Requirements
@@ -47,24 +47,25 @@ Configuration file: `~/.open-im/config.json`
 | `open-im dev` | Foreground mode for debugging |
 | `open-im dashboard` | Keep only the local config HTTP server (no bridge) |
 
-After `start`, the CLI prints the **web dashboard** URL and the **local API** base (`http://127.0.0.1:39282` by default).
+After `start`, the CLI prints the **web dashboard** URL (`http://127.0.0.1:39282` by default, same as the API base).
 
 ## Web configuration
 
-### Hosted dashboard (full UI)
+### Bundled dashboard (full UI)
 
-The npm package does **not** ship the large in-browser dashboard as static HTML. Use the **web console** for the full UI (overview, platforms, AI settings, JSON editors, service controls).
+The published npm package includes **`web/dist`**. `open-im start` or `open-im dashboard` serves the **full SPA** (overview, platforms, AI, JSON, service controls) from the local HTTP server. Open **`http://127.0.0.1:<port>`** (default **39282**) in your browser; the page is **same-origin** with the API, so you usually do not need to paste a Server URL.
 
-- Default URL: **https://open-im.shenzjd.com**
-- Override with environment variable: **`OPEN_IM_PUBLIC_WEB_URL`**
+- Default dashboard URL: **`http://127.0.0.1:39282`** (respects **`OPEN_IM_WEB_PORT`**)
+- Override the URL shown/opened by the CLI with **`OPEN_IM_PUBLIC_WEB_URL`** (e.g. behind a reverse proxy)
 
-In the web console, set the **server address** to your machine’s API base, e.g. `http://127.0.0.1:39282` or `http://<your-lan-ip>:39282`.
+If you install from source without running `npm run web:build`, `web/dist` may be missing and **`GET /`** falls back to a minimal landing page only.
 
 ### Local HTTP service
 
 The running process listens on **`OPEN_IM_WEB_PORT`** (default **39282**):
 
-- **`GET /`** — small landing page with a link to the web console and the current API origin
+- **`GET /`** — built-in dashboard when `web/dist` is present; otherwise a minimal landing page
+- **`/assets/*`** — static assets for the bundled SPA (when present)
 - **`/api/*`** — JSON API used by the dashboard
 
 ### Remote access
@@ -76,7 +77,7 @@ export OPEN_IM_WEB_HOST=0.0.0.0
 # Optional: skip cookie login on trusted networks (see security implications in docs)
 # export OPEN_IM_ALLOW_REMOTE_API=true
 # Optional: restrict CORS origins (comma-separated)
-# export OPEN_IM_CORS_ORIGINS=https://open-im.shenzjd.com
+# export OPEN_IM_CORS_ORIGINS=http://127.0.0.1:39282
 ```
 
 If the server is not bound to `127.0.0.1`, it may print a **one-time login URL** (`login_token=…`) for first-time browser access.
@@ -87,10 +88,8 @@ In the repository:
 
 ```bash
 npm run web:dev    # Vite dev server; proxies /api to 127.0.0.1:39282
-npm run web:build  # Production build → web/dist
+npm run web:build  # Production build → web/dist (included in `npm publish` via `files`)
 ```
-
-**GitHub Pages (this repo’s workflow):** in the repository, enable **Settings → Pages → Build and deployment → Source: GitHub Actions** once. Then pushes that touch `web/` run `.github/workflows/deploy-web.yml`.
 
 More detail: [CLAUDE.md](./CLAUDE.md), [AGENTS.md](./AGENTS.md).
 

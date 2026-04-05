@@ -5,8 +5,8 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * 极简落地页：引导用户使用线上 Web 控制台，本进程仅提供 /api。
- * 不再将完整仪表盘 HTML 打入 npm 包。
+ * 无内置 `web/dist` 时的极简落地页（例如从源码运行且未执行 web:build）。
+ * 发布到 npm 的包通常包含构建产物，由 config-web-static 直接提供 SPA。
  */
 export function getConfigWebLandingHtml(): string {
   const web = escapeHtml(getPublicWebDashboardUrl());
@@ -25,8 +25,9 @@ export function getConfigWebLandingHtml(): string {
   </head>
   <body>
     <h1>open-im</h1>
-    <p>Web console: <a href="${web}">${web}</a></p>
-    <p>API base URL (paste in the web console): <code id="api"></code></p>
+    <p>No bundled dashboard (<code>web/dist</code> missing). Run <code>npm run web:build</code> in the repo, or install the published npm package.</p>
+    <p>Console URL when bundled: <a href="${web}">${web}</a></p>
+    <p>API base: <code id="api"></code></p>
     <script>document.getElementById("api").textContent = location.origin;</script>
   </body>
 </html>`;
