@@ -3,6 +3,7 @@
 import { main, needsSetup, runInteractiveSetup } from "./index.js";
 import { loadConfig } from "./config.js";
 import { checkAndUpdate } from "./check-update.js";
+import { getPublicWebDashboardUrl } from "./constants.js";
 import { getWebConfigUrl, runWebConfigFlow } from "./config-web.js";
 import { getManagerStatus, startManagerProcess, stopManagerProcess } from "./manager-control.js";
 import { stopBackgroundService } from "./service-control.js";
@@ -52,7 +53,8 @@ async function cmdStart(): Promise<void> {
   if (status.running && status.pid) {
     console.log("\nopen-im is already running in the background.");
     console.log(`  pid: ${status.pid}`);
-    console.log(`  config page: ${getWebConfigUrl()}`);
+    console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
+    console.log(`  local API: ${getWebConfigUrl()}`);
     process.exit(0);
   }
 
@@ -65,7 +67,8 @@ async function cmdStart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im started in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  config page: ${getWebConfigUrl()}`);
+  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
+  console.log(`  local API: ${getWebConfigUrl()}`);
   if (process.env.OPEN_IM_WEB_HOST && process.env.OPEN_IM_WEB_HOST !== "127.0.0.1") {
     console.log("");
     console.log("NOTE:");
@@ -110,7 +113,8 @@ async function cmdRestart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im restarted in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  config page: ${getWebConfigUrl()}`);
+  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
+  console.log(`  local API: ${getWebConfigUrl()}`);
   process.exit(0);
 }
 
@@ -141,8 +145,10 @@ async function cmdDashboard(): Promise<void> {
   // Start web config server in persistent mode (no timeout)
   const { startWebConfigServer } = await import("./config-web.js");
   const server = await startWebConfigServer({ mode: "dev", cwd: process.cwd(), persistent: true });
-  const url = server.loginUrl ?? server.url;
-  console.log(`\nDashboard: ${url}`);
+  const publicUrl = getPublicWebDashboardUrl();
+  const apiUrl = server.loginUrl ?? server.url;
+  console.log(`\nWeb dashboard: ${publicUrl}`);
+  console.log(`Local API: ${apiUrl}`);
   console.log("Press Ctrl+C to close.\n");
   await server.waitForResult;
 }
@@ -159,11 +165,13 @@ Commands:
   dev       Run in the foreground for debugging
   dashboard Open the web dashboard (keeps running until Ctrl+C)
 
-Local dashboard:
+Web dashboard (full UI):
+  ${getPublicWebDashboardUrl()}
+  Local API (paste in dashboard):
   http://127.0.0.1:39282
-  - "start" keeps it available while the service runs
-  - "dashboard" opens it standalone (use to modify existing config)
-  - "dev" opens it only during initial setup
+  - "start" keeps the API available while the service runs
+  - "dashboard" runs the API server only (use web dashboard + local API URL)
+  - "dev" opens web console during initial setup
 
 Options:
   -h, --help    Show this help message
