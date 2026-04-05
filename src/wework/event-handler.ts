@@ -26,6 +26,7 @@ import { buildErrorNote, buildProgressNote } from '../shared/message-note.js';
 import { createPlatformEventContext } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
+import { handleEnqueueResult } from '../shared/utils.js';
 import {
   decryptAes256CbcMedia,
   downloadMediaFromUrl,
@@ -285,7 +286,7 @@ export function setupWeWorkHandlers(
       await sendFinalMessages(ctx.chatId, ctx.msgId, content, note ?? '', ctx.toolId, senderCtx.reqId);
     },
     sendError: async (error) => {
-      await updateMessage(ctx.chatId, ctx.msgId, `Error: ${error}`, 'error', buildErrorNote(), ctx.toolId, senderCtx.reqId);
+      await updateMessage(ctx.chatId, ctx.msgId, `错误：${error}`, 'error', buildErrorNote(), ctx.toolId, senderCtx.reqId);
     },
   });
 
@@ -337,11 +338,7 @@ export function setupWeWorkHandlers(
       await handleAIRequest({ userId, chatId, prompt: nextPrompt, workDir, convId, replyToMessageId: undefined, signal });
     });
 
-    if (enqueueResult === 'rejected') {
-      await sendTextReply(chatId, 'Request queue is full. Please try again later.', reqId);
-    } else if (enqueueResult === 'queued') {
-      await sendTextReply(chatId, 'Your request is queued.', reqId);
-    }
+    await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text, reqId));
   }
 
   async function handleEvent(data: WeWorkCallbackMessage): Promise<void> {
@@ -361,7 +358,7 @@ export function setupWeWorkHandlers(
       // Check access control
       if (!ctx.accessControl.isAllowed(fromUser)) {
         log.warn(`Access denied for sender: ${fromUser}`);
-        await sendTextReply(chatId, `Access denied. Your WeWork user ID: ${fromUser}`, reqId);
+        await sendTextReply(chatId, `抱歉，您没有访问权限。\n您的 ID: ${fromUser}`, reqId);
         return;
       }
 

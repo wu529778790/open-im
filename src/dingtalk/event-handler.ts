@@ -15,6 +15,8 @@ import {
 import { ackMessage, downloadRobotMessageFile, registerSessionWebhook } from './client.js';
 import { createPlatformEventContext } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from '../platform/handle-ai-request.js';
+import { handleTextFlow } from '../platform/handle-text-flow.js';
+import { handleEnqueueResult } from '../shared/utils.js';
 import { setActiveChatId, setDingTalkActiveTarget } from '../shared/active-chats.js';
 import { setChatUser } from '../shared/chat-user-map.js';
 import { createLogger } from '../logger.js';
@@ -284,7 +286,7 @@ export function setupDingTalkHandlers(
     log.info(`[MSG] DingTalk message: type=${message.msgtype}, user=${userId}, chat=${chatId}`);
 
     if (!accessControl.isAllowed(userId)) {
-      await sendTextReply(chatId, `Access denied. Your DingTalk user ID: ${userId}`);
+      await sendTextReply(chatId, `抱歉，您没有访问权限。\n您的 ID: ${userId}`);
       ackMessage(callbackId, { denied: true });
       return;
     }
@@ -317,11 +319,7 @@ export function setupDingTalkHandlers(
       }
 
       const enqueueResult = await enqueuePrompt(userId, chatId, prompt, dingtalkTarget);
-      if (enqueueResult === 'rejected') {
-        await sendTextReply(chatId, 'Request queue is full. Please try again later.');
-      } else if (enqueueResult === 'queued') {
-        await sendTextReply(chatId, 'Your request is queued.');
-      }
+      await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text));
       ackMessage(callbackId, { queued: enqueueResult, kind });
       return;
     }
@@ -331,27 +329,31 @@ export function setupDingTalkHandlers(
       return;
     }
 
-    try {
-      const handled = await commandHandler.dispatch(text, chatId, userId, 'dingtalk', (userId, chatId, prompt, workDir, convId) => {
-        return handleAIRequest({ userId, chatId, prompt, workDir, convId });
-      });
-      if (handled) {
-        ackMessage(callbackId, { handled: true });
-        return;
-      }
-    } catch (err) {
-      log.error('Error in commandHandler.dispatch:', err);
+    // Use shared text flow with customEnqueue to carry dingtalkTarget
+    const processed = await handleTextFlow({
+      platform: 'dingtalk',
+      userId,
+      chatId,
+      text,
+      ctx,
+      handleAIRequest,
+      sendTextReply,
+      workDir: sessionManager.getWorkDir(userId),
+      convId: sessionManager.getConvId(userId),
+      queueFullMessage: '请求队列已满，请稍后再试。',
+      queuedMessage: '您的请求已排队等待。',
+      customEnqueue: (prompt) => {
+        return enqueuePrompt(userId, chatId, prompt, dingtalkTarget);
+      },
+    });
+
+    if (!processed) {
+      // Access denied
+      ackMessage(callbackId, { denied: true });
+      return;
     }
 
-    const enqueueResult = await enqueuePrompt(userId, chatId, text, dingtalkTarget);
-
-    if (enqueueResult === 'rejected') {
-      await sendTextReply(chatId, 'Request queue is full. Please try again later.');
-    } else if (enqueueResult === 'queued') {
-      await sendTextReply(chatId, 'Your request is queued.');
-    }
-
-    ackMessage(callbackId, { queued: enqueueResult });
+    ackMessage(callbackId, { handled: true });
   }
 
   return {

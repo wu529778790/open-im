@@ -270,12 +270,14 @@ export function runAITask(
           }
           settled = true;
           log.error(`Task error for user ${ctx.userId}: ${error}`);
-          if (aiCommand !== 'claude' && !isUsageLimitError(error)) {
+          if (isUsageLimitError(error)) {
+            // Usage limit errors: keep session for all tools (user can retry later)
+            log.warn(`Keeping ${aiCommand} session for user ${ctx.userId} after usage limit error`);
+          } else if (aiCommand !== 'claude') {
+            // Non-CLI errors for codex/codebuddy: reset session to avoid stale state
             if (ctx.convId) sessionManager.clearSessionForConv(ctx.userId, ctx.convId, aiCommand);
             else sessionManager.clearActiveToolSession(ctx.userId, aiCommand);
             log.warn(`Session reset for user ${ctx.userId} due to ${aiCommand} task error`);
-          } else if (aiCommand === 'codex' && isUsageLimitError(error)) {
-            log.warn(`Keeping codex session for user ${ctx.userId} after usage limit error`);
           }
           const friendlyError = hadSessionInvalid
             ? '当前 Claude 会话已失效，已自动执行 /new 重置会话，请重新发送刚才的问题。'

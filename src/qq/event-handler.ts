@@ -20,6 +20,7 @@ import { setChatUser } from "../shared/chat-user-map.js";
 import { createPlatformEventContext } from "../platform/create-event-context.js";
 import { createPlatformAIRequestHandler } from "../platform/handle-ai-request.js";
 import { handleTextFlow } from "../platform/handle-text-flow.js";
+import { handleEnqueueResult } from "../shared/utils.js";
 
 const log = createLogger("QQHandler");
 const QQ_THROTTLE_MS = 1200;
@@ -274,9 +275,9 @@ export function setupQQHandlers(
           workDir: sessionManager.getWorkDir(userId),
           convId: sessionManager.getConvId(userId),
           replyToMessageId: event.id,
-          accessDeniedMessage: (userId) => `Access denied. Your QQ user ID: ${userId}`,
-          queueFullMessage: "Request queue is full. Please try again later.",
-          queuedMessage: "Your request is queued.",
+          accessDeniedMessage: (userId) => `抱歉，您没有访问权限。\n您的 ID: ${userId}`,
+          queueFullMessage: "请求队列已满，请稍后再试。",
+          queuedMessage: "您的请求已排队等待。",
         });
 
         if (processed) {
@@ -292,7 +293,7 @@ export function setupQQHandlers(
 
         // Check access control
         if (!accessControl.isAllowed(userId)) {
-          await sendTextReply(chatId, `Access denied. Your QQ user ID: ${userId}`);
+          await sendTextReply(chatId, `抱歉，您没有访问权限。\n您的 ID: ${userId}`);
           return;
         }
 
@@ -318,11 +319,7 @@ export function setupQQHandlers(
           },
         );
 
-        if (enqueueResult === "rejected") {
-          await sendTextReply(chatId, "Request queue is full. Please try again later.");
-        } else if (enqueueResult === "queued") {
-          await sendTextReply(chatId, "Your request is queued.");
-        }
+        await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text));
 
         log.info(`QQ message handled: user=${userId}, chat=${chatId}, attachments=${event.attachments?.length ?? 0}`);
       }
@@ -330,7 +327,7 @@ export function setupQQHandlers(
       log.error('Unhandled error in QQ event handler:', err);
       try {
         if (chatId) {
-          await sendTextReply(chatId, 'Internal error occurred. Please try again.');
+          await sendTextReply(chatId, '内部错误，请重试。');
         }
       } catch { /* ignore */ }
     }

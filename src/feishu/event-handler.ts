@@ -21,6 +21,7 @@ import { buildProgressNote } from '../shared/message-note.js';
 import { createPlatformEventContext } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
+import { handleEnqueueResult } from '../shared/utils.js';
 import { isPermissionError, handlePermissionError } from './permission.js';
 
 const log = createLogger('FeishuHandler');
@@ -253,15 +254,13 @@ export function setupFeishuHandlers(
         const messageId = message.message_id ?? '';
         const msgType = message.message_type;
         const contentStr = message.content ?? '{}';
-        log.info(`[handleEvent] Parsed: chatId=${chatId}, msgType=${msgType}`);
-
         log.info(`Message: chatId=${chatId}, messageId=${messageId}, msgType=${msgType}`);
 
         // Parse message content
         let content: Record<string, unknown>;
         try {
           content = JSON.parse(contentStr);
-          log.info(`Parsed content:`, JSON.stringify(content).slice(0, 200));
+          log.debug(`Parsed content:`, JSON.stringify(content).slice(0, 200));
         } catch (err) {
           log.error('Failed to parse message content:', err);
           return;
@@ -296,7 +295,7 @@ export function setupFeishuHandlers(
             // 最后做一次首尾 trim，但不动中间的空格
             text = text.trim();
 
-            log.info(`[MSG] Type=text, User=${senderId}, Length=${text.length}, Content="${text}"`);
+            log.debug(`[MSG] Type=text, User=${senderId}, Length=${text.length}, Content="${text}"`);
           } else if (msgType === 'post') {
             // Feishu rich text/post messages - extract text content
             // 支持 post.content 或 zh_cn.content，content 可能是二维数组（段落→元素）
@@ -323,7 +322,7 @@ export function setupFeishuHandlers(
             }
 
             if (rawContent && Array.isArray(rawContent)) {
-              log.info(`[MSG] Post content structure:`, JSON.stringify(rawContent).slice(0, 500));
+              log.debug(`[MSG] Post content structure:`, JSON.stringify(rawContent).slice(0, 500));
 
               for (const section of rawContent) {
                 if (Array.isArray(section)) {
@@ -338,7 +337,7 @@ export function setupFeishuHandlers(
             }
 
             text = text.trim();
-            log.info(`[MSG] Type=post, User=${senderId}, Length=${text.length}, Content="${text}"`);
+            log.debug(`[MSG] Type=post, User=${senderId}, Length=${text.length}, Content="${text}"`);
           }
 
           if (!text) {
@@ -397,14 +396,10 @@ export function setupFeishuHandlers(
             const enqueueResult = ctx.requestQueue.enqueue(senderId, convId, prompt, async (p, signal) => {
               await handleAIRequest({ userId: senderId, chatId, prompt: p, workDir: work, convId, replyToMessageId: messageId, signal });
             });
-            if (enqueueResult === 'rejected') {
-              sendTextReply(chatId, 'Request queue is full. Please try again later.').catch((sendErr) => {
-                log.warn('[feishu] Failed to send queue full message for image:', sendErr);
-              });
-            } else if (enqueueResult === 'queued') {
-              sendTextReply(chatId, 'Your request is queued.').catch((sendErr) => {
-                log.warn('[feishu] Failed to send queued message for image:', sendErr);
-              });
+            try {
+              await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text));
+            } catch (sendErr) {
+              log.warn('[feishu] Failed to send enqueue result message for image:', sendErr);
             }
           } catch (err) {
             log.error('Error processing image message:', err);
@@ -446,14 +441,10 @@ export function setupFeishuHandlers(
             const enqueueResult = ctx.requestQueue.enqueue(senderId, convId, prompt, async (p, signal) => {
               await handleAIRequest({ userId: senderId, chatId, prompt: p, workDir, convId, replyToMessageId: messageId, signal });
             });
-            if (enqueueResult === 'rejected') {
-              sendTextReply(chatId, 'Request queue is full. Please try again later.').catch((sendErr) => {
-                log.warn(`[feishu] Failed to send queue full message for ${msgType}:`, sendErr);
-              });
-            } else if (enqueueResult === 'queued') {
-              sendTextReply(chatId, 'Your request is queued.').catch((sendErr) => {
-                log.warn(`[feishu] Failed to send queued message for ${msgType}:`, sendErr);
-              });
+            try {
+              await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text));
+            } catch (sendErr) {
+              log.warn(`[feishu] Failed to send enqueue result message for ${msgType}:`, sendErr);
             }
           } catch (err) {
             log.error(`Error processing ${msgType} message:`, err);
@@ -463,7 +454,7 @@ export function setupFeishuHandlers(
           }
         } else {
           log.warn(`[MSG] Unsupported message type: ${msgType}, senderId=${senderId}`);
-          log.info(`[MSG] Content structure:`, JSON.stringify(content).slice(0, 500));
+          log.debug(`[MSG] Content structure:`, JSON.stringify(content).slice(0, 500));
         }
       }
     } catch (err) {

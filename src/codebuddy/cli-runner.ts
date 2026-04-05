@@ -378,7 +378,7 @@ export function runCodeBuddy(
         try {
           handlePayload(JSON.parse(payload) as Record<string, unknown>);
         } catch {
-          // Ignore trailing partial payloads.
+          log.debug(`Ignoring trailing partial CodeBuddy payload on close`);
         }
       }
       if (completed) return;

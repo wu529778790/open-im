@@ -3,6 +3,9 @@ import type { SessionManager } from '../session/session-manager.js';
 import type { RequestQueue } from '../queue/request-queue.js';
 import { escapePathForMarkdown } from '../shared/utils.js';
 import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('Commands');
 import { execFile } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -186,8 +189,8 @@ export function listDirectories(basePath: string): { name: string; fullPath: str
       .sort((a, b) => a.name.localeCompare(b.name)); // 按名称排序
 
     dirs.push(...subDirs);
-  } catch {
-    // 忽略错误
+  } catch (err) {
+    log.debug('Failed to list subdirectories:', err);
   }
 
   return dirs;

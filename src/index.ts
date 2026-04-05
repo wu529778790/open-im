@@ -355,7 +355,7 @@ export async function main() {
     // WebSocket "not open" errors are transient — the connection will auto-reconnect.
     // Exiting would take down all platforms, so just log and continue.
     if (msg.includes("WebSocket is not open") || msg.includes("readyState")) {
-      log.warn("Transient WebSocket error (ignored, will reconnect):", err);
+      log.debug("Transient WebSocket error (ignored, will reconnect):", err);
       return;
     }
     log.error("Uncaught exception (process will exit):", err);

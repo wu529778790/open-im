@@ -107,7 +107,7 @@ async function getTenantAccessToken(): Promise<string> {
       app_secret: client.appSecret,
     },
   });
-  if (resp.code !== 0 || !resp.data) {
+  if (resp.code !== 0) {
     throw new Error(`Failed to get tenant access token: ${resp.msg}`);
   }
   return (resp.data as { tenant_access_token: string }).tenant_access_token;

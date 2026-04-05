@@ -586,8 +586,8 @@ async function probeWorkBuddy(config: Record<string, unknown>): Promise<string> 
 
   const baseUrl = clean(String(config.baseUrl ?? "")) || "https://copilot.tencent.com";
 
-  // Validate credentials by attempting to register workspace
-  const response = await fetch(`${baseUrl}/api/copilot/workspace/register`, {
+  // Validate credentials by attempting to register workspace (same endpoint as runtime)
+  const response = await fetch(`${baseUrl}/v2/agentos/localagent/registerWorkspace`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -598,6 +598,7 @@ async function probeWorkBuddy(config: Record<string, unknown>): Promise<string> 
       hostId: "open-im-test",
       workspaceId: "open-im-test-workspace",
       workspaceName: "OpenIM Test Workspace",
+      localAgentType: "ide",
     }),
     signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
   });
@@ -987,74 +988,7 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
 
       if (request.method === "GET" && requestUrl.pathname === "/api/health") {
         const file = loadFileConfig();
-        const fileTelegram = file.platforms?.telegram;
-        const fileFeishu = file.platforms?.feishu;
-        const fileQQ = file.platforms?.qq;
-        const fileWework = file.platforms?.wework;
-        const fileDingtalk = file.platforms?.dingtalk;
-        const fileWorkbuddy = file.platforms?.workbuddy;
-        const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? fileTelegram?.botToken ?? file.telegramBotToken;
-        const feishuAppId = process.env.FEISHU_APP_ID ?? fileFeishu?.appId ?? file.feishuAppId;
-        const feishuAppSecret = process.env.FEISHU_APP_SECRET ?? fileFeishu?.appSecret ?? file.feishuAppSecret;
-        const qqAppId = process.env.QQ_BOT_APPID ?? process.env.QQ_APP_ID ?? fileQQ?.appId;
-        const qqSecret = process.env.QQ_BOT_SECRET ?? process.env.QQ_SECRET ?? fileQQ?.secret;
-        const weworkCorpId = process.env.WEWORK_CORP_ID ?? fileWework?.corpId;
-        const weworkSecret = process.env.WEWORK_SECRET ?? fileWework?.secret;
-        const dingtalkClientId = process.env.DINGTALK_CLIENT_ID ?? fileDingtalk?.clientId;
-        const dingtalkClientSecret = process.env.DINGTALK_CLIENT_SECRET ?? fileDingtalk?.clientSecret;
-        const workbuddyAccessToken = fileWorkbuddy?.accessToken;
-        const workbuddyRefreshToken = fileWorkbuddy?.refreshToken;
-        const workbuddyUserId = fileWorkbuddy?.userId;
-        const platforms: Record<string, { configured: boolean; enabled: boolean; healthy: boolean; message?: string }> = {};
-
-        // 检查 Telegram
-        platforms.telegram = {
-          configured: !!telegramBotToken,
-          enabled: !!telegramBotToken && fileTelegram?.enabled !== false,
-          healthy: !!telegramBotToken,
-          message: telegramBotToken ? "Token configured" : "Token not configured"
-        };
-
-        // 检查 Feishu
-        platforms.feishu = {
-          configured: !!(feishuAppId && feishuAppSecret),
-          enabled: !!(feishuAppId && feishuAppSecret) && fileFeishu?.enabled !== false,
-          healthy: !!(feishuAppId && feishuAppSecret),
-          message: (feishuAppId && feishuAppSecret) ? "App ID and Secret configured" : "Missing credentials"
-        };
-
-        // 检查 QQ
-        platforms.qq = {
-          configured: !!(qqAppId && qqSecret),
-          enabled: !!(qqAppId && qqSecret) && fileQQ?.enabled !== false,
-          healthy: !!(qqAppId && qqSecret),
-          message: (qqAppId && qqSecret) ? "App ID and Secret configured" : "Missing credentials"
-        };
-
-        // 检查 WeWork
-        platforms.wework = {
-          configured: !!(weworkCorpId && weworkSecret),
-          enabled: !!(weworkCorpId && weworkSecret) && fileWework?.enabled !== false,
-          healthy: !!(weworkCorpId && weworkSecret),
-          message: (weworkCorpId && weworkSecret) ? "Corp ID and Secret configured" : "Missing credentials"
-        };
-
-        // 检查 DingTalk
-        platforms.dingtalk = {
-          configured: !!(dingtalkClientId && dingtalkClientSecret),
-          enabled: !!(dingtalkClientId && dingtalkClientSecret) && fileDingtalk?.enabled !== false,
-          healthy: !!(dingtalkClientId && dingtalkClientSecret),
-          message: (dingtalkClientId && dingtalkClientSecret) ? "Client ID and Secret configured" : "Missing credentials"
-        };
-
-        // 检查 WorkBuddy
-        platforms.workbuddy = {
-          configured: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId),
-          enabled: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId) && fileWorkbuddy?.enabled !== false,
-          healthy: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId),
-          message: (workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId) ? "OAuth credentials configured" : "Missing credentials"
-        };
-
+        const platforms = getHealthPlatformSnapshot(file);
         json(response, 200, { platforms, serviceStatus: getServiceStatus() });
         return;
       }

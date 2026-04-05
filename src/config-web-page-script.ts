@@ -108,8 +108,7 @@ export const PAGE_SCRIPT = String.raw`      const platformDefinitions = [
         [
           "headerValidateButton",
           "headerSaveButton",
-          "headerStartButton",
-          "headerStopButton",
+          "headerToggleServiceButton",
           "langButton",
         ].forEach((id) => {
           const node = el(id);
@@ -233,8 +232,7 @@ export const PAGE_SCRIPT = String.raw`      const platformDefinitions = [
         buttons: [
           { id: "headerValidateButton", key: "validate" },
           { id: "headerSaveButton", key: "save" },
-          { id: "headerStartButton", key: "start" },
-          { id: "headerStopButton", key: "stop" },
+          { id: "headerToggleServiceButton", key: "start" },
         ],
         testButtons: [
           { prefix: "test-", key: "test" },
@@ -623,6 +621,12 @@ export const PAGE_SCRIPT = String.raw`      const platformDefinitions = [
           serviceState.textContent = serviceStateText;
           serviceState.className = "badge " + (data.running ? "badge-success" : "badge-default");
         }
+        // Update toggle button text and style
+        const toggleBtn = el("headerToggleServiceButton");
+        if (toggleBtn) {
+          toggleBtn.textContent = data.running ? t("stop") : t("start");
+          toggleBtn.className = "btn btn-sm " + (data.running ? "btn-danger" : "btn-primary");
+        }
         return data;
       }
 
@@ -750,8 +754,14 @@ export const PAGE_SCRIPT = String.raw`      const platformDefinitions = [
         };
         el("headerValidateButton").onclick = validate;
         el("headerSaveButton").onclick = onSaveClick;
-        el("headerStartButton").onclick = onStartClick;
-        el("headerStopButton").onclick = stopService;
+        el("headerToggleServiceButton").onclick = async () => {
+          const status = await refreshStatus();
+          if (status.running) {
+            await stopService();
+          } else {
+            await onStartClick();
+          }
+        };
 
         // Platform test buttons
         platformKeys.forEach((platform) => {

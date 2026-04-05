@@ -2,13 +2,6 @@ import { createLogger } from '../logger.js';
 
 const log = createLogger('Queue');
 
-export class QueueTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`Task timed out after ${timeoutMs / 1000}s`);
-    this.name = 'QueueTimeoutError';
-  }
-}
-
 interface QueuedTask {
   prompt: string;
   execute: (prompt: string, signal: AbortSignal) => Promise<void>;
@@ -21,7 +14,6 @@ interface UserQueue {
 }
 
 const MAX_QUEUE_SIZE = 3;
-const TASK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 export type EnqueueResult = 'running' | 'queued' | 'rejected';
 
@@ -42,7 +34,9 @@ export class RequestQueue {
       return 'queued';
     }
     q.running = true;
-    this.run(key, prompt, execute).catch(() => {});
+    this.run(key, prompt, execute).catch((err) => {
+      log.error(`Unhandled error in task execution for ${key}:`, err);
+    });
     return 'running';
   }
 
@@ -59,29 +53,19 @@ export class RequestQueue {
 
   private async run(key: string, prompt: string, execute: (prompt: string, signal: AbortSignal) => Promise<void>): Promise<void> {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new QueueTimeoutError(TASK_TIMEOUT_MS));
-        }, TASK_TIMEOUT_MS);
-      });
-      await Promise.race([execute(prompt, controller.signal), timeoutPromise]);
+      await execute(prompt, controller.signal);
     } catch (err) {
-      if (err instanceof QueueTimeoutError) {
-        log.error(`Timeout executing task for ${key}: ${err.message}`);
-      } else {
-        log.error(`Error executing task for ${key}:`, err);
-      }
+      log.error(`Error executing task for ${key}:`, err);
       throw err;
     } finally {
-      if (timer) clearTimeout(timer);
       const q = this.queues.get(key);
       if (!q) return;
       const next = q.tasks.shift();
       if (next) {
-        setImmediate(() => this.run(key, next.prompt, next.execute).catch(() => {}));
+        setImmediate(() => this.run(key, next.prompt, next.execute).catch((err) => {
+          log.error(`Unhandled error in next task execution for ${key}:`, err);
+        }));
       } else {
         q.running = false;
         this.queues.delete(key);
