@@ -866,8 +866,7 @@ export const PAGE_HTML_PREFIX = String.raw`<!doctype html>
           <div class="main-header-toolbar" id="headerToolbar" role="toolbar" aria-label="Bridge controls">
             <button type="button" id="headerValidateButton" class="btn btn-warning btn-sm">Validate</button>
             <button type="button" id="headerSaveButton" class="btn btn-secondary btn-sm">Save config</button>
-            <button type="button" id="headerStartButton" class="btn btn-primary btn-sm">Start bridge</button>
-            <button type="button" id="headerStopButton" class="btn btn-danger btn-sm">Stop bridge</button>
+            <button type="button" id="headerToggleServiceButton" class="btn btn-primary btn-sm">Start bridge</button>
           </div>
         </header>
 
