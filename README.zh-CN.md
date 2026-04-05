@@ -13,7 +13,7 @@
 - **多媒体** — 图片、文件、语音、视频（因平台而异）
 - **会话隔离** — 每用户独立；`/new` 重置会话
 - **Web 配置** — 完整界面在**线上控制台**；本机进程在 `39282` 端口提供 HTTP API
-- **聊天命令** — `/help`、`/new`、`/cd`、`/pwd`、`/status`、`/allow`、`/deny`
+- **聊天命令** — `/help`、`/new`、`/sessions`、`/resume`、`/cd`、`/pwd`、`/status`、`/allow`、`/deny`
 
 ## 环境要求
 
@@ -98,6 +98,8 @@ npm run web:build  # 构建到 web/dist
 | --- | --- |
 | `/help` | 帮助 |
 | `/new` | 新 AI 会话 |
+| `/sessions` | 查看历史会话 |
+| `/resume <序号>` | 恢复历史会话 |
 | `/status` | AI 与会话信息 |
 | `/cd <路径>` | 切换工作目录 |
 | `/pwd` | 当前目录 |
@@ -106,7 +108,7 @@ npm run web:build  # 构建到 web/dist
 
 ## 会话说明
 
-会话保存在 `~/.open-im/data/sessions.json`，与 IM 聊天记录无关。`/new` 会重置当前用户的 AI 会话。
+会话保存在 `~/.open-im/data/sessions.json`，与 IM 聊天记录无关。`/new` 创建新会话并归档旧会话。使用 `/sessions` 查看历史，`/resume <序号>` 恢复之前的会话。
 
 ## 配置说明
 

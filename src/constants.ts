@@ -20,7 +20,6 @@ export const IMAGE_DIR = join(tmpdir(), "open-im-images");
 export const TERMINAL_ONLY_COMMANDS = new Set([
   "/context",
   "/rewind",
-  "/resume",
   "/copy",
   "/export",
   "/config",

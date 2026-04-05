@@ -11,6 +11,12 @@ const SESSIONS_FILE = join(APP_HOME, 'data', 'sessions.json');
 type ToolId = 'claude' | 'codex' | 'codebuddy';
 type ToolSessionIds = Partial<Record<ToolId, string>>;
 
+interface ConvHistoryEntry {
+  convId: string;
+  totalTurns: number;
+  createdAt: number;
+}
+
 interface UserSession {
   sessionIds?: ToolSessionIds;
   workDir: string;
@@ -18,6 +24,7 @@ interface UserSession {
   totalTurns?: number;
   claudeModel?: string;
   threads?: Record<string, { sessionIds?: ToolSessionIds; totalTurns?: number; claudeModel?: string }>;
+  convHistory?: ConvHistoryEntry[];
 }
 
 export function resolveWorkDirInput(baseDir: string, targetDir: string): string {
@@ -132,12 +139,18 @@ export class SessionManager {
     if (s) {
       oldConvId = s.activeConvId;
       this.persistActiveConvSessions(userId, s);
+      if (oldConvId) {
+        if (!s.convHistory) s.convHistory = [];
+        s.convHistory.push({
+          convId: oldConvId,
+          totalTurns: s.totalTurns ?? 0,
+          createdAt: Date.now(),
+        });
+        if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
+      }
       s.workDir = realPath;
       s.sessionIds = {};
       s.activeConvId = randomBytes(4).toString('hex');
-      if (oldConvId) {
-        this.clearConvSessionMappings(userId, oldConvId);
-      }
     } else {
       this.sessions.set(userId, {
         workDir: realPath,
@@ -191,12 +204,20 @@ export class SessionManager {
       const oldSessionIds = { ...(s.sessionIds ?? {}) };
       const oldConvId = s.activeConvId;
       this.persistActiveConvSessions(userId, s);
+      // Archive old conversation to history (keep convSessionMap entries for resume)
+      if (oldConvId) {
+        if (!s.convHistory) s.convHistory = [];
+        s.convHistory.push({
+          convId: oldConvId,
+          totalTurns: s.totalTurns ?? 0,
+          createdAt: Date.now(),
+        });
+        // Keep last 10 entries
+        if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
+      }
       s.sessionIds = {};
       s.activeConvId = randomBytes(4).toString('hex');
       s.totalTurns = 0;
-      if (oldConvId) {
-        this.clearConvSessionMappings(userId, oldConvId);
-      }
       this.flushSync();
       log.info(
         `New session for user ${userId}: oldConvId=${oldConvId}, oldSessionIds=${JSON.stringify(oldSessionIds)}, newConvId=${s.activeConvId}, sessionIds={}`
@@ -219,6 +240,58 @@ export class SessionManager {
     this.flushSync();
     log.info(`Cleared active ${toolId} session for user ${userId}, convId=${activeConvId ?? 'none'}`);
     return hadSession;
+  }
+
+  listConvHistory(userId: string): ConvHistoryEntry[] {
+    const s = this.sessions.get(userId);
+    if (!s) return [];
+    return s.convHistory ?? [];
+  }
+
+  getActiveConvInfo(userId: string): { convId: string; totalTurns: number } | undefined {
+    const s = this.sessions.get(userId);
+    if (!s?.activeConvId) return undefined;
+    return { convId: s.activeConvId, totalTurns: s.totalTurns ?? 0 };
+  }
+
+  resumeConv(userId: string, convId: string): boolean {
+    const s = this.sessions.get(userId);
+    if (!s) return false;
+
+    // Find target in history
+    const idx = s.convHistory?.findIndex((e) => e.convId === convId) ?? -1;
+    if (idx === -1) return false;
+
+    // Archive current active session
+    this.persistActiveConvSessions(userId, s);
+    if (s.activeConvId) {
+      if (!s.convHistory) s.convHistory = [];
+      s.convHistory.push({
+        convId: s.activeConvId,
+        totalTurns: s.totalTurns ?? 0,
+        createdAt: Date.now(),
+      });
+    }
+
+    // Remove target from history
+    const [entry] = s.convHistory!.splice(idx, 1);
+
+    // Restore target as active
+    s.activeConvId = entry.convId;
+    s.totalTurns = entry.totalTurns;
+    s.sessionIds = {};
+    // Restore sessionIds from convSessionMap
+    for (const toolId of ['claude', 'codex', 'codebuddy'] as const) {
+      const sessionId = this.convSessionMap.get(this.getConvSessionKey(userId, entry.convId, toolId));
+      if (sessionId) {
+        if (!s.sessionIds) s.sessionIds = {};
+        s.sessionIds[toolId] = sessionId;
+      }
+    }
+
+    this.flushSync();
+    log.info(`Resumed session for user ${userId}: convId=${entry.convId}, turns=${entry.totalTurns}`);
+    return true;
   }
 
   addTurns(userId: string, turns: number): number {

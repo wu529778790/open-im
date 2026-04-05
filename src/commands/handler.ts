@@ -55,6 +55,8 @@ export class CommandHandler {
 
     if (t === '/help') return this.handleHelp(chatId);
     if (t === '/new') return this.handleNew(chatId, userId);
+    if (t === '/sessions' || t === '/resume') return this.handleSessions(chatId, userId, platform);
+    if (t.startsWith('/resume ')) return this.handleResume(chatId, userId, t.slice(8).trim(), platform);
     if (t === '/pwd') return this.handlePwd(chatId, userId);
     if (t === '/status') return this.handleStatus(chatId, userId, platform);
 
@@ -77,11 +79,62 @@ export class CommandHandler {
       '',
       '/help - 显示帮助',
       '/new - 开始新会话（AI 上下文重置）',
+      '/sessions - 查看历史会话',
+      '/resume <序号> - 恢复历史会话',
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
     ].join('\n');
     await this.deps.sender.sendTextReply(chatId, help);
+    return true;
+  }
+
+  private async handleSessions(chatId: string, userId: string, _platform: Platform): Promise<boolean> {
+    const history = this.deps.sessionManager.listConvHistory(userId);
+    const active = this.deps.sessionManager.getActiveConvInfo(userId);
+
+    if (history.length === 0 && !active) {
+      await this.deps.sender.sendTextReply(chatId, '📋 暂无会话记录。');
+      return true;
+    }
+
+    const lines = ['📋 会话列表:', ''];
+    history.forEach((entry, i) => {
+      lines.push(`${i + 1}. ${entry.convId} · ${entry.totalTurns}轮`);
+    });
+    if (active) {
+      const num = history.length + 1;
+      lines.push(`▸ ${num}. ${active.convId} · ${active.totalTurns}轮（当前）`);
+    }
+
+    lines.push('', '使用 /resume <序号> 恢复历史会话');
+    await this.deps.sender.sendTextReply(chatId, lines.join('\n'));
+    return true;
+  }
+
+  private async handleResume(chatId: string, userId: string, arg: string, _platform: Platform): Promise<boolean> {
+    const index = parseInt(arg, 10);
+    if (isNaN(index) || index < 1) {
+      await this.deps.sender.sendTextReply(chatId, '用法: /resume <序号>\n\n使用 /sessions 查看会话列表。');
+      return true;
+    }
+
+    const history = this.deps.sessionManager.listConvHistory(userId);
+    if (index > history.length) {
+      await this.deps.sender.sendTextReply(chatId, `序号 ${index} 无效，共 ${history.length} 个历史会话。`);
+      return true;
+    }
+
+    const entry = history[index - 1];
+    const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
+    if (ok) {
+      await this.deps.sender.sendTextReply(
+        chatId,
+        `✅ 已恢复会话 ${index} (${entry.convId})，共 ${entry.totalTurns}轮对话。\n继续发消息即可。`
+      );
+    } else {
+      await this.deps.sender.sendTextReply(chatId, '❌ 恢复会话失败，请重试。');
+    }
     return true;
   }
 

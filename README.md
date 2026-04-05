@@ -13,7 +13,7 @@ Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, Ding
 - **Media** — images, files, voice, and video for analysis (platform-dependent)
 - **Session isolation** — per-user state; `/new` resets the AI session
 - **Web configuration** — full UI on the hosted dashboard; local process exposes HTTP API on port `39282`
-- **Chat commands** — `/help`, `/new`, `/cd`, `/pwd`, `/status`, `/allow`, `/deny`
+- **Chat commands** — `/help`, `/new`, `/sessions`, `/resume`, `/cd`, `/pwd`, `/status`, `/allow`, `/deny`
 
 ## Requirements
 
@@ -100,6 +100,8 @@ More detail: [CLAUDE.md](./CLAUDE.md), [AGENTS.md](./AGENTS.md).
 | --- | --- |
 | `/help` | Help |
 | `/new` | New AI session |
+| `/sessions` | List session history |
+| `/resume <N>` | Resume a previous session by number |
 | `/status` | AI tool and session info |
 | `/cd <path>` | Change session working directory |
 | `/pwd` | Print working directory |
@@ -108,7 +110,7 @@ More detail: [CLAUDE.md](./CLAUDE.md), [AGENTS.md](./AGENTS.md).
 
 ## Sessions
 
-Sessions are stored in `~/.open-im/data/sessions.json`, separate from IM chat history. Each user has an isolated session. `/new` clears the current AI session.
+Sessions are stored in `~/.open-im/data/sessions.json`, separate from IM chat history. Each user has an isolated session. `/new` starts a fresh session and archives the old one. Use `/sessions` to view history and `/resume <N>` to switch back to a previous session.
 
 ## Configuration
 
