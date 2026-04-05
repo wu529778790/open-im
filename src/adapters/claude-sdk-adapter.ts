@@ -36,7 +36,12 @@ function loadUserPluginSettings(): UserPluginSettings | null {
     if (settings.enabledPlugins) result.enabledPlugins = settings.enabledPlugins;
     if (settings.extraKnownMarketplaces) result.extraKnownMarketplaces = settings.extraKnownMarketplaces;
     if (Object.keys(result).length === 0) return null;
-    log.info(`Loaded user plugin settings: plugins=[${Object.keys(result.enabledPlugins ?? {}).join(', ')}]`);
+    const pluginNames = Object.keys(result.enabledPlugins ?? {});
+    if (pluginNames.length > 0) {
+      log.info(`Loaded user plugin settings:\n${pluginNames.map((p) => `  • ${p}`).join("\n")}`);
+    } else {
+      log.info("Loaded user plugin settings (no enabledPlugins entries in ~/.claude/settings.json)");
+    }
     return result;
   } catch (err) {
     log.warn('Failed to read ~/.claude/settings.json for plugin config:', err);

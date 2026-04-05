@@ -9,6 +9,18 @@ import { getWebConfigUrl, runWebConfigFlow } from "./config-web.js";
 import { getManagerStatus, startManagerProcess, stopManagerProcess } from "./manager-control.js";
 import { stopBackgroundService } from "./service-control.js";
 
+/** 控制台与 API 同源时只打一行 */
+function logWebDashboardAndApi(): void {
+  const dash = getPublicWebDashboardUrl().replace(/\/$/, "");
+  const api = getWebConfigUrl().replace(/\/$/, "");
+  if (dash === api) {
+    console.log(`  web dashboard: ${dash}`);
+  } else {
+    console.log(`  web dashboard: ${dash}`);
+    console.log(`  local API: ${api}`);
+  }
+}
+
 async function ensureConfigured(mode: "init" | "start" | "dev"): Promise<boolean> {
   if (mode === "init") {
     if (!process.stdin.isTTY) {
@@ -54,8 +66,7 @@ async function cmdStart(): Promise<void> {
   if (status.running && status.pid) {
     console.log("\nopen-im is already running in the background.");
     console.log(`  pid: ${status.pid}`);
-    console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-    console.log(`  local API: ${getWebConfigUrl()}`);
+    logWebDashboardAndApi();
     process.exit(0);
   }
 
@@ -68,8 +79,7 @@ async function cmdStart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im started in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-  console.log(`  local API: ${getWebConfigUrl()}`);
+  logWebDashboardAndApi();
   if (process.env.OPEN_IM_WEB_HOST && process.env.OPEN_IM_WEB_HOST !== "127.0.0.1") {
     console.log("");
     console.log("NOTE:");
@@ -114,8 +124,7 @@ async function cmdRestart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im restarted in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-  console.log(`  local API: ${getWebConfigUrl()}`);
+  logWebDashboardAndApi();
   process.exit(0);
 }
 
