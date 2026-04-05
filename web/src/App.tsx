@@ -17,7 +17,7 @@ export function App() {
   const request = useMemo(() => createRequest(() => apiBase), [apiBase]);
 
   const connectWithUrl = useCallback(async (raw: string) => {
-    const url = normalizeServerUrl(raw) || (import.meta.env.DEV ? "" : "");
+    const url = normalizeServerUrl(raw);
     if (!url && !import.meta.env.DEV) {
       setConnMsg({ text: "Enter server URL (e.g. http://127.0.0.1:39282)", ok: false });
       return;
@@ -25,10 +25,8 @@ export function App() {
     setApiBase(url);
     setConnMsg({ text: "Connecting…", ok: null });
     try {
-      const testUrl = `${url.replace(/\/$/, "")}/api/health`;
-      const res = await fetch(testUrl, { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await res.json();
+      const testReq = createRequest(() => url);
+      await testReq("/api/health");
       localStorage.setItem(STORAGE_KEY_SERVER, url);
       setConnMsg({ text: "Connected", ok: true });
       setConnected(true);
