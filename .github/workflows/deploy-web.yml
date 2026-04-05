@@ -1,3 +1,10 @@
+# Deploy web/dist to GitHub Pages (Vite build in web/)
+#
+# One-time repo setup (otherwise deploy may fail):
+#   Settings → Pages → Build and deployment → Source: GitHub Actions
+#
+# Optional: create an Environment named "github-pages" if prompted (first run).
+
 name: Deploy web to GitHub Pages
 
 on:
@@ -6,6 +13,7 @@ on:
     paths:
       - "web/**"
       - "src/config-web-page-i18n.ts"
+      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
 permissions:
@@ -38,7 +46,8 @@ jobs:
       - run: npm run build
         working-directory: web
 
-      - uses: actions/configure-pages@v4
+      # Intentionally omit actions/configure-pages: it calls the Pages API and returns 404
+      # until the site exists. For static assets, upload + deploy is enough.
 
       - uses: actions/upload-pages-artifact@v3
         with:

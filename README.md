@@ -90,6 +90,8 @@ npm run web:dev    # Vite dev server; proxies /api to 127.0.0.1:39282
 npm run web:build  # Production build → web/dist
 ```
 
+**GitHub Pages (this repo’s workflow):** in the repository, enable **Settings → Pages → Build and deployment → Source: GitHub Actions** once. Then pushes that touch `web/` run `.github/workflows/deploy-web.yml`.
+
 More detail: [CLAUDE.md](./CLAUDE.md), [AGENTS.md](./AGENTS.md).
 
 ## IM commands

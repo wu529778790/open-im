@@ -88,6 +88,8 @@ npm run web:dev    # Vite；将 /api 代理到 127.0.0.1:39282
 npm run web:build  # 构建到 web/dist
 ```
 
+**GitHub Pages（本仓库工作流）：** 在仓库 **设置 → Pages → 构建与部署 → 源：GitHub Actions** 中启用一次。之后变更 `web/` 会触发 `.github/workflows/deploy-web.yml`。
+
 更多开发说明见 [CLAUDE.md](./CLAUDE.md)、[AGENTS.md](./AGENTS.md)。
 
 ## IM 内命令
