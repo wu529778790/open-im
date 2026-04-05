@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRequest, normalizeServerUrl } from "./api.js";
 import { ApiProvider } from "./context/ApiContext.js";
 import { DEFAULT_SERVER_URL, STORAGE_KEY_SERVER } from "./constants.js";
 import { Dashboard } from "./Dashboard.js";
+
+function initialServerUrl(): string {
+  if (typeof localStorage === "undefined") return DEFAULT_SERVER_URL;
+  return localStorage.getItem(STORAGE_KEY_SERVER) ?? DEFAULT_SERVER_URL;
+}
 
 export function App() {
   const [apiBase, setApiBase] = useState("");
@@ -11,8 +16,7 @@ export function App() {
 
   const request = useMemo(() => createRequest(() => apiBase), [apiBase]);
 
-  const onConnect = async () => {
-    const raw = (document.getElementById("serverUrlInput") as HTMLInputElement | null)?.value ?? "";
+  const connectWithUrl = useCallback(async (raw: string) => {
     const url = normalizeServerUrl(raw) || (import.meta.env.DEV ? "" : "");
     if (!url && !import.meta.env.DEV) {
       setConnMsg({ text: "Enter server URL (e.g. http://127.0.0.1:39282)", ok: false });
@@ -32,7 +36,16 @@ export function App() {
       setConnMsg({ text: e instanceof Error ? e.message : String(e), ok: false });
       setApiBase("");
     }
+  }, []);
+
+  const onConnect = async () => {
+    const raw = (document.getElementById("serverUrlInput") as HTMLInputElement | null)?.value ?? "";
+    await connectWithUrl(raw);
   };
+
+  useEffect(() => {
+    void connectWithUrl(initialServerUrl());
+  }, [connectWithUrl]);
 
   return (
     <>
@@ -48,11 +61,7 @@ export function App() {
             placeholder={DEFAULT_SERVER_URL}
             autoComplete="url"
             spellCheck={false}
-            defaultValue={
-              typeof localStorage !== "undefined"
-                ? localStorage.getItem(STORAGE_KEY_SERVER) ?? DEFAULT_SERVER_URL
-                : DEFAULT_SERVER_URL
-            }
+            defaultValue={initialServerUrl()}
             onKeyDown={(e) => {
               if (e.key === "Enter") void onConnect();
             }}
