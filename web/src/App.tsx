@@ -72,35 +72,6 @@ export function App() {
 
   return (
     <>
-      <div className="connection-bar" id="connectionBar" role="banner">
-        <div className="connection-bar-inner">
-          <label className="connection-label" htmlFor="serverUrlInput">
-            Server URL
-          </label>
-          <input
-            id="serverUrlInput"
-            className="connection-input"
-            type="text"
-            placeholder={isRemoteHttpsPage() ? "https://… (tunnel) or open built-in http://127.0.0.1:39282" : DEFAULT_SERVER_URL}
-            autoComplete="url"
-            spellCheck={false}
-            defaultValue={initialServerUrl()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void onConnect();
-            }}
-          />
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => void onConnect()}>
-            Connect
-          </button>
-          <span
-            className={`connection-status${connMsg.ok === true ? " ok" : connMsg.ok === false ? " err" : ""}`}
-            aria-live="polite"
-          >
-            {connMsg.text}
-          </span>
-        </div>
-      </div>
-
       {connected ? (
         <ApiProvider request={request}>
           <div id="mainAppWrap">
@@ -108,7 +79,41 @@ export function App() {
           </div>
         </ApiProvider>
       ) : (
-        <p style={{ padding: "24px 32px", color: "var(--text-secondary)" }}>Connect to your open-im web API to manage configuration.</p>
+        <div className="connection-setup">
+          <p className="connection-setup-hint">
+            Connect to your open-im web API to manage configuration.
+          </p>
+          <div className="connection-setup-row">
+            <label className="connection-label" htmlFor="serverUrlInput">
+              Server URL
+            </label>
+            <input
+              id="serverUrlInput"
+              className="connection-input"
+              type="text"
+              placeholder={
+                isRemoteHttpsPage()
+                  ? "https://… (tunnel) or open built-in http://127.0.0.1:39282"
+                  : DEFAULT_SERVER_URL
+              }
+              autoComplete="url"
+              spellCheck={false}
+              defaultValue={initialServerUrl()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void onConnect();
+              }}
+            />
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => void onConnect()}>
+              Connect
+            </button>
+            <span
+              className={`connection-status${connMsg.ok === true ? " ok" : connMsg.ok === false ? " err" : ""}`}
+              aria-live="polite"
+            >
+              {connMsg.text}
+            </span>
+          </div>
+        </div>
       )}
     </>
   );
