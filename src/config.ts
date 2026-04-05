@@ -307,6 +307,19 @@ export function loadConfig(): Config {
     ? false
     : (tc.skipPermissions ?? true);
 
+  const envIdleRaw = process.env.OPEN_IM_CLAUDE_SESSION_IDLE_TTL_MINUTES;
+  const envIdleParsed =
+    envIdleRaw !== undefined && envIdleRaw !== '' ? Number.parseInt(envIdleRaw, 10) : NaN;
+  const fileIdle = tc.sessionIdleTtlMinutes;
+  let claudeSessionIdleTtlMinutes: number;
+  if (Number.isFinite(envIdleParsed)) {
+    claudeSessionIdleTtlMinutes = Math.max(0, envIdleParsed);
+  } else if (typeof fileIdle === 'number' && Number.isFinite(fileIdle)) {
+    claudeSessionIdleTtlMinutes = Math.max(0, fileIdle);
+  } else {
+    claudeSessionIdleTtlMinutes = 30;
+  }
+
   // 6. 校验 Claude API 凭证（SDK 模式需要）
   // 支持：官方 API Key、Auth Token、或自定义 API（第三方模型等，BASE_URL + token）
   if (aiCommand === 'claude') {
@@ -534,6 +547,7 @@ export function loadConfig(): Config {
     claudeProxy,
     codexProxy,
     claudeWorkDir,
+    claudeSessionIdleTtlMinutes,
     claudeModel: process.env.ANTHROPIC_MODEL,
     skipPermissions,
     logDir,

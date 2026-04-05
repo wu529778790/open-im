@@ -190,6 +190,7 @@ export async function sendTextReply(
     await bot.telegram.sendMessage(Number(chatId), formatMessage(text, "done", undefined, OPEN_IM_SYSTEM_TITLE));
   } catch (err) {
     log.error("Failed to send text:", err);
+    throw err;
   }
 }
 

@@ -133,11 +133,8 @@ async function sendLifecycleNotification(platform: Platform, message: string) {
   }
 
   log.info(`[${platform}] Sending lifecycle notification to chatId=${chatId}`);
-  await mod.sendNotification(chatId, message).then(() => {
-    log.info(`[${platform}] Lifecycle notification sent successfully`);
-  }).catch((err) => {
-    log.warn(`Failed to send ${platform} notification:`, err);
-  });
+  await mod.sendNotification(chatId, message);
+  log.info(`[${platform}] Lifecycle notification sent successfully`);
 }
 
 function buildStartupMessage(

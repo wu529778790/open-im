@@ -38,6 +38,10 @@ export interface Config {
   /** Codex 访问 chatgpt.com 的代理（如 http://127.0.0.1:7890） */
   codexProxy?: string;
   claudeWorkDir: string;
+  /**
+   * Claude SDK 进程内会话空闲多久后回收（分钟）。0 表示关闭空闲回收（仍受适配器内 MAX_ACTIVE_SESSIONS 限制）。默认 30。
+   */
+  claudeSessionIdleTtlMinutes: number;
   claudeModel?: string;
   /** 是否跳过 AI 工具的权限确认（默认 true） */
   skipPermissions?: boolean;
@@ -156,6 +160,8 @@ export interface FileToolClaude {
   cliPath?: string;
   workDir?: string;
   skipPermissions?: boolean;
+  /** 空闲会话回收间隔（分钟），0 表示关闭 */
+  sessionIdleTtlMinutes?: number;
   /** HTTP/HTTPS 代理，用于访问 Claude API（如 http://127.0.0.1:7890） */
   proxy?: string;
   /** Claude API 配置（优先级：环境变量 > tools.claude.env > ~/.claude/settings.json） */

@@ -318,10 +318,18 @@ async function connectWebSocket(config: Config, handler: (event: QQMessageEvent)
         settle(() => {}); // 清理 ready timeout
         clearTimers();
         ws = null;
-        log.info(`QQ gateway closed: ${code} ${reason.toString()}`);
+        const reasonStr = reason.toString();
+        if (code === 4009) {
+          log.info(`QQ gateway session idle timeout (4009), reconnecting… (${reasonStr})`);
+        } else {
+          log.info(`QQ gateway closed: ${code} ${reasonStr}`);
+        }
         if (stopped) return;
-        if (code === 4004 || code === 4006 || code === 4007 || code === 4009) {
+        // 4009 仅为长连接会话过期，HTTP access_token 仍有效，勿清空 tokenState
+        if (code === 4004 || code === 4006 || code === 4007) {
           tokenState = null;
+        }
+        if (code === 4004 || code === 4006 || code === 4007 || code === 4009) {
           sessionId = null;
           seq = null;
         }

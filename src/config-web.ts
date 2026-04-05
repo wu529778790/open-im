@@ -520,6 +520,7 @@ function createProbeConfig(values: Partial<Config>): Config {
     aiCommand: "claude",
     codexCliPath: "codex",
     claudeWorkDir: process.cwd(),
+    claudeSessionIdleTtlMinutes: 30,
     logDir: "",
     logLevel: "INFO",
     codebuddyCliPath: "codebuddy",
