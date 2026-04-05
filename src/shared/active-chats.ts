@@ -2,6 +2,9 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { APP_HOME } from '../constants.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('ActiveChats');
 
 const ACTIVE_CHATS_FILE = join(APP_HOME, 'data', 'active-chats.json');
 
@@ -47,8 +50,8 @@ function scheduleSave(): void {
     try {
       await mkdir(dirname(ACTIVE_CHATS_FILE), { recursive: true });
       await writeFile(ACTIVE_CHATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    } catch {
-      /* ignore */
+    } catch (err) {
+      log.warn('Failed to save active chats:', err);
     }
   }, 500);
 }
@@ -61,7 +64,8 @@ export function loadActiveChats(): void {
         delete data.dingtalkTarget;
       }
     }
-  } catch {
+  } catch (err) {
+    log.warn('Failed to load active chats, starting with empty state:', err);
     data = {};
   }
 }
@@ -115,7 +119,7 @@ export function flushActiveChats(): void {
     const dir = dirname(ACTIVE_CHATS_FILE);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(ACTIVE_CHATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch {
-    /* ignore */
+  } catch (err) {
+    log.warn('Failed to flush active chats:', err);
   }
 }

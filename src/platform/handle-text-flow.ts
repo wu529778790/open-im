@@ -22,6 +22,7 @@ import type { PlatformEventContext } from './create-event-context.js';
 import type { EnqueueResult } from '../queue/request-queue.js';
 import type { HandleAIRequestParams } from './handle-ai-request.js';
 import { createLogger } from '../logger.js';
+import { handleEnqueueResult, DEFAULT_QUEUE_FULL_MESSAGE, DEFAULT_QUEUED_MESSAGE } from '../shared/utils.js';
 
 /** AI request handler function type (object params, as returned by createPlatformAIRequestHandler). */
 export type HandleAIRequestFn = (params: HandleAIRequestParams) => Promise<void>;
@@ -77,12 +78,6 @@ export interface HandleTextFlowParams {
 function defaultAccessDeniedMessage(userId: string): string {
   return `抱歉，您没有访问权限。\n您的 ID: ${userId}`;
 }
-
-/** Default queue-full message. */
-const DEFAULT_QUEUE_FULL_MESSAGE = '请求队列已满，请稍后再试。';
-
-/** Default queued message. */
-const DEFAULT_QUEUED_MESSAGE = '您的请求已排队等待。';
 
 /**
  * Handles the full text message flow shared across all platforms.
@@ -173,12 +168,7 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
   if (customEnqueue) {
     // Platform-specific enqueue (e.g., WorkBuddy with extra context)
     const enqueueResult = await customEnqueue(text);
-
-    if (enqueueResult === 'rejected') {
-      await sendTextReply(chatId, queueFullMessage);
-    } else if (enqueueResult === 'queued') {
-      await sendTextReply(chatId, queuedMessage);
-    }
+    await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text), { queueFull: queueFullMessage, queued: queuedMessage });
   } else {
     // Standard enqueue flow
     const { requestQueue } = ctx;
@@ -201,12 +191,7 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
         });
       },
     );
-
-    if (enqueueResult === 'rejected') {
-      await sendTextReply(chatId, queueFullMessage);
-    } else if (enqueueResult === 'queued') {
-      await sendTextReply(chatId, queuedMessage);
-    }
+    await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text), { queueFull: queueFullMessage, queued: queuedMessage });
   }
 
   return true;

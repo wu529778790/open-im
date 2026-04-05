@@ -114,7 +114,7 @@ export async function initFeishu(
         app_secret: config.feishuAppSecret,
       },
     });
-    if (tokenResp.code !== 0 || !tokenResp.data) {
+    if (tokenResp.code !== 0) {
       throw new Error(`Feishu credentials invalid: ${tokenResp.msg} (code: ${tokenResp.code})`);
     }
     log.info('Feishu credentials validated successfully');

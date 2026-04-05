@@ -1,5 +1,29 @@
+import type { EnqueueResult } from '../queue/request-queue.js';
+
 /** 消息头部品牌后缀，用于飞书等平台展示 */
 export const OPEN_IM_BRAND_SUFFIX = ' · 通过 open-im 控制';
+
+/** Default queue-full message. */
+export const DEFAULT_QUEUE_FULL_MESSAGE = '请求队列已满，请稍后再试。';
+
+/** Default queued message. */
+export const DEFAULT_QUEUED_MESSAGE = '您的请求已排队等待。';
+
+/**
+ * Handle enqueue result by sending the appropriate notification message.
+ * Centralizes the repeated rejected/queued notification pattern across all platforms.
+ */
+export async function handleEnqueueResult(
+  enqueueResult: EnqueueResult,
+  sendTextReply: (text: string) => Promise<void>,
+  messages?: { queueFull?: string; queued?: string },
+): Promise<void> {
+  if (enqueueResult === 'rejected') {
+    await sendTextReply(messages?.queueFull ?? DEFAULT_QUEUE_FULL_MESSAGE);
+  } else if (enqueueResult === 'queued') {
+    await sendTextReply(messages?.queued ?? DEFAULT_QUEUED_MESSAGE);
+  }
+}
 
 /** 转义路径供 Markdown 显示，防止 xxx.yyy.com 被解析为链接 */
 export function escapePathForMarkdown(path: string): string {

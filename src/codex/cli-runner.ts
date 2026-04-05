@@ -162,7 +162,8 @@ function extractCodexJsFromCmdShim(cmdPath: string): string | null {
     if (!match) return null;
     const relativeJsPath = match[1].replace(/\\/g, '/');
     return join(dirname(cmdPath), relativeJsPath);
-  } catch {
+  } catch (err) {
+    log.debug(`Failed to extract Codex JS path from cmd shim ${cmdPath}:`, err);
     return null;
   }
 }
@@ -204,7 +205,8 @@ function resolveWindowsCodexLaunch(
     };
     windowsCodexLaunchCache.set(cliPath, resolved);
     return { command: resolved.command, args: [...resolved.args, ...args] };
-  } catch {
+  } catch (err) {
+    log.debug(`Failed to resolve Windows Codex launch for ${cliPath}:`, err);
     windowsCodexLaunchCache.set(cliPath, null);
     return null;
   }

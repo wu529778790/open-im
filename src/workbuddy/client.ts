@@ -217,7 +217,13 @@ async function connect(): Promise<void> {
         scheduleReconnect();
       },
       onError: (error) => {
-        log.error(`WorkBuddy Centrifuge error: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+        const msg = error instanceof Error ? error.message : JSON.stringify(error);
+        // "transport closed" is a transient WebSocket disconnect, not a real error
+        if (msg.includes('transport closed')) {
+          log.debug(`WorkBuddy Centrifuge transient error: ${msg}`);
+        } else {
+          log.error(`WorkBuddy Centrifuge error: ${msg}`);
+        }
         updateState('error');
       },
       onPersistentFailure: () => {

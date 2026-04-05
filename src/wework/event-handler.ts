@@ -26,6 +26,7 @@ import { buildErrorNote, buildProgressNote } from '../shared/message-note.js';
 import { createPlatformEventContext } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
+import { handleEnqueueResult } from '../shared/utils.js';
 import {
   decryptAes256CbcMedia,
   downloadMediaFromUrl,
@@ -337,11 +338,7 @@ export function setupWeWorkHandlers(
       await handleAIRequest({ userId, chatId, prompt: nextPrompt, workDir, convId, replyToMessageId: undefined, signal });
     });
 
-    if (enqueueResult === 'rejected') {
-      await sendTextReply(chatId, '请求队列已满，请稍后再试。', reqId);
-    } else if (enqueueResult === 'queued') {
-      await sendTextReply(chatId, '您的请求已排队等待。', reqId);
-    }
+    await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text, reqId));
   }
 
   async function handleEvent(data: WeWorkCallbackMessage): Promise<void> {

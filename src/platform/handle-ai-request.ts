@@ -206,41 +206,23 @@ export function createPlatformAIRequestHandler(
 
     // Use taskCallbacksFactory if provided (has full context access)
     let factoryCallbacks: PlatformTaskCallbacks | undefined;
-    if (taskCallbacksFactory) {
-      factoryCallbacks = taskCallbacksFactory({
-        chatId,
-        msgId,
-        taskKey,
-        userId,
-        toolId,
-        replyToMessageId,
-      });
-      if (factoryCallbacks.streamUpdate) {
-        mergedCallbacks.streamUpdate = factoryCallbacks.streamUpdate;
-      }
-      if (factoryCallbacks.sendComplete) {
-        mergedCallbacks.sendComplete = factoryCallbacks.sendComplete;
-      }
-      if (factoryCallbacks.sendError) {
-        mergedCallbacks.sendError = factoryCallbacks.sendError;
-      }
-      if (factoryCallbacks.onFirstContent) {
-        mergedCallbacks.onFirstContent = factoryCallbacks.onFirstContent;
-      }
-    } else if (taskCallbacks) {
-      // Fall back to static taskCallbacks
-      if (taskCallbacks.streamUpdate) {
-        mergedCallbacks.streamUpdate = taskCallbacks.streamUpdate;
-      }
-      if (taskCallbacks.sendComplete) {
-        mergedCallbacks.sendComplete = taskCallbacks.sendComplete;
-      }
-      if (taskCallbacks.sendError) {
-        mergedCallbacks.sendError = taskCallbacks.sendError;
-      }
-      if (taskCallbacks.onFirstContent) {
-        mergedCallbacks.onFirstContent = taskCallbacks.onFirstContent;
-      }
+    const platformOverrides = taskCallbacksFactory
+      ? (factoryCallbacks = taskCallbacksFactory({
+          chatId,
+          msgId,
+          taskKey,
+          userId,
+          toolId,
+          replyToMessageId,
+        }))
+      : taskCallbacks;
+
+    if (platformOverrides) {
+      const { streamUpdate, sendComplete, sendError, onFirstContent } = platformOverrides;
+      if (streamUpdate) mergedCallbacks.streamUpdate = streamUpdate;
+      if (sendComplete) mergedCallbacks.sendComplete = sendComplete;
+      if (sendError) mergedCallbacks.sendError = sendError;
+      if (onFirstContent) mergedCallbacks.onFirstContent = onFirstContent;
     }
 
     if (onThinkingToText) {

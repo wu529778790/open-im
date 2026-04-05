@@ -20,6 +20,7 @@ import { setChatUser } from "../shared/chat-user-map.js";
 import { createPlatformEventContext } from "../platform/create-event-context.js";
 import { createPlatformAIRequestHandler } from "../platform/handle-ai-request.js";
 import { handleTextFlow } from "../platform/handle-text-flow.js";
+import { handleEnqueueResult } from "../shared/utils.js";
 
 const log = createLogger("QQHandler");
 const QQ_THROTTLE_MS = 1200;
@@ -318,11 +319,7 @@ export function setupQQHandlers(
           },
         );
 
-        if (enqueueResult === "rejected") {
-          await sendTextReply(chatId, "请求队列已满，请稍后再试。");
-        } else if (enqueueResult === "queued") {
-          await sendTextReply(chatId, "您的请求已排队等待。");
-        }
+        await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text));
 
         log.info(`QQ message handled: user=${userId}, chat=${chatId}, attachments=${event.attachments?.length ?? 0}`);
       }

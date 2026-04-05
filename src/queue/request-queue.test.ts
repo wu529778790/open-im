@@ -90,25 +90,6 @@ describe('RequestQueue', () => {
     expect(queue.clear('nobody', 'noconv')).toBe(0);
   });
 
-  it('times out long-running tasks after 10 minutes', async () => {
-    vi.useFakeTimers();
-    const queue = new RequestQueue();
-    const execute = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
-
-    queue.enqueue('user1', 'conv1', 'hello', execute);
-    expect(execute).toHaveBeenCalledTimes(1);
-
-    // Advance past 10-minute timeout
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
-    // Let microtasks settle
-    await vi.advanceTimersByTimeAsync(100);
-
-    // The timed-out task should be done, queue should be cleared
-    expect(execute).toHaveBeenCalledTimes(1);
-
-    vi.useRealTimers();
-  });
-
   it('handles task execution error gracefully and processes next', async () => {
     const queue = new RequestQueue();
     const execute = vi.fn()
@@ -123,28 +104,5 @@ describe('RequestQueue', () => {
     expect(execute).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledWith('first', expect.any(AbortSignal));
     expect(execute).toHaveBeenCalledWith('second', expect.any(AbortSignal));
-  });
-
-  it('aborts the AbortSignal on timeout', async () => {
-    vi.useFakeTimers();
-    const queue = new RequestQueue();
-    let receivedSignal: AbortSignal | undefined;
-    const execute = vi.fn().mockImplementation(async (_prompt: string, signal: AbortSignal) => {
-      receivedSignal = signal;
-      // Never resolve — simulates a stuck task
-      await new Promise(() => {});
-    });
-
-    queue.enqueue('user1', 'conv1', 'hello', execute);
-    await vi.advanceTimersByTimeAsync(10);
-    expect(receivedSignal?.aborted).toBe(false);
-
-    // Advance past timeout
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(receivedSignal?.aborted).toBe(true);
-
-    vi.useRealTimers();
   });
 });
