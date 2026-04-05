@@ -4,8 +4,17 @@ import { homedir, tmpdir } from "node:os";
 export const APP_HOME = join(homedir(), ".open-im");
 /** 优雅关闭 HTTP 端口（stop 命令通过此端口触发 shutdown） */
 export const SHUTDOWN_PORT = 39281;
-/** 本地 Web 配置页固定端口 */
+/** 本地 Web 配置 API 固定端口（完整 UI 见线上控制台，见 getPublicWebDashboardUrl） */
 export const WEB_CONFIG_PORT = 39282;
+
+/** 默认线上 Web 控制台（npm 包不再内置大段 HTML；可通过 OPEN_IM_PUBLIC_WEB_URL 覆盖） */
+export const PUBLIC_WEB_DASHBOARD_DEFAULT = "https://open-im.shenzjd.com";
+
+export function getPublicWebDashboardUrl(): string {
+  const fromEnv = process.env.OPEN_IM_PUBLIC_WEB_URL?.trim();
+  const raw = fromEnv || PUBLIC_WEB_DASHBOARD_DEFAULT;
+  return raw.replace(/\/$/, "");
+}
 export const IMAGE_DIR = join(tmpdir(), "open-im-images");
 
 export const TERMINAL_ONLY_COMMANDS = new Set([

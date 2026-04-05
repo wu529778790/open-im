@@ -1,14 +1,14 @@
 import { spawn } from "node:child_process";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
-import { WEB_CONFIG_PORT } from "./constants.js";
+import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
 import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig } from "./config.js";
-import { PAGE_HTML } from "./config-web-page.js";
+import { getConfigWebLandingHtml } from "./config-web-page.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
 import { createLogger } from "./logger.js";
@@ -43,6 +43,36 @@ function getWebConfigHost(): string {
   const envHost = process.env.OPEN_IM_WEB_HOST?.trim();
   if (envHost) return envHost;
   return "127.0.0.1";
+}
+
+/** 设为 true 时，非本机绑定的 Web 配置服务跳过登录 Cookie 校验（仅适用于受信网络；生产建议配合 HTTPS 反向代理） */
+function allowRemoteApiWithoutAuth(): boolean {
+  return process.env.OPEN_IM_ALLOW_REMOTE_API === "true";
+}
+
+/** 有 Origin 时返回 CORS 响应头；无 Origin（如本地 file:// 或同源内置页）不返回，行为与原来一致 */
+function corsHeadersFor(request: IncomingMessage): Record<string, string> | undefined {
+  const originRaw = request.headers.origin;
+  if (!originRaw || typeof originRaw !== "string") return undefined;
+
+  const allowlist = splitCsv(process.env.OPEN_IM_CORS_ORIGINS);
+  if (allowlist.length > 0 && !allowlist.includes(originRaw)) {
+    return undefined;
+  }
+
+  return {
+    "Access-Control-Allow-Origin": originRaw,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+function mergeCors(request: IncomingMessage, headers: OutgoingHttpHeaders): OutgoingHttpHeaders {
+  const cors = corsHeadersFor(request);
+  if (!cors) return headers;
+  return { ...headers, ...cors };
 }
 
 function generateRandomToken(bytes = 32): string {
@@ -275,8 +305,8 @@ function readJson<T>(request: IncomingMessage): Promise<T> {
   });
 }
 
-function json(response: ServerResponse, statusCode: number, body: unknown): void {
-  response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
+function json(response: ServerResponse, statusCode: number, body: unknown, request: IncomingMessage): void {
+  response.writeHead(statusCode, mergeCors(request, { "content-type": "application/json; charset=utf-8" }));
   response.end(JSON.stringify(body));
 }
 
@@ -775,7 +805,7 @@ export function getWebConfigUrl(): string {
 }
 
 export function openWebConfigUrl(): void {
-  openBrowser(getWebConfigUrl());
+  openBrowser(getPublicWebDashboardUrl());
 }
 
 
@@ -800,13 +830,22 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         settle(result);
       };
 
+      const cors = corsHeadersFor(request);
+      if (request.method === "OPTIONS" && cors) {
+        response.writeHead(204, cors);
+        response.end();
+        return;
+      }
+
       // Auth gating:
       // - 当仅绑定 127.0.0.1 时，保持完全本地免登录（向后兼容）
       // - 当绑定到 0.0.0.0 或其他地址时，启用一次性登录 + Session Cookie 机制
+      // - OPEN_IM_ALLOW_REMOTE_API=true 时跳过上述校验（受信网络 / 跨域在线配置页配合 CORS 使用）
       const isLocalOnly = host === "127.0.0.1";
       const hasLoginTokenFeature = !isLocalOnly;
+      const shouldRequireAuth = hasLoginTokenFeature && !allowRemoteApiWithoutAuth();
 
-      if (hasLoginTokenFeature) {
+      if (shouldRequireAuth) {
         const loginToken = requestUrl.searchParams.get("login_token");
         if (loginToken) {
           const info = pendingLogins.get(loginToken);
@@ -821,31 +860,34 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
             requestUrl.searchParams.delete("login_token");
             const redirectPath = requestUrl.pathname + (requestUrl.search ? requestUrl.search : "");
 
-            response.writeHead(302, {
-              Location: redirectPath || "/",
-              "Set-Cookie": cookie,
-            });
+            response.writeHead(
+              302,
+              mergeCors(request, {
+                Location: redirectPath || "/",
+                "Set-Cookie": cookie,
+              }),
+            );
             response.end();
             return;
           }
 
           // 无效或过期的一次性 token
-          response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+          response.writeHead(401, mergeCors(request, { "content-type": "text/plain; charset=utf-8" }));
           response.end("Invalid or expired login link. Please generate a new one from the server.");
           return;
         }
 
         // 其他请求：必须已有有效 session
         if (!isSessionValid(request)) {
-          response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+          response.writeHead(401, mergeCors(request, { "content-type": "text/plain; charset=utf-8" }));
           response.end("Unauthorized. Please open the latest login URL from the server output.");
           return;
         }
       }
 
       if (request.method === "GET" && requestUrl.pathname === "/") {
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(PAGE_HTML);
+        response.writeHead(200, mergeCors(request, { "content-type": "text/html; charset=utf-8" }));
+        response.end(getConfigWebLandingHtml());
         return;
       }
 
@@ -853,7 +895,7 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         json(response, 200, {
           payload: buildInitialPayload(loadFileConfig()),
           meta: { configPath: CONFIG_PATH, mode: options.mode },
-        });
+        }, request);
         return;
       }
 
@@ -863,9 +905,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           if (existsSync(CONFIG_PATH)) {
             contents = readFileSync(CONFIG_PATH, "utf-8");
           }
-          json(response, 200, { path: CONFIG_PATH, contents });
+          json(response, 200, { path: CONFIG_PATH, contents }, request);
         } catch (error) {
-          json(response, 500, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -875,13 +917,13 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const body = await readJson<{ contents?: string }>(request);
           const raw = body.contents ?? "";
           if (!raw.trim()) {
-            json(response, 400, { error: "contents is required" });
+            json(response, 400, { error: "contents is required" }, request);
             return;
           }
           try {
             JSON.parse(raw);
           } catch {
-            json(response, 400, { error: "Invalid JSON" });
+            json(response, 400, { error: "Invalid JSON" }, request);
             return;
           }
           const dir = dirname(CONFIG_PATH);
@@ -890,9 +932,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           }
           writeFileSync(CONFIG_PATH, raw, "utf-8");
           loadConfig();
-          json(response, 200, { message: "Config file saved.", path: CONFIG_PATH });
+          json(response, 200, { message: "Config file saved.", path: CONFIG_PATH }, request);
         } catch (error) {
-          json(response, 500, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -902,12 +944,12 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const body = await readJson<WebConfigPayload>(request);
           const errors = validatePayload(body);
           if (errors.length > 0) {
-            json(response, 400, { error: errors.join(" ") });
+            json(response, 400, { error: errors.join(" ") }, request);
             return;
           }
-          json(response, 200, { message: "Configuration looks internally consistent." });
+          json(response, 200, { message: "Configuration looks internally consistent." }, request);
         } catch (error) {
-          json(response, 400, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 400, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -917,23 +959,23 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const body = await readJson<WebConfigPayload>(request);
           const errors = validatePayload(body);
           if (errors.length > 0) {
-            json(response, 400, { error: errors.join(" ") });
+            json(response, 400, { error: errors.join(" ") }, request);
             return;
           }
           saveFileConfig(toFileConfig(body, loadFileConfig()));
           loadConfig();
-          json(response, 200, { message: "Configuration saved." });
+          json(response, 200, { message: "Configuration saved." }, request);
           if (!options.persistent && requestUrl.searchParams.get("final") === "1") {
             setTimeout(() => finishFlow("saved"), 120);
           }
         } catch (error) {
-          json(response, 400, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 400, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
 
       if (request.method === "GET" && requestUrl.pathname === "/api/service/status") {
-        json(response, 200, getServiceStatus());
+        json(response, 200, getServiceStatus(), request);
         return;
       }
 
@@ -950,9 +992,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
               contents = JSON.stringify({ env }, null, 2);
             }
           }
-          json(response, 200, { path: settingsPath, contents });
+          json(response, 200, { path: settingsPath, contents }, request);
         } catch (error) {
-          json(response, 500, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -962,14 +1004,14 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const body = await readJson<{ contents?: string }>(request);
           const raw = body.contents ?? "";
           if (!raw.trim()) {
-            json(response, 400, { error: "contents is required" });
+            json(response, 400, { error: "contents is required" }, request);
             return;
           }
           let parsed: unknown;
           try {
             parsed = JSON.parse(raw);
           } catch (err) {
-            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` });
+            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` }, request);
             return;
           }
           const pretty = JSON.stringify(parsed, null, 2);
@@ -979,9 +1021,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
             mkdirSync(dir, { recursive: true });
           }
           writeFileSync(settingsPath, pretty, "utf-8");
-          json(response, 200, { message: "Claude settings.json saved.", path: settingsPath });
+          json(response, 200, { message: "Claude settings.json saved.", path: settingsPath }, request);
         } catch (error) {
-          json(response, 500, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -989,7 +1031,7 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
       if (request.method === "GET" && requestUrl.pathname === "/api/health") {
         const file = loadFileConfig();
         const platforms = getHealthPlatformSnapshot(file);
-        json(response, 200, { platforms, serviceStatus: getServiceStatus() });
+        json(response, 200, { platforms, serviceStatus: getServiceStatus() }, request);
         return;
       }
 
@@ -998,12 +1040,12 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const config = loadConfig();
           const workDir = config.claudeWorkDir ?? options.cwd;
           const started = startBackgroundService(workDir);
-          json(response, 200, { message: `Bridge started with pid ${started.pid}.`, pid: started.pid });
+          json(response, 200, { message: `Bridge started with pid ${started.pid}.`, pid: started.pid }, request);
           if (!options.persistent) {
             setTimeout(() => finishFlow("saved"), 120);
           }
         } catch (error) {
-          json(response, 400, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 400, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -1011,9 +1053,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
       if (request.method === "POST" && requestUrl.pathname === "/api/service/stop") {
         try {
           const result = await stopBackgroundService();
-          json(response, 200, { message: result.pid ? `Bridge stopped (pid ${result.pid}).` : "Bridge was already stopped." });
+          json(response, 200, { message: result.pid ? `Bridge stopped (pid ${result.pid}).` : "Bridge was already stopped." }, request);
         } catch (error) {
-          json(response, 400, { error: error instanceof Error ? error.message : String(error) });
+          json(response, 400, { error: error instanceof Error ? error.message : String(error) }, request);
         }
         return;
       }
@@ -1023,14 +1065,14 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           const body = await readJson<{ platform: string; config: Record<string, unknown> }>(request);
           const { platform, config } = body;
           const message = await testPlatformConfig(platform, config);
-          json(response, 200, { message, success: true });
+          json(response, 200, { message, success: true }, request);
         } catch (error) {
-          json(response, 400, { error: toErrorMessage(error), success: false });
+          json(response, 400, { error: toErrorMessage(error), success: false }, request);
         }
         return;
       }
 
-      json(response, 404, { error: "Not found." });
+      json(response, 404, { error: "Not found." }, request);
   });
 
   const port = getWebConfigPort();
@@ -1102,9 +1144,14 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
 
 export async function runWebConfigFlow(options: { mode: WebFlowMode; cwd: string }): Promise<WebFlowResult> {
   const started = await startWebConfigServer(options);
-  const targetUrl = started.loginUrl ?? started.url;
-  openBrowser(targetUrl);
-  log.info(`Opened local configuration page: ${targetUrl}`);
-  log.info(process.env.OPEN_IM_NO_BROWSER === "1" ? "Browser launch disabled. Open the URL manually." : "Save the configuration in your browser to continue.");
+  const publicUrl = getPublicWebDashboardUrl();
+  const apiUrl = started.url;
+  openBrowser(publicUrl);
+  log.info(`Opened web console: ${publicUrl}`);
+  log.info(`Local API (paste in the web console): ${apiUrl}`);
+  if (started.loginUrl) {
+    log.info(`Remote login (first visit): ${started.loginUrl}`);
+  }
+  log.info(process.env.OPEN_IM_NO_BROWSER === "1" ? "Browser launch disabled. Open the web console URL manually." : "Save the configuration in your browser to continue.");
   return started.waitForResult;
 }
