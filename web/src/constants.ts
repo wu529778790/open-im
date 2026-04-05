@@ -4,6 +4,9 @@ export const STORAGE_KEY_LANG = "open-im-web-lang";
 export const STORAGE_KEY_DARK_MODE = "open-im-web-dark-mode";
 export const STORAGE_KEY_SERVER = "open-im-web-api-base";
 
+/** 本地 Web 配置 API（与 open-im 默认端口一致） */
+export const DEFAULT_SERVER_URL = "http://127.0.0.1:39282";
+
 export const POLLING_INTERVAL_MS = 10_000;
 
 export const PLATFORM_KEYS: PlatformKey[] = [

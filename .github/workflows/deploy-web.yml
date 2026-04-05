@@ -4,12 +4,17 @@
 #   Settings → Pages → Build and deployment → Source: GitHub Actions
 #
 # Optional: create an Environment named "github-pages" if prompted (first run).
+#
+# The "github-pages" environment often restricts which branches may deploy (default: main only).
+# If you need Pages to update on every `dev` push, go to:
+#   Settings → Environments → github-pages → Deployment branches
+# and allow `dev` (or all branches). Otherwise only `main` pushes trigger deploy below.
 
 name: Deploy web to GitHub Pages
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
     paths:
       - "web/**"
       - "src/config-web-page-i18n.ts"

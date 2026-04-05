@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createRequest, normalizeServerUrl } from "./api.js";
 import { ApiProvider } from "./context/ApiContext.js";
-import { STORAGE_KEY_SERVER } from "./constants.js";
+import { DEFAULT_SERVER_URL, STORAGE_KEY_SERVER } from "./constants.js";
 import { Dashboard } from "./Dashboard.js";
 
 export function App() {
@@ -45,10 +45,14 @@ export function App() {
             id="serverUrlInput"
             className="connection-input"
             type="text"
-            placeholder="http://127.0.0.1:39282"
+            placeholder={DEFAULT_SERVER_URL}
             autoComplete="url"
             spellCheck={false}
-            defaultValue={typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY_SERVER) ?? "" : ""}
+            defaultValue={
+              typeof localStorage !== "undefined"
+                ? localStorage.getItem(STORAGE_KEY_SERVER) ?? DEFAULT_SERVER_URL
+                : DEFAULT_SERVER_URL
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter") void onConnect();
             }}

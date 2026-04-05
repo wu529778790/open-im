@@ -50,20 +50,37 @@ function allowRemoteApiWithoutAuth(): boolean {
   return process.env.OPEN_IM_ALLOW_REMOTE_API === "true";
 }
 
+/** 是否允许该浏览器 Origin（跨域线上控制台始终允许，与 OPEN_IM_PUBLIC_WEB_URL 一致） */
+function isCorsOriginAllowed(origin: string): boolean {
+  const publicWeb = getPublicWebDashboardUrl();
+  try {
+    if (origin === new URL(publicWeb).origin) return true;
+  } catch {
+    if (origin === publicWeb) return true;
+  }
+
+  const allowlist = splitCsv(process.env.OPEN_IM_CORS_ORIGINS);
+  if (allowlist.length === 0) return true;
+  return allowlist.includes(origin);
+}
+
 /** 有 Origin 时返回 CORS 响应头；无 Origin（如本地 file:// 或同源内置页）不返回，行为与原来一致 */
 function corsHeadersFor(request: IncomingMessage): Record<string, string> | undefined {
   const originRaw = request.headers.origin;
   if (!originRaw || typeof originRaw !== "string") return undefined;
 
-  const allowlist = splitCsv(process.env.OPEN_IM_CORS_ORIGINS);
-  if (allowlist.length > 0 && !allowlist.includes(originRaw)) {
-    return undefined;
-  }
+  if (!isCorsOriginAllowed(originRaw)) return undefined;
+
+  const requestedHeaders = request.headers["access-control-request-headers"];
+  const allowHeaders =
+    typeof requestedHeaders === "string" && requestedHeaders.trim()
+      ? requestedHeaders
+      : "Content-Type, Authorization";
 
   return {
     "Access-Control-Allow-Origin": originRaw,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": allowHeaders,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
   };
