@@ -7,7 +7,8 @@
  *   1. Access control check → deny with error message
  *   2. setActiveChatId(platform, chatId)
  *   3. setChatUser(chatId, userId, platform)
- *   4. Command dispatch via commandHandler.dispatch()
+ *   4. Command dispatch via commandHandler.dispatch(..., commandSender)
+ *      （与 sendTextReply 同源，保证 WorkBuddy 等平台的斜杠命令带上 msgId）
  *   5. If not handled: empty text → return, otherwise enqueue AI request
  *   6. Handle queue-full notification (rejected / queued)
  *
@@ -23,6 +24,7 @@ import type { EnqueueResult } from '../queue/request-queue.js';
 import type { HandleAIRequestParams } from './handle-ai-request.js';
 import { createLogger } from '../logger.js';
 import { handleEnqueueResult, DEFAULT_QUEUE_FULL_MESSAGE, DEFAULT_QUEUED_MESSAGE } from '../shared/utils.js';
+import type { MessageSender } from '../commands/handler.js';
 
 /** AI request handler function type (object params, as returned by createPlatformAIRequestHandler). */
 export type HandleAIRequestFn = (params: HandleAIRequestParams) => Promise<void>;
@@ -145,12 +147,19 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
       });
     };
 
+    const commandSender: MessageSender = {
+      sendTextReply: async (chatId, text, _threadCtx?) => {
+        await sendTextReply(chatId, text);
+      },
+    };
+
     const handled = await ctx.commandHandler.dispatch(
       text,
       chatId,
       userId,
       platform,
       dispatchHandler,
+      commandSender,
     );
     if (handled) {
       return true;
