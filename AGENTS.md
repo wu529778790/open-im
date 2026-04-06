@@ -33,7 +33,7 @@ See `CLAUDE.md` for the full list. Key commands:
 - **Default on**: anonymous diagnostic events (`ai.task.*`, `service.platform.init`) are written as JSON lines under the log dir (`events-YYYY-MM-DD.jsonl`) and may be **uploaded** when `OPEN_IM_TELEMETRY_URL` is set to an **HTTPS** collector URL.
 - **Opt out**: set `OPEN_IM_TELEMETRY=false` or `telemetry.enabled: false` in `~/.open-im/config.json` — disables structured events and upload (no queue, no HTTP).
 - **Collector URL / token**: defaults in `src/constants.ts` — `DEFAULT_TELEMETRY_INGEST_URL`, `DEFAULT_TELEMETRY_INGEST_TOKEN` (Bearer; empty constant = no header). Override via env or `telemetry.*`. Explicit empty `OPEN_IM_TELEMETRY_TOKEN` disables Bearer.
-- **Privacy**: no chat/prompt bodies; user keys are hashed in `data`. Example collector: [`examples/telemetry-cloudflare-worker`](examples/telemetry-cloudflare-worker).
+- **Privacy**: no chat/prompt bodies; user keys are hashed in `data`. Reference collector: [`telemetry-cloudflare-worker`](telemetry-cloudflare-worker).
 
 ### Testing Notes
 
