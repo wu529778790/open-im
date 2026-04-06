@@ -93,4 +93,37 @@ describe('telemetry upload', () => {
     );
     vi.unstubAllGlobals();
   });
+
+  it('POSTs when queue reaches batch size without waiting for shutdown', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    initTelemetryUpload({
+      enabled: true,
+      url: 'https://example.com/v1/ingest',
+    });
+    for (let i = 0; i < 100; i++) {
+      enqueueTelemetryLine(`{"n":${i}}\n`);
+    }
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await shutdownTelemetryUpload();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not POST sparse lines until min interval elapses', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    initTelemetryUpload({
+      enabled: true,
+      url: 'https://example.com/v1/ingest',
+    });
+    enqueueTelemetryLine('{"sparse":1}\n');
+    enqueueTelemetryLine('{"sparse":2}\n');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await shutdownTelemetryUpload();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 });

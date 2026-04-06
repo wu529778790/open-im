@@ -1,5 +1,12 @@
-const BATCH_MAX_LINES = 50;
-const FLUSH_INTERVAL_MS = 4000;
+/**
+ * 遥测 NDJSON 上传：
+ * - 单次 POST 最多 BATCH_MAX_LINES 条（控制 body 大小）；
+ * - 事件稀疏时按 MIN_PARTIAL_FLUSH_INTERVAL_MS 合并上报，降低时间维度上的请求频率；
+ * - 积压达到 BATCH_MAX_LINES 时仍立即上传（突发流量）。
+ */
+const BATCH_MAX_LINES = 100;
+/** 稀疏流量：队列未满批时，最早在「首条入队」后经过该间隔才上传（避免短间隔反复 POST） */
+const MIN_PARTIAL_FLUSH_INTERVAL_MS = 60_000;
 const MAX_QUEUE = 8000;
 const MAX_BACKOFF_MS = 120_000;
 const INITIAL_BACKOFF_MS = 1000;
@@ -27,12 +34,14 @@ function clearBackoffTimer() {
   }
 }
 
-function scheduleIdleFlush() {
-  if (!uploadEnabled || !endpoint || idleTimer || flushing) return;
+function schedulePartialFlush(): void {
+  if (!uploadEnabled || !endpoint || idleTimer || flushing || backoffTimer) return;
   idleTimer = setTimeout(() => {
     idleTimer = null;
-    void flushPipeline();
-  }, FLUSH_INTERVAL_MS);
+    void flushPipeline().catch(() => {
+      /* 静默；退避重试由 flushPipeline/backoff 处理 */
+    });
+  }, MIN_PARTIAL_FLUSH_INTERVAL_MS);
 }
 
 async function postBatch(lines: string[]): Promise<boolean> {
@@ -43,8 +52,17 @@ async function postBatch(lines: string[]): Promise<boolean> {
     accept: 'application/json',
   };
   if (bearer) headers.authorization = `Bearer ${bearer}`;
-  const res = await fetch(endpoint, { method: 'POST', headers, body });
-  return res.ok;
+  try {
+    const res = await fetch(endpoint, { method: 'POST', headers, body });
+    try {
+      await res.text();
+    } catch {
+      /* ignore body read errors */
+    }
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function flushPipeline(): Promise<void> {
@@ -70,11 +88,10 @@ async function flushPipeline(): Promise<void> {
         break;
       }
     }
+  } catch {
+    /* 静默：上传失败不得向外抛，避免 unhandledRejection */
   } finally {
     flushing = false;
-    if (uploadEnabled && endpoint && queue.length > 0 && !backoffTimer) {
-      scheduleIdleFlush();
-    }
   }
 }
 
@@ -84,7 +101,7 @@ function backoffThenRetry(): Promise<void> {
     backoffTimer = setTimeout(() => {
       backoffTimer = null;
       backoffMs = Math.min(MAX_BACKOFF_MS, backoffMs * 2);
-      void flushPipeline().finally(resolve);
+      void flushPipeline().catch(() => {}).finally(resolve);
     }, backoffMs);
   });
 }
@@ -101,18 +118,26 @@ export function initTelemetryUpload(opts: { enabled: boolean; url?: string; toke
   }
 }
 
-/** 单行 NDJSON（已含 \\n）。 */
+/**
+ * 单行 NDJSON（已含 \\n）。
+ * 满 BATCH_MAX_LINES 立即上传；否则自「当前积压周期」起至少间隔 MIN_PARTIAL_FLUSH_INTERVAL_MS 再上传。
+ */
 export function enqueueTelemetryLine(line: string): void {
   if (!uploadEnabled || !endpoint) return;
   if (queue.length >= MAX_QUEUE) {
     queue.splice(0, Math.floor(MAX_QUEUE / 4));
   }
+  const wasEmpty = queue.length === 0;
   queue.push(line);
   if (queue.length >= BATCH_MAX_LINES) {
     clearIdleTimer();
-    void flushPipeline();
-  } else if (!idleTimer && !flushing && !backoffTimer) {
-    scheduleIdleFlush();
+    void flushPipeline().catch(() => {
+      /* 静默 */
+    });
+    return;
+  }
+  if (wasEmpty && !idleTimer && !flushing && !backoffTimer) {
+    schedulePartialFlush();
   }
 }
 
@@ -143,9 +168,10 @@ export async function shutdownTelemetryUpload(): Promise<void> {
         accept: 'application/json',
       };
       if (br) headers.authorization = `Bearer ${br}`;
-      await fetch(ep, { method: 'POST', headers, body });
+      const res = await fetch(ep, { method: 'POST', headers, body });
+      await res.text().catch(() => {});
     } catch {
-      /* best effort */
+      /* best effort，静默 */
     }
   }
 }

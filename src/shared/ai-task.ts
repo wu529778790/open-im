@@ -359,9 +359,11 @@ export function runAITask(
           durationMs: 0,
           errorSnippet: sanitize(String(err).slice(0, 400)),
         });
-        platformAdapter.sendError(
-          `内部错误：${err instanceof Error ? err.message : String(err)}`
-        ).catch(() => { /* ignore */ });
+        platformAdapter
+          .sendError(`内部错误：${err instanceof Error ? err.message : String(err)}`)
+          .catch(() => {
+            /* ignore */
+          });
         resolve();
       }
       return;
