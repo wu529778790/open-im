@@ -99,13 +99,34 @@ export async function startManagerProcess(cwd: string): Promise<{ pid: number }>
     env: process.env,
     windowsHide: process.platform === "win32",
   });
-  child.on("error", (err) => {
-    logError("Manager process spawn failed:", err);
-  });
-  child.unref();
 
-  if (!child.pid) {
-    throw new Error("Failed to start manager process.");
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onSpawn = () => {
+        child.off("error", onError);
+        resolve();
+      };
+      const onError = (err: Error) => {
+        child.off("spawn", onSpawn);
+        reject(err);
+      };
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
+    });
+  } catch (err) {
+    logError("Manager process spawn failed:", err);
+    throw new Error(
+      `Failed to start manager process: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  child.unref();
+  child.on("error", (err) => {
+    logError("Manager process error after spawn:", err);
+  });
+
+  if (child.pid === undefined || child.pid === null) {
+    throw new Error("Failed to start manager process: no PID after spawn.");
   }
 
   writeManagerPid(child.pid);
