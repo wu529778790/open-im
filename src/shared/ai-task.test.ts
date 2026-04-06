@@ -167,6 +167,7 @@ describe("runAITask", () => {
       expect.any(String),
       undefined
     );
+    expect(sessionManager.addTurns).toHaveBeenCalledWith("u1", 1);
     expect(sendError).not.toHaveBeenCalled();
     expect(streamUpdate).toHaveBeenCalled();
   });

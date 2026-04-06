@@ -73,9 +73,10 @@ function buildCompletionNote(
   if (toolInfo) parts.push(toolInfo);
   if (result.model) parts.push(result.model);
 
+  // 每完成一次「用户消息 → AI 回复」计 1 轮（供 /sessions、上下文提示等）
   const currentTurns = ctx.threadId
-    ? sessionManager.addTurnsForThread(ctx.userId, ctx.threadId, 0)
-    : sessionManager.addTurns(ctx.userId, 0);
+    ? sessionManager.addTurnsForThread(ctx.userId, ctx.threadId, 1)
+    : sessionManager.addTurns(ctx.userId, 1);
   const ctxWarning = getContextWarning(currentTurns);
   if (ctxWarning) parts.push(ctxWarning);
 
