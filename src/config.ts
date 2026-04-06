@@ -436,6 +436,44 @@ export function loadConfig(): Config {
   const logDir = process.env.LOG_DIR ?? file.logDir ?? join(APP_HOME, 'logs');
   const logLevel = (process.env.LOG_LEVEL?.toUpperCase() ?? file.logLevel ?? 'INFO') as LogLevel;
 
+  const telemetryEnv = process.env.OPEN_IM_TELEMETRY?.trim().toLowerCase();
+  let telemetryEnabled: boolean;
+  if (telemetryEnv === 'false' || telemetryEnv === '0' || telemetryEnv === 'no') {
+    telemetryEnabled = false;
+  } else if (telemetryEnv === 'true' || telemetryEnv === '1' || telemetryEnv === 'yes') {
+    telemetryEnabled = true;
+  } else if (file.telemetry?.enabled === false) {
+    telemetryEnabled = false;
+  } else if (file.telemetry?.enabled === true) {
+    telemetryEnabled = true;
+  } else {
+    telemetryEnabled = true;
+  }
+
+  let telemetryUrl: string | undefined;
+  const telemetryUrlRaw = process.env.OPEN_IM_TELEMETRY_URL ?? file.telemetry?.url;
+  if (telemetryUrlRaw && typeof telemetryUrlRaw === 'string' && telemetryUrlRaw.trim()) {
+    try {
+      const u = new URL(telemetryUrlRaw.trim());
+      if (u.protocol !== 'https:') {
+        log.warn('OPEN_IM_TELEMETRY_URL / telemetry.url 必须为 https，已忽略上传地址');
+      } else {
+        telemetryUrl = u.href;
+      }
+    } catch {
+      log.warn('无效的 OPEN_IM_TELEMETRY_URL / telemetry.url，已忽略上传地址');
+    }
+  }
+
+  const telemetryToken =
+    process.env.OPEN_IM_TELEMETRY_TOKEN ?? file.telemetry?.token;
+
+  if (telemetryEnabled && !telemetryUrl) {
+    log.warn(
+      '遥测已开启但未配置有效的 HTTPS 采集 URL：仅写入本地 events-*.jsonl；设置 OPEN_IM_TELEMETRY_URL 可上传。'
+    );
+  }
+
   const platforms: Config['platforms'] = {
     telegram: telegramEnabled
       ? {
@@ -552,6 +590,11 @@ export function loadConfig(): Config {
     skipPermissions,
     logDir,
     logLevel,
+    telemetry: {
+      enabled: telemetryEnabled,
+      url: telemetryUrl,
+      token: telemetryToken,
+    },
     platforms,
   };
 }

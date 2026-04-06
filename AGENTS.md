@@ -28,6 +28,13 @@ See `CLAUDE.md` for the full list. Key commands:
 - **远程访问**：将服务暴露给其他机器时，设置 `OPEN_IM_WEB_HOST=0.0.0.0`；在受信网络可用 `OPEN_IM_ALLOW_REMOTE_API=true` 跳过 Web 登录 Cookie（生产建议配合 HTTPS 反向代理）。可选 `OPEN_IM_CORS_ORIGINS`（逗号分隔）限制允许的 `Origin`。从第三方 **HTTPS** 页面调用本机 **HTTP** API 会被浏览器拦截混合内容；默认用法为打开本机 **`http://127.0.0.1:39282`** 的内置仪表盘（与 API 同源）。
 - **npm 包**：包含 `web/dist` 仪表盘静态资源；`open-im start` 默认提示 **`http://127.0.0.1:39282`**（可用 `OPEN_IM_PUBLIC_WEB_URL` 覆盖为反代地址）。无 `web/dist` 时 **`GET /`** 为 **503** 纯文本提示。
 
+### Telemetry (structured events)
+
+- **Default on**: anonymous diagnostic events (`ai.task.*`, `service.platform.init`) are written as JSON lines under the log dir (`events-YYYY-MM-DD.jsonl`) and may be **uploaded** when `OPEN_IM_TELEMETRY_URL` is set to an **HTTPS** collector URL.
+- **Opt out**: set `OPEN_IM_TELEMETRY=false` or `telemetry.enabled: false` in `~/.open-im/config.json` — disables structured events and upload (no queue, no HTTP).
+- **Collector URL / token**: `OPEN_IM_TELEMETRY_URL`, optional `OPEN_IM_TELEMETRY_TOKEN` (Bearer), or `telemetry.url` / `telemetry.token` in config. Invalid or non-HTTPS URL is ignored with a warning; local JSONL still applies when telemetry is enabled.
+- **Privacy**: no chat/prompt bodies; user keys are hashed in `data`. Example collector: [`examples/telemetry-cloudflare-worker`](examples/telemetry-cloudflare-worker).
+
 ### Testing Notes
 
 - Tests run with `npm run test` (vitest) and do not require any external credentials or services.

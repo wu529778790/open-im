@@ -32,7 +32,13 @@ import {
   getActiveChatId,
   flushActiveChats,
 } from "./shared/active-chats.js";
-import { initLogger, createLogger, closeLogger } from "./logger.js";
+import {
+  initLogger,
+  createLogger,
+  closeLogger,
+  emitStructuredEvent,
+  shutdownLoggerTelemetry,
+} from "./logger.js";
 import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
 import { createRequire } from "node:module";
 import { escapePathForMarkdown } from "./shared/utils.js";
@@ -193,7 +199,11 @@ export async function main() {
   let config: ReturnType<typeof loadConfig>;
   try {
     config = loadConfig();
-    initLogger(config.logDir, config.logLevel);
+    initLogger({
+      logDir: config.logDir,
+      logLevel: config.logLevel,
+      telemetry: config.telemetry,
+    });
   } catch (err) {
     if (
       err instanceof Error &&
@@ -204,7 +214,11 @@ export async function main() {
       const saved = await runClaudeApiSetup();
       if (!saved) process.exit(1);
       config = loadConfig();
-      initLogger(config.logDir, config.logLevel);
+      initLogger({
+        logDir: config.logDir,
+        logLevel: config.logLevel,
+        telemetry: config.telemetry,
+      });
     } else {
       throw err;
     }
@@ -279,6 +293,11 @@ export async function main() {
   log.info("Service is running. Press Ctrl+C to stop.");
   log.info(`Successfully initialized platforms: ${successfulPlatforms.join(", ")}`);
 
+  emitStructuredEvent("Main", "service.platform.init", {
+    platforms: successfulPlatforms,
+    version: APP_VERSION,
+  });
+
   // Send notification only to successfully initialized platforms
   for (const platform of successfulPlatforms) {
     const startupMsg = buildStartupMessage(
@@ -336,7 +355,8 @@ export async function main() {
     sessionManager.destroy();
     cleanupAdapters();
     flushActiveChats();
-    closeLogger();
+    await shutdownLoggerTelemetry();
+    await closeLogger();
     process.exit(0);
   };
 
@@ -356,8 +376,9 @@ export async function main() {
       return;
     }
     log.error("Uncaught exception (process will exit):", err);
-    closeLogger();
-    process.exit(1);
+    void shutdownLoggerTelemetry()
+      .then(() => closeLogger())
+      .finally(() => process.exit(1));
   });
 }
 
@@ -367,7 +388,8 @@ const isEntry =
 if (isEntry) {
   main().catch((err) => {
     log.error("Fatal error:", err);
-    closeLogger();
-    process.exit(1);
+    void shutdownLoggerTelemetry()
+      .then(() => closeLogger())
+      .finally(() => process.exit(1));
   });
 }

@@ -116,6 +116,14 @@ Add Feishu, QQ, WeCom, DingTalk, WorkBuddy under **`platforms`** as needed. Run 
 
 Use **`config.json`** or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`**, **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
 
+### Telemetry (optional)
+
+By default, open-im records **anonymous** diagnostic events (e.g. AI task lifecycle) as JSON lines under the log directory and can **upload** them if you set a collector URL.
+
+- **Opt out**: `OPEN_IM_TELEMETRY=false` or `"telemetry": { "enabled": false }` in **`config.json`** — disables structured events and any upload.
+- **Upload**: set **`OPEN_IM_TELEMETRY_URL`** to an **HTTPS** endpoint (full URL to `POST`, NDJSON body). Optional Bearer: **`OPEN_IM_TELEMETRY_TOKEN`** or **`telemetry.token`**. Same keys can be set in **`config.json`** as **`telemetry.url`** / **`telemetry.token`**.
+- No chat or prompt content is sent; user identifiers are hashed. A minimal **Cloudflare Worker + R2** example lives in [`examples/telemetry-cloudflare-worker`](examples/telemetry-cloudflare-worker).
+
 ### Platform credentials
 
 | Platform | Notes |
