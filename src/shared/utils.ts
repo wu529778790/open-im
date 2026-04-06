@@ -25,6 +25,23 @@ export async function handleEnqueueResult(
   }
 }
 
+/**
+ * 将 AI 适配器可能返回的非字符串（如第三方 API 把 result 解析成对象）转为可展示的文本，
+ * 避免 IM 侧出现 "[object Object]"。
+ */
+export function toReplyPlainText(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 /** 转义路径供 Markdown 显示，防止 xxx.yyy.com 被解析为链接 */
 export function escapePathForMarkdown(path: string): string {
   return `\`${path.replace(/`/g, '\\`')}\``;

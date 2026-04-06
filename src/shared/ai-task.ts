@@ -12,6 +12,7 @@ import {
   formatToolCallNotification,
   getContextWarning,
   getAIToolDisplayName,
+  toReplyPlainText,
 } from './utils.js';
 import { createLogger, emitStructuredEvent } from '../logger.js';
 import { hashUserId } from '../telemetry/hash-user.js';
@@ -241,11 +242,12 @@ export function runAITask(
             pendingUpdate = null;
           }
           const note = buildCompletionNote(result, sessionManager, ctx);
-          const output =
+          const raw =
             result.accumulated ||
             result.result ||
             taskState.latestContent ||
-            '(无输出)';
+            '';
+          const output = raw ? toReplyPlainText(raw) : '(无输出)';
           if (!result.accumulated && !result.result && taskState.latestContent) {
             log.warn(
               `Empty AI output from adapter but had streamed content (${taskState.latestContent.length} chars), using latestContent. platform=${ctx.platform}, taskKey=${ctx.taskKey}`
