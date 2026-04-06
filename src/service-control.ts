@@ -3,6 +3,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
+import { resolveNodeExecutable } from "./node-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PID_FILE = join(APP_HOME, "open-im-worker.pid");
@@ -17,16 +18,17 @@ function removePortFile(): void {
 }
 
 function getServiceEntry(): { command: string; args: string[] } {
+  const node = resolveNodeExecutable();
   const extension = extname(fileURLToPath(import.meta.url));
   if (extension === ".ts") {
     return {
-      command: process.execPath,
+      command: node,
       args: ["--import", "tsx", join(__dirname, "index.ts")],
     };
   }
 
   return {
-    command: process.execPath,
+    command: node,
     args: [join(__dirname, "index.js")],
   };
 }
