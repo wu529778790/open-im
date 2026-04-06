@@ -8,7 +8,11 @@ import { accessSync, constants } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, isAbsolute } from 'node:path';
 import { createLogger, type LogLevel } from './logger.js';
-import { APP_HOME } from './constants.js';
+import {
+  APP_HOME,
+  DEFAULT_TELEMETRY_INGEST_URL,
+  DEFAULT_TELEMETRY_INGEST_TOKEN,
+} from './constants.js';
 
 const log = createLogger('config');
 
@@ -465,12 +469,31 @@ export function loadConfig(): Config {
     }
   }
 
-  const telemetryToken =
-    process.env.OPEN_IM_TELEMETRY_TOKEN ?? file.telemetry?.token;
+  if (!telemetryUrl && telemetryEnabled && DEFAULT_TELEMETRY_INGEST_URL.trim()) {
+    try {
+      const u = new URL(DEFAULT_TELEMETRY_INGEST_URL.trim());
+      if (u.protocol === 'https:') {
+        telemetryUrl = u.href;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let telemetryToken: string | undefined;
+  if (process.env.OPEN_IM_TELEMETRY_TOKEN !== undefined) {
+    const t = process.env.OPEN_IM_TELEMETRY_TOKEN.trim();
+    telemetryToken = t.length > 0 ? t : undefined;
+  } else if (file.telemetry?.token !== undefined) {
+    const t = String(file.telemetry.token).trim();
+    telemetryToken = t.length > 0 ? t : undefined;
+  } else {
+    telemetryToken = DEFAULT_TELEMETRY_INGEST_TOKEN.trim() || undefined;
+  }
 
   if (telemetryEnabled && !telemetryUrl) {
     log.warn(
-      '遥测已开启但未配置有效的 HTTPS 采集 URL：仅写入本地 events-*.jsonl；设置 OPEN_IM_TELEMETRY_URL 可上传。'
+      '遥测已开启但未配置有效的 HTTPS 采集 URL：仅写入本地 events-*.jsonl；可设置 OPEN_IM_TELEMETRY_URL 或在 constants 中配置 DEFAULT_TELEMETRY_INGEST_URL。'
     );
   }
 

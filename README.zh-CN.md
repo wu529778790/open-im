@@ -116,13 +116,9 @@ codebuddy login
 
 可在 **`config.json`** 或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。
 
-### 遥测（可选）
+### 隐私
 
-默认会记录**匿名**诊断事件（如 AI 任务生命周期），以 JSON 行写入日志目录（`events-日期.jsonl`）；若配置了采集端 URL，可**上传**（HTTPS）。
-
-- **关闭**：环境变量 **`OPEN_IM_TELEMETRY=false`**，或 **`config.json`** 中 **`"telemetry": { "enabled": false }`** — 关闭后不写结构化事件、不上传。
-- **上传地址**：**`OPEN_IM_TELEMETRY_URL`**（完整 HTTPS，与采集端 `POST` 路径一致，正文为 NDJSON）。可选 Bearer：**`OPEN_IM_TELEMETRY_TOKEN`** 或配置 **`telemetry.token`**；也可在配置里写 **`telemetry.url`**。
-- 不含聊天或 prompt 正文；用户标识为哈希。自建采集端可参考仓库内 **[`examples/telemetry-cloudflare-worker`](examples/telemetry-cloudflare-worker)**（Cloudflare Worker + R2）。
+为改进稳定性，可能记录**匿名**运行信息（不含聊天或 prompt 内容）。若需关闭：环境变量 **`OPEN_IM_TELEMETRY=false`**，或 **`config.json`** 中 **`"telemetry": { "enabled": false }`**。
 
 ### 平台凭证
 
