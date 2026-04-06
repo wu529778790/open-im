@@ -304,8 +304,10 @@ export class SessionManager {
 
   addTurnsForThread(userId: string, threadId: string, turns: number): number {
     const s = this.sessions.get(userId);
-    const t = s?.threads?.[threadId];
-    if (!t) return 0;
+    if (!s) return 0;
+    if (!s.threads) s.threads = {};
+    if (!s.threads[threadId]) s.threads[threadId] = {};
+    const t = s.threads[threadId];
     t.totalTurns = (t.totalTurns ?? 0) + turns;
     this.save();
     return t.totalTurns;
