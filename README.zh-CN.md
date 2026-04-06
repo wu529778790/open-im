@@ -12,8 +12,8 @@
 - **流式输出** — 视平台能力实时回传
 - **多媒体** — 图片、文件、语音、视频（因平台而异）
 - **会话隔离** — 每用户独立；`/new` 重置会话
-- **Web 配置** — 完整界面在**线上控制台**；本机进程在 `39282` 端口提供 HTTP API
-- **聊天命令** — `/help`、`/new`、`/cd`、`/pwd`、`/status`、`/allow`、`/deny`
+- **Web 配置** — 完整仪表盘 **随 npm 包内置**（`web/dist`），由本机 `http://127.0.0.1:39282` **同源**提供
+- **聊天命令** — `/help`、`/new`、`/sessions`、`/resume`、`/cd`、`/pwd`、`/status`、`/allow`、`/deny`
 
 ## 环境要求
 
@@ -47,25 +47,26 @@ open-im start
 | `open-im dev` | 前台调试 |
 | `open-im dashboard` | 仅保留本地配置 HTTP 服务（不启动桥接） |
 
-执行 `start` 后，终端会提示 **线上 Web 控制台** 地址和 **本地 API** 地址（默认 `http://127.0.0.1:39282`）。
+执行 `start` 后，终端会提示 **Web 控制台** 地址（默认 **`http://127.0.0.1:39282`**，与 API 同源）。
 
 ## Web 配置
 
-### 线上控制台（完整 UI）
+### 内置仪表盘（完整 UI）
 
-npm 包**不再内置**完整仪表盘静态 HTML。请在 **Web 控制台** 完成概览、平台、AI、JSON 编辑与服务启停等操作。
+发布到 npm 的包内含 **`web/dist`** 构建产物；`open-im start` 或 `open-im dashboard` 在本机 HTTP 服务上提供 **完整 SPA**（概览、平台、AI、JSON、服务启停等）。浏览器打开 **`http://127.0.0.1:<端口>`**（默认端口 **39282**）即可，**Server URL** 与页面同源，一般无需再填。
 
-- 默认地址：**https://open-im.shenzjd.com**
-- 可通过环境变量 **`OPEN_IM_PUBLIC_WEB_URL`** 覆盖
+- 默认控制台地址：本机 **`http://127.0.0.1:39282`**（随 **`OPEN_IM_WEB_PORT`** 变化）
+- 若需自定义打开的链接（例如反向代理后的地址），可设置 **`OPEN_IM_PUBLIC_WEB_URL`**
 
-在控制台中填写本机 API 地址，例如 `http://127.0.0.1:39282` 或 `http://<局域网IP>:39282`。
+若从源码安装且未执行 **`npm run build`**（内含 `web:build`），可能没有 `web/dist`，此时 **`GET /`** 会返回 **503** 直至构建完成。仅改 TypeScript 时可使用 **`npm run build:ts`** 跳过前端构建。
 
 ### 本机 HTTP 服务
 
 进程监听 **`OPEN_IM_WEB_PORT`**（默认 **39282**）：
 
-- **`GET /`** — 极简落地页（链接到线上控制台 + 显示当前 API origin）
-- **`/api/*`** — 供控制台使用的 JSON API
+- **`GET /`** — 有 `web/dist` 时返回内置仪表盘；否则 **503** 纯文本提示
+- **`/assets/*`** — 内置前端静态资源（有构建产物时）
+- **`/api/*`** — JSON API
 
 ### 远程访问
 
@@ -76,7 +77,7 @@ export OPEN_IM_WEB_HOST=0.0.0.0
 # 可选：受信网络跳过 Cookie 登录（请自行评估风险）
 # export OPEN_IM_ALLOW_REMOTE_API=true
 # 可选：限制 CORS 来源（逗号分隔）
-# export OPEN_IM_CORS_ORIGINS=https://open-im.shenzjd.com
+# export OPEN_IM_CORS_ORIGINS=http://127.0.0.1:39282
 ```
 
 未绑定 `127.0.0.1` 时，服务端可能打印 **一次性登录链接**（`login_token=…`）。
@@ -85,10 +86,10 @@ export OPEN_IM_WEB_HOST=0.0.0.0
 
 ```bash
 npm run web:dev    # Vite；将 /api 代理到 127.0.0.1:39282
-npm run web:build  # 构建到 web/dist
+npm run build      # web:build + tsc；发布前与日常请用此命令
+npm run build:ts   # 仅 tsc（不更新 web/dist）
+npm run web:build  # 仅构建 web/dist
 ```
-
-**GitHub Pages（本仓库工作流）：** 在仓库 **设置 → Pages → 构建与部署 → 源：GitHub Actions** 中启用一次。之后变更 `web/` 会触发 `.github/workflows/deploy-web.yml`。
 
 更多开发说明见 [CLAUDE.md](./CLAUDE.md)、[AGENTS.md](./AGENTS.md)。
 
@@ -98,6 +99,8 @@ npm run web:build  # 构建到 web/dist
 | --- | --- |
 | `/help` | 帮助 |
 | `/new` | 新 AI 会话 |
+| `/sessions` | 查看历史会话 |
+| `/resume <序号>` | 恢复历史会话 |
 | `/status` | AI 与会话信息 |
 | `/cd <路径>` | 切换工作目录 |
 | `/pwd` | 当前目录 |
@@ -106,7 +109,7 @@ npm run web:build  # 构建到 web/dist
 
 ## 会话说明
 
-会话保存在 `~/.open-im/data/sessions.json`，与 IM 聊天记录无关。`/new` 会重置当前用户的 AI 会话。
+会话保存在 `~/.open-im/data/sessions.json`，与 IM 聊天记录无关。`/new` 创建新会话并归档旧会话。使用 `/sessions` 查看历史，`/resume <序号>` 恢复之前的会话。
 
 ## 配置说明
 

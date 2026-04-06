@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
-# Build TypeScript to JavaScript (outputs to dist/)
+# Build web/dist (Vite) + TypeScript to dist/
 npm run build
+# TypeScript only (skip web bundle): npm run build:ts
 
 # Development mode - run directly from source with tsx
 npm run dev

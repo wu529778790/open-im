@@ -113,6 +113,9 @@ describe('handleTextFlow', () => {
       'user-1',
       'telegram',
       expect.any(Function),
+      expect.objectContaining({
+        sendTextReply: expect.any(Function),
+      }),
     );
 
     // Does NOT enqueue (sendTextReply not called for queue messages)

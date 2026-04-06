@@ -36,7 +36,12 @@ function loadUserPluginSettings(): UserPluginSettings | null {
     if (settings.enabledPlugins) result.enabledPlugins = settings.enabledPlugins;
     if (settings.extraKnownMarketplaces) result.extraKnownMarketplaces = settings.extraKnownMarketplaces;
     if (Object.keys(result).length === 0) return null;
-    log.info(`Loaded user plugin settings: plugins=[${Object.keys(result.enabledPlugins ?? {}).join(', ')}]`);
+    const pluginNames = Object.keys(result.enabledPlugins ?? {});
+    if (pluginNames.length > 0) {
+      log.info(`Loaded user plugin settings:\n${pluginNames.map((p) => `  • ${p}`).join("\n")}`);
+    } else {
+      log.info("Loaded user plugin settings (no enabledPlugins entries in ~/.claude/settings.json)");
+    }
     return result;
   } catch (err) {
     log.warn('Failed to read ~/.claude/settings.json for plugin config:', err);
@@ -58,17 +63,32 @@ const activeStreams = new Set<AsyncIterator<SDKMessage>>();
 const sessionLastUsed = new Map<string, number>();
 // 跟踪正在执行任务的 session ID，防止空闲清理误杀运行中的长任务
 const runningSessions = new Set<string>();
-const SESSION_IDLE_TTL_MS = 30 * 60 * 1000; // 30 分钟未使用则清理
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;  // 每 5 分钟检查一次
+let sessionIdleTtlMs = 30 * 60 * 1000; // 默认 30 分钟未使用则清理
+let sessionIdleCleanupDisabled = false;
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 每 5 分钟检查一次
 const MAX_ACTIVE_SESSIONS = 100;
 
 let sessionSeq = 0;
 
+/**
+ * 由 initAdapters 根据配置调用。ttlMinutes≤0 时关闭空闲回收（仍受 MAX_ACTIVE_SESSIONS 限制）。
+ */
+export function configureClaudeSdkSessionIdle(ttlMinutes: number): void {
+  if (ttlMinutes <= 0) {
+    sessionIdleCleanupDisabled = true;
+    log.info('Claude SDK: idle session cleanup disabled (sessionIdleTtlMinutes=0)');
+  } else {
+    sessionIdleCleanupDisabled = false;
+    sessionIdleTtlMs = ttlMinutes * 60 * 1000;
+  }
+}
+
 const cleanupInterval = setInterval(() => {
+  if (sessionIdleCleanupDisabled) return;
   const now = Date.now();
   for (const [id, lastUsed] of sessionLastUsed) {
     if (runningSessions.has(id)) continue; // 跳过正在运行任务的 session
-    if (now - lastUsed > SESSION_IDLE_TTL_MS) {
+    if (now - lastUsed > sessionIdleTtlMs) {
       const session = activeSessions.get(id);
       if (session) {
         try { session.close(); } catch { /* ignore */ }

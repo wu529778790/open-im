@@ -50,6 +50,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm ci --prefix web
+
       - name: Sync version from pushed tag
         if: github.event_name == 'push'
         shell: bash

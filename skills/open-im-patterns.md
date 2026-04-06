@@ -67,8 +67,8 @@ src/
 ├── commands/           # 命令处理
 │   └── handler.ts      # /help, /new 等命令
 ├── config.ts           # 配置加载和验证
-├── config-web.ts       # Web 配置 HTTP 服务（/api、极简落地页）
-├── config-web-page.ts  # 落地页 HTML；完整 UI 在仓库 web/（Vite）与线上控制台
+├── config-web.ts       # Web 配置 HTTP 服务（/api、托管 web/dist；无 dist 时 GET / 503）
+├── config-web-static.ts # 从包内 web/dist 提供 SPA 静态资源
 ├── config-web-page-i18n.ts # 文案（web 前端与历史兼容）
 ├── setup.ts            # 交互式配置向导
 ├── index.ts            # 主服务入口

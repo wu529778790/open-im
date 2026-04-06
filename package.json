@@ -9,11 +9,13 @@
   },
   "files": [
     "dist",
+    "web/dist",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run web:build && tsc",
+    "build:ts": "tsc",
     "dev": "tsx src/index.ts",
     "init": "tsx src/cli.ts init",
     "start": "node dist/cli.js start",

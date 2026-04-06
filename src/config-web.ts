@@ -8,7 +8,7 @@ import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
 import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig } from "./config.js";
-import { getConfigWebLandingHtml } from "./config-web-page.js";
+import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
 import { createLogger } from "./logger.js";
@@ -50,7 +50,7 @@ function allowRemoteApiWithoutAuth(): boolean {
   return process.env.OPEN_IM_ALLOW_REMOTE_API === "true";
 }
 
-/** 是否允许该浏览器 Origin（跨域线上控制台始终允许，与 OPEN_IM_PUBLIC_WEB_URL 一致） */
+/** 是否允许该浏览器 Origin（与 getPublicWebDashboardUrl() 同源时始终允许，便于反代 / 自定义 OPEN_IM_PUBLIC_WEB_URL） */
 function isCorsOriginAllowed(origin: string): boolean {
   const publicWeb = getPublicWebDashboardUrl();
   try {
@@ -520,6 +520,7 @@ function createProbeConfig(values: Partial<Config>): Config {
     aiCommand: "claude",
     codexCliPath: "codex",
     claudeWorkDir: process.cwd(),
+    claudeSessionIdleTtlMinutes: 30,
     logDir: "",
     logLevel: "INFO",
     codebuddyCliPath: "codebuddy",
@@ -903,8 +904,11 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
       }
 
       if (request.method === "GET" && requestUrl.pathname === "/") {
-        response.writeHead(200, mergeCors(request, { "content-type": "text/html; charset=utf-8" }));
-        response.end(getConfigWebLandingHtml());
+        if (tryServeDashboardStatic(requestUrl, request, response, mergeCors)) return;
+        response.writeHead(503, mergeCors(request, { "content-type": "text/plain; charset=utf-8" }));
+        response.end(
+          "open-im: web/dist is missing. Run npm run build in the repository root, then restart.\n",
+        );
         return;
       }
 
@@ -1089,6 +1093,10 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         return;
       }
 
+      if (request.method === "GET" && tryServeDashboardStatic(requestUrl, request, response, mergeCors)) {
+        return;
+      }
+
       json(response, 404, { error: "Not found." }, request);
   });
 
@@ -1165,7 +1173,11 @@ export async function runWebConfigFlow(options: { mode: WebFlowMode; cwd: string
   const apiUrl = started.url;
   openBrowser(publicUrl);
   log.info(`Opened web console: ${publicUrl}`);
-  log.info(`Local API (paste in the web console): ${apiUrl}`);
+  if (getWebDistDir()) {
+    log.info("Full dashboard UI is bundled (same origin as API).");
+  } else {
+    log.info(`API base: ${apiUrl} — install has no web/dist; GET / returns 503 until you run npm run build.`);
+  }
   if (started.loginUrl) {
     log.info(`Remote login (first visit): ${started.loginUrl}`);
   }

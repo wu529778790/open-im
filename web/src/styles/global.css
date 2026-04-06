@@ -780,23 +780,26 @@ body {
   }
 }
 
-/* connection bar (remote SPA) */
-.connection-bar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 10px 16px;
-  box-shadow: var(--shadow-xs);
+/* 未连上 API 时的连接表单（非顶栏） */
+.connection-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 0 24px;
 }
-.connection-bar-inner {
+.connection-setup-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.connection-setup-row {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  max-width: 1400px;
-  margin: 0 auto;
 }
 .connection-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
 .connection-input {

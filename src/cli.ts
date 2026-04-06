@@ -4,9 +4,22 @@ import { main, needsSetup, runInteractiveSetup } from "./index.js";
 import { loadConfig } from "./config.js";
 import { checkAndUpdate } from "./check-update.js";
 import { getPublicWebDashboardUrl } from "./constants.js";
+import { getWebDistDir } from "./config-web-static.js";
 import { getWebConfigUrl, runWebConfigFlow } from "./config-web.js";
 import { getManagerStatus, startManagerProcess, stopManagerProcess } from "./manager-control.js";
 import { stopBackgroundService } from "./service-control.js";
+
+/** 控制台与 API 同源时只打一行 */
+function logWebDashboardAndApi(): void {
+  const dash = getPublicWebDashboardUrl().replace(/\/$/, "");
+  const api = getWebConfigUrl().replace(/\/$/, "");
+  if (dash === api) {
+    console.log(`  web dashboard: ${dash}`);
+  } else {
+    console.log(`  web dashboard: ${dash}`);
+    console.log(`  local API: ${api}`);
+  }
+}
 
 async function ensureConfigured(mode: "init" | "start" | "dev"): Promise<boolean> {
   if (mode === "init") {
@@ -53,8 +66,7 @@ async function cmdStart(): Promise<void> {
   if (status.running && status.pid) {
     console.log("\nopen-im is already running in the background.");
     console.log(`  pid: ${status.pid}`);
-    console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-    console.log(`  local API: ${getWebConfigUrl()}`);
+    logWebDashboardAndApi();
     process.exit(0);
   }
 
@@ -67,8 +79,7 @@ async function cmdStart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im started in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-  console.log(`  local API: ${getWebConfigUrl()}`);
+  logWebDashboardAndApi();
   if (process.env.OPEN_IM_WEB_HOST && process.env.OPEN_IM_WEB_HOST !== "127.0.0.1") {
     console.log("");
     console.log("NOTE:");
@@ -113,8 +124,7 @@ async function cmdRestart(): Promise<void> {
   const child = await startManagerProcess(process.cwd());
   console.log("\nopen-im restarted in the background.");
   console.log(`  pid: ${child.pid}`);
-  console.log(`  web dashboard: ${getPublicWebDashboardUrl()}`);
-  console.log(`  local API: ${getWebConfigUrl()}`);
+  logWebDashboardAndApi();
   process.exit(0);
 }
 
@@ -146,9 +156,13 @@ async function cmdDashboard(): Promise<void> {
   const { startWebConfigServer } = await import("./config-web.js");
   const server = await startWebConfigServer({ mode: "dev", cwd: process.cwd(), persistent: true });
   const publicUrl = getPublicWebDashboardUrl();
-  const apiUrl = server.loginUrl ?? server.url;
   console.log(`\nWeb dashboard: ${publicUrl}`);
-  console.log(`Local API: ${apiUrl}`);
+  if (!getWebDistDir()) {
+    console.log("Note: web/dist not found — GET / returns 503 until you run npm run build (or npm run web:build), or use the published npm package.");
+  }
+  if (server.loginUrl) {
+    console.log(`Remote login: ${server.loginUrl}`);
+  }
   console.log("Press Ctrl+C to close.\n");
   await server.waitForResult;
 }
@@ -165,13 +179,11 @@ Commands:
   dev       Run in the foreground for debugging
   dashboard Open the web dashboard (keeps running until Ctrl+C)
 
-Web dashboard (full UI):
-  ${getPublicWebDashboardUrl()}
-  Local API (paste in dashboard):
-  http://127.0.0.1:39282
-  - "start" keeps the API available while the service runs
-  - "dashboard" runs the API server only (use web dashboard + local API URL)
-  - "dev" opens web console during initial setup
+Web dashboard (bundled SPA when web/dist is installed):
+  ${getPublicWebDashboardUrl()}  (same origin as API; default port 39282)
+  - "start" keeps the dashboard and API available while the service runs
+  - "dashboard" runs only the web config server (no bridge)
+  - "dev" may open the browser during initial setup
 
 Options:
   -h, --help    Show this help message

@@ -25,6 +25,7 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "botToken", "proxy", "allowedUserIds"] as const,
     testFields: ["botToken", "proxy"] as const,
     requiredFields: ["botToken"] as const,
+    sensitiveFields: ["botToken"] as const,
   },
   {
     key: "feishu" as const,
@@ -32,6 +33,7 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "appId", "appSecret", "allowedUserIds"] as const,
     testFields: ["appId", "appSecret"] as const,
     requiredFields: ["appId", "appSecret"] as const,
+    sensitiveFields: ["appSecret"] as const,
   },
   {
     key: "qq" as const,
@@ -39,6 +41,7 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "appId", "secret", "allowedUserIds"] as const,
     testFields: ["appId", "secret"] as const,
     requiredFields: ["appId", "secret"] as const,
+    sensitiveFields: ["secret"] as const,
   },
   {
     key: "wework" as const,
@@ -46,6 +49,7 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "corpId", "secret", "allowedUserIds"] as const,
     testFields: ["corpId", "secret"] as const,
     requiredFields: ["corpId", "secret"] as const,
+    sensitiveFields: ["secret"] as const,
   },
   {
     key: "dingtalk" as const,
@@ -53,6 +57,7 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "clientId", "clientSecret", "cardTemplateId", "allowedUserIds"] as const,
     testFields: ["clientId", "clientSecret"] as const,
     requiredFields: ["clientId", "clientSecret"] as const,
+    sensitiveFields: ["clientSecret"] as const,
   },
   {
     key: "workbuddy" as const,
@@ -60,5 +65,6 @@ export const PLATFORM_DEFINITIONS = [
     fields: ["aiCommand", "accessToken", "refreshToken", "userId", "baseUrl", "allowedUserIds"] as const,
     testFields: ["accessToken", "refreshToken", "userId"] as const,
     requiredFields: ["accessToken", "refreshToken", "userId"] as const,
+    sensitiveFields: ["accessToken", "refreshToken"] as const,
   },
 ];

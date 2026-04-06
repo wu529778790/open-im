@@ -8,8 +8,16 @@ import {
 } from "./constants.js";
 import { INLINE_TIP_KEY, PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY } from "./fieldLabels.js";
 import { useI18n, type Lang } from "./hooks/useI18n.js";
-import type { AiCommand, PlatformKey, WebConfigPayload } from "./types.js";
+import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
 import { useApi } from "./context/ApiContext.js";
+
+function toErrorMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+function prettyJson(raw: string): string {
+  return JSON.stringify(JSON.parse(raw), null, 2) + "\n";
+}
 
 function emptyPayload(): WebConfigPayload {
   return {
@@ -154,14 +162,18 @@ export function Dashboard() {
 
   const refreshStatus = useCallback(async () => {
     const data = (await request("/api/service/status")) as { running?: boolean; pid?: number };
-    setServiceStatus({ running: Boolean(data.running), pid: data.pid });
+    const next = { running: Boolean(data.running), pid: data.pid };
+    setServiceStatus((prev) => (prev.running === next.running && prev.pid === next.pid ? prev : next));
     return data;
   }, [request]);
 
   const refreshHealth = useCallback(async () => {
     try {
       const data = (await request("/api/health")) as Record<string, unknown>;
-      setHealth(data);
+      setHealth((prev) => {
+        if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        return data;
+      });
     } catch {
       /* ignore */
     }
@@ -173,16 +185,23 @@ export function Dashboard() {
       setBusy(true);
       setMessage({ text: "", type: "" });
       try {
-        const data = (await request("/api/config")) as { payload: WebConfigPayload; meta: { configPath: string } };
+        const data = (await request("/api/config")) as ConfigApiResponse;
         if (cancelled) return;
         setPayload(coercePayload(data.payload));
         setMeta({ configPath: data.meta.configPath });
 
-        const claude = (await request("/api/claude/settings")) as { contents?: string };
+        const [claude, file, ,] = await Promise.all([
+          request("/api/claude/settings") as Promise<{ contents?: string }>,
+          request("/api/config/file") as Promise<{ contents?: string }>,
+          refreshStatus(),
+          refreshHealth(),
+        ]);
+        if (cancelled) return;
+
         const rawC = (claude.contents ?? "").trim();
         if (rawC) {
           try {
-            setClaudeSettingsJson(JSON.stringify(JSON.parse(rawC), null, 2) + "\n");
+            setClaudeSettingsJson(prettyJson(rawC));
           } catch {
             setClaudeSettingsJson(rawC);
           }
@@ -190,12 +209,11 @@ export function Dashboard() {
           setClaudeSettingsJson("{\n}\n");
         }
 
-        const file = (await request("/api/config/file")) as { contents?: string };
         const rawJ = (file.contents ?? "").trim();
         setOriginalConfigJson(rawJ);
         if (rawJ) {
           try {
-            setConfigJson(JSON.stringify(JSON.parse(rawJ), null, 2) + "\n");
+            setConfigJson(prettyJson(rawJ));
           } catch {
             setConfigJson(rawJ);
           }
@@ -204,10 +222,8 @@ export function Dashboard() {
         }
 
         setCurrentAiPanel(data.payload.ai.aiCommand || "claude");
-        await refreshStatus();
-        await refreshHealth();
       } catch (e) {
-        if (!cancelled) setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+        if (!cancelled) setMessage({ text: toErrorMsg(e), type: "error" });
       } finally {
         if (!cancelled) setBusy(false);
       }
@@ -273,7 +289,7 @@ export function Dashboard() {
       });
       setMessage({ text: t("validationOk"), type: "success" });
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      setMessage({ text: toErrorMsg(e), type: "error" });
     } finally {
       setBusy(false);
     }
@@ -287,15 +303,14 @@ export function Dashboard() {
     }
     setBusy(true);
     try {
-      await saveClaudeSettings();
-      await saveOpenImConfigFile();
+      await Promise.all([saveClaudeSettings(), saveOpenImConfigFile()]);
       await request("/api/config/save?final=1", {
         method: "POST",
         body: JSON.stringify(buildPayload()),
       });
       setMessage({ text: t("saveOk"), type: "success" });
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      setMessage({ text: toErrorMsg(e), type: "error" });
     } finally {
       setBusy(false);
     }
@@ -309,17 +324,18 @@ export function Dashboard() {
     }
     setBusy(true);
     try {
-      await saveClaudeSettings();
-      await request("/api/config/save", {
-        method: "POST",
-        body: JSON.stringify(buildPayload()),
-      });
+      await Promise.all([
+        saveClaudeSettings(),
+        request("/api/config/save", {
+          method: "POST",
+          body: JSON.stringify(buildPayload()),
+        }),
+      ]);
       await request("/api/service/start", { method: "POST" });
-      await refreshStatus();
-      await refreshHealth();
+      await Promise.all([refreshStatus(), refreshHealth()]);
       setMessage({ text: t("startOk"), type: "success" });
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      setMessage({ text: toErrorMsg(e), type: "error" });
     } finally {
       setBusy(false);
     }
@@ -332,7 +348,7 @@ export function Dashboard() {
       await refreshStatus();
       setMessage({ text: t("stopOk"), type: "success" });
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      setMessage({ text: toErrorMsg(e), type: "error" });
     } finally {
       setBusy(false);
     }
@@ -371,7 +387,7 @@ export function Dashboard() {
     } catch (e) {
       setTestMsg((m) => ({
         ...m,
-        [key]: { text: t("testFailed", { error: e instanceof Error ? e.message : String(e) }), ok: false },
+        [key]: { text: t("testFailed", { error: toErrorMsg(e) }), ok: false },
       }));
     } finally {
       setTestBusy(null);
@@ -414,7 +430,7 @@ export function Dashboard() {
 
   const formatJson = () => {
     try {
-      setConfigJson(JSON.stringify(JSON.parse(configJson), null, 2) + "\n");
+      setConfigJson(prettyJson(configJson));
     } catch {
       setJsonValidation({ text: t("jsonInvalid", { error: "parse" }), type: "error" });
     }
@@ -719,7 +735,7 @@ export function Dashboard() {
                             await saveOpenImConfigFile();
                             setMessage({ text: t("saveOk"), type: "success" });
                           } catch (e) {
-                            setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+                            setMessage({ text: toErrorMsg(e), type: "error" });
                           }
                         })()
                       }
@@ -753,7 +769,7 @@ export function Dashboard() {
                             await saveClaudeSettings();
                             setMessage({ text: t("saveOk"), type: "success" });
                           } catch (e) {
-                            setMessage({ text: e instanceof Error ? e.message : String(e), type: "error" });
+                            setMessage({ text: toErrorMsg(e), type: "error" });
                           }
                         })()
                       }
@@ -804,9 +820,7 @@ function PlatformCard({
     const tipId = `${def.key}-${field}` as keyof typeof INLINE_TIP_KEY;
     const tipKey = INLINE_TIP_KEY[tipId];
     const isArea = field === "allowedUserIds";
-    const isPassword =
-      ["botToken", "appSecret", "secret", "clientSecret", "accessToken", "refreshToken", "cardTemplateId"].includes(field) ||
-      (def.key === "dingtalk" && field === "clientId");
+    const isPassword = (def.sensitiveFields as readonly string[]).includes(field);
 
     return (
       <div className="form-group" key={field}>
