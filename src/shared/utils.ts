@@ -50,6 +50,8 @@ export function escapePathForMarkdown(path: string): string {
 /** AI 工具显示名称映射（aiCommand -> 用户友好名称） */
 export const AI_TOOL_DISPLAY_NAMES: Record<string, string> = {
   claude: 'Claude Code',
+  /** ClaudeSDKAdapter.toolId，与 claude 相同展示名 */
+  'claude-sdk': 'Claude Code',
   codex: 'Codex',
   codebuddy: 'CodeBuddy',
 };
