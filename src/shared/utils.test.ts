@@ -4,6 +4,7 @@ import {
   formatToolStats,
   getContextWarning,
   preprocessMarkdownForTelegram,
+  toReplyPlainText,
   truncateText,
 } from './utils.js';
 
@@ -57,6 +58,16 @@ describe('getContextWarning', () => {
 describe('truncateText', () => {
   it('uses a readable Chinese omission marker', () => {
     expect(truncateText('a'.repeat(120), 40)).toContain('...(前文已省略)...');
+  });
+});
+
+describe('toReplyPlainText', () => {
+  it('passes through strings', () => {
+    expect(toReplyPlainText('hi')).toBe('hi');
+  });
+
+  it('stringifies objects as JSON to avoid [object Object]', () => {
+    expect(toReplyPlainText({ a: 1 })).toBe('{\n  "a": 1\n}');
   });
 });
 

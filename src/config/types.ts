@@ -48,6 +48,18 @@ export interface Config {
   logDir: string;
   logLevel: LogLevel;
 
+  /**
+   * 遥测：默认开启；关闭后不写入结构化事件、不上传。
+   * 环境变量：OPEN_IM_TELEMETRY、OPEN_IM_TELEMETRY_URL、OPEN_IM_TELEMETRY_TOKEN。
+   */
+  telemetry: {
+    enabled: boolean;
+    /** HTTPS 采集端完整 URL（如 https://example.com/v1/ingest） */
+    url?: string;
+    /** 可选 Bearer，与采集端一致 */
+    token?: string;
+  };
+
   platforms: {
     telegram?: {
       enabled: boolean;
@@ -204,4 +216,10 @@ export interface FileConfig {
   };
   logDir?: string;
   logLevel?: LogLevel;
+
+  telemetry?: {
+    enabled?: boolean;
+    url?: string;
+    token?: string;
+  };
 }

@@ -523,6 +523,7 @@ function createProbeConfig(values: Partial<Config>): Config {
     claudeSessionIdleTtlMinutes: 30,
     logDir: "",
     logLevel: "INFO",
+    telemetry: { enabled: true },
     codebuddyCliPath: "codebuddy",
     platforms: {},
     ...values,

@@ -2,6 +2,20 @@ import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
 export const APP_HOME = join(homedir(), ".open-im");
+
+/**
+ * 未设置 `OPEN_IM_TELEMETRY_URL` / `telemetry.url` 时使用的默认采集端（HTTPS）。
+ * 工具发行方可写死自有域名；留空字符串则仅在上游显式配置 URL 时上传。
+ */
+export const DEFAULT_TELEMETRY_INGEST_URL = "https://open-im.shenzjd.com/v1/ingest";
+
+/**
+ * 未设置 `OPEN_IM_TELEMETRY_TOKEN` / `telemetry.token` 时使用的默认 Bearer。
+ * 须与 Cloudflare Worker 的 `wrangler secret put TELEMETRY_INGEST_TOKEN` 值完全一致。
+ */
+export const DEFAULT_TELEMETRY_INGEST_TOKEN =
+  "610457d55274f20f2d031d38cdfd86c8498016e75160f60cdbce0dab93a78240";
+
 /** 优雅关闭 HTTP 端口（stop 命令通过此端口触发 shutdown） */
 export const SHUTDOWN_PORT = 39281;
 /** 本地 Web 配置 API 固定端口（完整 UI 由 web/dist 随包提供，见 getPublicWebDashboardUrl） */

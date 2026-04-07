@@ -116,6 +116,10 @@ codebuddy login
 
 可在 **`config.json`** 或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。
 
+### 隐私
+
+为改进稳定性，可能记录**匿名**运行信息（不含聊天或 prompt 内容）。若需关闭：环境变量 **`OPEN_IM_TELEMETRY=false`**，或 **`config.json`** 中 **`"telemetry": { "enabled": false }`**。
+
 ### 平台凭证
 
 | 平台 | 说明 |

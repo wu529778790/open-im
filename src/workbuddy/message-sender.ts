@@ -3,6 +3,7 @@
  */
 
 import { createLogger } from '../logger.js';
+import { toReplyPlainText } from '../shared/utils.js';
 import { getCentrifugeClient } from './client.js';
 import type { WorkBuddyCentrifugeClient } from './centrifuge-client.js';
 
@@ -28,7 +29,7 @@ export async function sendTextReply(
   await client.sendPromptResponse({
     session_id: chatId,
     prompt_id: msgId,
-    content: [{ type: 'text', text }],
+    content: [{ type: 'text', text: toReplyPlainText(text) }],
     stop_reason: 'end_turn',
   });
 }
@@ -73,5 +74,5 @@ export function sendStreamingChunk(
     return;
   }
 
-  client.sendMessageChunk(chatId, msgId, { type: 'text', text });
+  client.sendMessageChunk(chatId, msgId, { type: 'text', text: toReplyPlainText(text) });
 }

@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { createLogger } from '../logger.js';
+import { toReplyPlainText } from '../shared/utils.js';
 import type { ToolAdapter, RunCallbacks, RunOptions, RunHandle } from './tool-adapter.interface.js';
 
 const log = createLogger('ClaudeSDK');
@@ -403,7 +404,14 @@ export class ClaudeSDKAdapter implements ToolAdapter {
             // 处理结果消息
             if (isResult(msg)) {
               streamClosed = true;
-              const m = msg as { subtype?: string; result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number; errors?: string[] };
+              const m = msg as {
+                subtype?: string;
+                result?: unknown;
+                total_cost_usd?: number;
+                duration_ms?: number;
+                num_turns?: number;
+                errors?: string[];
+              };
               const success = m.subtype === 'success';
               const errs = m.errors ?? [];
 
@@ -428,7 +436,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
                 return;
               }
 
-              const resultText = m.result ?? '';
+              const resultText = toReplyPlainText(m.result ?? '');
               const result: Parameters<RunCallbacks['onComplete']>[0] = {
                 success,
                 result: resultText,

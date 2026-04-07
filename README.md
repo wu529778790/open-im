@@ -116,6 +116,10 @@ Add Feishu, QQ, WeCom, DingTalk, WorkBuddy under **`platforms`** as needed. Run 
 
 Use **`config.json`** or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`**, **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
 
+### Privacy
+
+**Anonymous** usage information may be collected to improve reliability (no chat or prompt content). To disable: **`OPEN_IM_TELEMETRY=false`** or **`"telemetry": { "enabled": false }`** in **`config.json`**.
+
 ### Platform credentials
 
 | Platform | Notes |

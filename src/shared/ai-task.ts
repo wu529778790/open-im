@@ -12,8 +12,11 @@ import {
   formatToolCallNotification,
   getContextWarning,
   getAIToolDisplayName,
+  toReplyPlainText,
 } from './utils.js';
-import { createLogger } from '../logger.js';
+import { createLogger, emitStructuredEvent } from '../logger.js';
+import { hashUserId } from '../telemetry/hash-user.js';
+import { sanitize } from '../sanitize.js';
 
 const log = createLogger('AITask');
 
@@ -158,6 +161,12 @@ export function runAITask(
 
     const startRun = () => {
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
+      emitStructuredEvent('AITask', 'ai.task.start', {
+        platform: ctx.platform,
+        taskKey: ctx.taskKey,
+        userKey: hashUserId(ctx.userId),
+        toolId: aiCommand,
+      });
 
       activeHandle = toolAdapter.run(
         prompt,
@@ -217,17 +226,28 @@ export function runAITask(
         onComplete: async (result) => {
           log.info(`[AITask] onComplete fired: settled=${settled}, success=${result.success}, platform=${ctx.platform}, taskKey=${ctx.taskKey}`);
           if (settled) return;
+          emitStructuredEvent('AITask', 'ai.task.complete', {
+            platform: ctx.platform,
+            taskKey: ctx.taskKey,
+            userKey: hashUserId(ctx.userId),
+            toolId: aiCommand,
+            durationMs: result.durationMs,
+            success: result.success,
+            numTurns: result.numTurns,
+            model: result.model,
+          });
           settled = true;
           if (pendingUpdate) {
             clearTimeout(pendingUpdate);
             pendingUpdate = null;
           }
           const note = buildCompletionNote(result, sessionManager, ctx);
-          const output =
+          const raw =
             result.accumulated ||
             result.result ||
             taskState.latestContent ||
-            '(无输出)';
+            '';
+          const output = raw ? toReplyPlainText(raw) : '(无输出)';
           if (!result.accumulated && !result.result && taskState.latestContent) {
             log.warn(
               `Empty AI output from adapter but had streamed content (${taskState.latestContent.length} chars), using latestContent. platform=${ctx.platform}, taskKey=${ctx.taskKey}`
@@ -271,6 +291,14 @@ export function runAITask(
           }
           settled = true;
           log.error(`Task error for user ${ctx.userId}: ${error}`);
+          emitStructuredEvent('AITask', 'ai.task.error', {
+            platform: ctx.platform,
+            taskKey: ctx.taskKey,
+            userKey: hashUserId(ctx.userId),
+            toolId: aiCommand,
+            durationMs: Date.now() - taskState.startedAt,
+            errorSnippet: sanitize(String(error).slice(0, 400)),
+          });
           if (isUsageLimitError(error)) {
             // Usage limit errors: keep session for all tools (user can retry later)
             log.warn(`Keeping ${aiCommand} session for user ${ctx.userId} after usage limit error`);
@@ -323,9 +351,19 @@ export function runAITask(
         settled = true;
         cleanup();
         log.error(`[AITask] Synchronous error in startRun: ${err}`);
-        platformAdapter.sendError(
-          `内部错误：${err instanceof Error ? err.message : String(err)}`
-        ).catch(() => { /* ignore */ });
+        emitStructuredEvent('AITask', 'ai.task.error', {
+          platform: ctx.platform,
+          taskKey: ctx.taskKey,
+          userKey: hashUserId(ctx.userId),
+          toolId: aiCommand,
+          durationMs: 0,
+          errorSnippet: sanitize(String(err).slice(0, 400)),
+        });
+        platformAdapter
+          .sendError(`内部错误：${err instanceof Error ? err.message : String(err)}`)
+          .catch(() => {
+            /* ignore */
+          });
         resolve();
       }
       return;

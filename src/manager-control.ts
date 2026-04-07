@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_HOME } from "./constants.js";
+import { resolveNodeExecutable } from "./node-exec.js";
 import { isRunning } from "./service-control.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,16 +16,17 @@ function logError(prefix: string, err: unknown): void {
 }
 
 function getManagerEntry(): { command: string; args: string[] } {
+  const node = resolveNodeExecutable();
   const extension = extname(fileURLToPath(import.meta.url));
   if (extension === ".ts") {
     return {
-      command: process.execPath,
+      command: node,
       args: ["--import", "tsx", join(__dirname, "manager.ts")],
     };
   }
 
   return {
-    command: process.execPath,
+    command: node,
     args: [join(__dirname, "manager.js")],
   };
 }
@@ -99,13 +101,36 @@ export async function startManagerProcess(cwd: string): Promise<{ pid: number }>
     env: process.env,
     windowsHide: process.platform === "win32",
   });
-  child.on("error", (err) => {
-    logError("Manager process spawn failed:", err);
-  });
-  child.unref();
 
-  if (!child.pid) {
-    throw new Error("Failed to start manager process.");
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onSpawn = () => {
+        child.off("error", onError);
+        resolve();
+      };
+      const onError = (err: Error) => {
+        child.off("spawn", onSpawn);
+        reject(err);
+      };
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
+    });
+  } catch (err) {
+    logError("Manager process spawn failed:", err);
+    const hint =
+      " 若 Node 安装路径已失效，请设置环境变量 OPEN_IM_NODE 指向有效的 node 可执行文件（Windows 一般为 node.exe）。";
+    throw new Error(
+      `Failed to start manager process: ${err instanceof Error ? err.message : String(err)}${hint}`
+    );
+  }
+
+  child.unref();
+  child.on("error", (err) => {
+    logError("Manager process error after spawn:", err);
+  });
+
+  if (child.pid === undefined || child.pid === null) {
+    throw new Error("Failed to start manager process: no PID after spawn.");
   }
 
   writeManagerPid(child.pid);
