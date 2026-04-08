@@ -23,9 +23,26 @@ const OLD_ROOT_KEYS = [
 
 const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy'];
 
+/** Claude 认证相关的环境变量 key 列表 */
+export const CLAUDE_AUTH_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+] as const;
+
 // Config cache with mtime tracking
 let cachedConfig: { config: FileConfig; mtime: number } | null = null;
 let cachedClaudeEnv: { env: Record<string, string>; mtime: number } | null = null;
+
+// 保存进程启动时 shell 环境中的 Claude 相关 key 原始值（优先级最高，不可被文件配置覆盖）
+const originalShellEnv: Partial<Record<string, string>> = {};
+for (const key of CLAUDE_AUTH_ENV_KEYS) {
+  if (process.env[key] !== undefined) {
+    originalShellEnv[key] = process.env[key];
+  }
+}
 
 function hasOldConfigFormat(raw: Record<string, unknown>): boolean {
   const hasOld = OLD_ROOT_KEYS.some((k) => raw[k] !== undefined && raw[k] !== null);
@@ -188,4 +205,31 @@ export function hasCodexAuth(): boolean {
 
 export function parseCommaSeparated(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * 将最新的 Claude 认证环境变量按优先级合并到 process.env。
+ * 优先级：shell 环境变量 > tools.claude.env（config.json） > ~/.claude/settings.json
+ * 启动时调用一次；cc switch 后再次调用即可生效。
+ */
+export function refreshClaudeEnvToProcess(): void {
+  const file = loadFileConfig();
+  const claudeToolEnv = (file.tools?.claude?.env ?? {}) as Record<string, string>;
+  const claudeSettingsEnv = loadClaudeSettingsEnv();
+
+  for (const key of CLAUDE_AUTH_ENV_KEYS) {
+    if (key in originalShellEnv) {
+      process.env[key] = originalShellEnv[key];
+      continue;
+    }
+    if (key in claudeToolEnv) {
+      process.env[key] = claudeToolEnv[key];
+      continue;
+    }
+    if (key in claudeSettingsEnv) {
+      process.env[key] = claudeSettingsEnv[key];
+      continue;
+    }
+    delete process.env[key];
+  }
 }

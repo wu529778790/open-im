@@ -47,6 +47,8 @@ export {
   normalizeAiCommand,
   hasCodexAuth,
   parseCommaSeparated,
+  CLAUDE_AUTH_ENV_KEYS,
+  refreshClaudeEnvToProcess,
 } from './config/file-io.js';
 
 import {
@@ -107,13 +109,9 @@ export function loadConfig(): Config {
   // 1. 全局 env（最低优先级之一）
   if (file.env) mergeEnv(file.env as Record<string, unknown>);
 
-  // 2. tools.claude.env（优先级高于 Claude settings）
-  const claudeToolEnv = file.tools?.claude?.env;
-  if (claudeToolEnv) mergeEnv(claudeToolEnv as Record<string, unknown>);
-
-  // 3. 从 Claude Code 配置合并（最低优先级）
-  const claudeSettingsEnv = loadClaudeSettingsEnv();
-  mergeEnv(claudeSettingsEnv);
+  // 2. tools.claude.env 和 Claude Code 的 ~/.claude/settings.json 不在此处合并到 process.env，
+  //    改由 Claude adapter 在创建 session 前按需加载（refreshClaudeEnvToProcess），
+  //    避免 Claude 凭证泄漏到 Codex / CodeBuddy 等子进程。
 
   const fileTelegram = file.platforms?.telegram;
   const fileFeishu = file.platforms?.feishu;
@@ -327,11 +325,21 @@ export function loadConfig(): Config {
   // 6. 校验 Claude API 凭证（SDK 模式需要）
   // 支持：官方 API Key、Auth Token、或自定义 API（第三方模型等，BASE_URL + token）
   if (aiCommand === 'claude') {
+    // 校验凭证时直接从各来源读取，不修改 process.env
+    const claudeToolEnvForCheck = file.tools?.claude?.env as Record<string, string> | undefined;
+    const claudeSettingsForCheck = loadClaudeSettingsEnv();
     const hasCreds = !!(
       process.env.ANTHROPIC_API_KEY ||
       process.env.ANTHROPIC_AUTH_TOKEN ||
       process.env.CLAUDE_CODE_OAUTH_TOKEN ||
-      process.env.ANTHROPIC_BASE_URL
+      process.env.ANTHROPIC_BASE_URL ||
+      claudeToolEnvForCheck?.ANTHROPIC_API_KEY ||
+      claudeToolEnvForCheck?.ANTHROPIC_AUTH_TOKEN ||
+      claudeToolEnvForCheck?.ANTHROPIC_BASE_URL ||
+      claudeSettingsForCheck.ANTHROPIC_API_KEY ||
+      claudeSettingsForCheck.ANTHROPIC_AUTH_TOKEN ||
+      claudeSettingsForCheck.CLAUDE_CODE_OAUTH_TOKEN ||
+      claudeSettingsForCheck.ANTHROPIC_BASE_URL
     );
 
     if (!hasCreds) {
