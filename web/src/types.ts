@@ -51,7 +51,6 @@ export interface WebConfigPayload {
     };
   };
   ai: {
-    aiCommand: "claude" | "codex" | "codebuddy";
     claudeWorkDir: string;
     claudeConfigPath: string;
     claudeProxy: string;

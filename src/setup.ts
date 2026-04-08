@@ -15,19 +15,20 @@ import { loadConfig, getPlatformsWithCredentials } from "./config.js";
 
 interface ExistingConfig {
   platforms?: {
-    telegram?: { enabled?: boolean; botToken?: string; allowedUserIds?: string[]; proxy?: string };
-    feishu?: { enabled?: boolean; appId?: string; appSecret?: string; allowedUserIds?: string[] };
-    qq?: { enabled?: boolean; appId?: string; secret?: string; allowedUserIds?: string[] };
+    telegram?: { enabled?: boolean; aiCommand?: string; botToken?: string; allowedUserIds?: string[]; proxy?: string };
+    feishu?: { enabled?: boolean; aiCommand?: string; appId?: string; appSecret?: string; allowedUserIds?: string[] };
+    qq?: { enabled?: boolean; aiCommand?: string; appId?: string; secret?: string; allowedUserIds?: string[] };
     workbuddy?: {
       enabled?: boolean;
+      aiCommand?: string;
       userId?: string;
       allowedUserIds?: string[];
       accessToken?: string;
       refreshToken?: string;
       baseUrl?: string;
     };
-    wework?: { enabled?: boolean; corpId?: string; secret?: string; allowedUserIds?: string[] };
-    dingtalk?: { enabled?: boolean; clientId?: string; clientSecret?: string; allowedUserIds?: string[]; cardTemplateId?: string };
+    wework?: { enabled?: boolean; aiCommand?: string; corpId?: string; secret?: string; allowedUserIds?: string[] };
+    dingtalk?: { enabled?: boolean; aiCommand?: string; clientId?: string; clientSecret?: string; allowedUserIds?: string[]; cardTemplateId?: string };
   };
   aiCommand?: string;
   tools?: {
@@ -72,6 +73,10 @@ function getConfiguredPlatforms(existing: ExistingConfig | null): string[] {
     .map(({ label }) => label);
 }
 
+function defaultPlatformAi(v: unknown): "claude" | "codex" | "codebuddy" {
+  return v === "codex" || v === "codebuddy" || v === "claude" ? v : "claude";
+}
+
 function question(prompt: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
@@ -91,7 +96,6 @@ function printManualInstructions(configPath: string): void {
   console.log("  3. 填入以下内容（替换为你的 Token/App ID 和用户 ID）：");
   console.log("");
   console.log(`{
-  "aiCommand": "claude",
   "tools": {
     "claude": {
       "cliPath": "claude",
@@ -103,30 +107,34 @@ function printManualInstructions(configPath: string): void {
   "platforms": {
     "telegram": {
       "enabled": true,
+      "aiCommand": "claude",
       "botToken": "你的 Telegram Bot Token（可选）",
       "allowedUserIds": ["允许访问的 Telegram 用户 ID（可选）"]
     },
     "feishu": {
       "enabled": false,
+      "aiCommand": "claude",
       "appId": "你的飞书 App ID（可选）",
       "appSecret": "你的飞书 App Secret（可选）",
       "allowedUserIds": ["允许访问的飞书用户 ID（可选）"]
     },
     "qq": {
       "enabled": false,
-      "aiCommand": "codebuddy",
+      "aiCommand": "claude",
       "appId": "你的 QQ App ID（可选）",
       "secret": "你的 QQ App Secret（可选）",
       "allowedUserIds": ["允许访问的 QQ 用户 ID（可选）"]
     },
     "wework": {
       "enabled": false,
+      "aiCommand": "claude",
       "corpId": "你的企业微信 Corp ID（可选）",
       "secret": "你的企业微信 Secret（可选）",
       "allowedUserIds": ["允许访问的企业微信用户 ID（可选）"]
     },
     "dingtalk": {
       "enabled": false,
+      "aiCommand": "claude",
       "clientId": "你的钉钉 Client ID（可选）",
       "clientSecret": "你的钉钉 Client Secret（可选）",
       "cardTemplateId": "你的钉钉 AI 卡片模板 ID（可选，配置后启用单条流式）",
@@ -134,6 +142,7 @@ function printManualInstructions(configPath: string): void {
     },
     "wechat": {
       "enabled": false,
+      "aiCommand": "claude",
       "workbuddyAccessToken": "（由 open-im init 在浏览器完成 WorkBuddy 登录后自动写入）",
       "workbuddyRefreshToken": "",
       "userId": "",
@@ -716,8 +725,6 @@ export async function runInteractiveSetup(): Promise<boolean> {
   const wcIds = existing?.platforms?.workbuddy?.allowedUserIds?.join(", ") ?? "";
   const wwIds = existing?.platforms?.wework?.allowedUserIds?.join(", ") ?? "";
   const dtIds = existing?.platforms?.dingtalk?.allowedUserIds?.join(", ") ?? "";
-  const aiIdx = ["claude", "codex", "codebuddy"].indexOf(existing?.aiCommand ?? "claude");
-
   const commonPrompts: prompts.PromptObject[] = [];
   if (selectedPlatforms.includes("qq")) {
     commonPrompts.push({
@@ -769,39 +776,22 @@ export async function runInteractiveSetup(): Promise<boolean> {
   }
   commonPrompts.push(
     {
-      type: "select",
-      name: "aiCommand",
-      message: "AI 工具（↑↓ 选择）",
-      choices: [
-        { title: "claude-code", value: "claude" },
-        { title: "codex", value: "codex" },
-        { title: "codebuddy", value: "codebuddy" },
-      ],
-      initial: aiIdx >= 0 ? aiIdx : 0,
-    },
-    {
       type: "text",
       name: "workDir",
       message: "工作目录",
       initial: existing?.tools?.claude?.workDir ?? process.cwd(),
     },
+    {
+      type: "text",
+      name: "codexProxy",
+      message: "Codex 代理（可选，如 http://127.0.0.1:7890）",
+      initial: existing?.tools?.codex?.proxy ?? "",
+    },
   );
 
   const commonResp = await prompts(commonPrompts, { onCancel });
-  const codexProxyResp =
-    commonResp.aiCommand === "codex"
-      ? await prompts(
-          {
-            type: "text",
-            name: "codexProxy",
-            message: "Codex 代理（可选，如 http://127.0.0.1:7890）",
-            initial: existing?.tools?.codex?.proxy ?? "",
-          },
-          { onCancel }
-        )
-      : {};
 
-  // 如果选择 Claude，询问 API 配置
+  // 若需配置 Claude API，询问 API 配置
   let claudeApiConfig: {
     apiKey?: string;
     baseUrl?: string;
@@ -810,7 +800,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
     sonnetModel?: string;
     opusModel?: string;
   } = {};
-  if (commonResp.aiCommand === "claude") {
+  {
     const legacyRootEnv = (existing as { env?: Record<string, string> } | null)?.env;
     const claudeFileEnv = existing?.tools?.claude?.env ?? legacyRootEnv;
     // 检查是否已配置 API 密钥（环境变量、tools.claude.env、旧版根 env、或 ~/.claude/settings.json）
@@ -927,6 +917,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
     claudeTimeoutMs: _ctm,
     claudeModel: _cm,
     env: _stripLegacyRootEnv,
+    aiCommand: _stripLegacyGlobalAi,
     ...baseRest
   } = (base ?? {}) as Record<string, unknown>;
 
@@ -956,13 +947,12 @@ export async function runInteractiveSetup(): Promise<boolean> {
   }
 
   const workDir = (commonResp.workDir || process.cwd()).trim();
-  const aiCmd = commonResp.aiCommand ?? base?.aiCommand ?? "claude";
   const baseTools = base?.tools ?? {};
+  const codexProxyVal = (commonResp as { codexProxy?: string }).codexProxy?.trim();
 
   const out: Record<string, unknown> = {
     ...baseRest,
     platforms: { ...(base?.platforms ?? {}) },
-    aiCommand: aiCmd,
     tools: {
       claude: {
         ...baseTools.claude,
@@ -973,10 +963,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
         ...baseTools.codex,
         cliPath: baseTools.codex?.cliPath ?? "codex",
         workDir: workDir,
-        proxy:
-          commonResp.aiCommand === "codex"
-            ? (codexProxyResp as { codexProxy?: string }).codexProxy?.trim() || undefined
-            : baseTools.codex?.proxy,
+        proxy: codexProxyVal || baseTools.codex?.proxy,
       },
       codebuddy: {
         ...baseTools.codebuddy,
@@ -994,22 +981,25 @@ export async function runInteractiveSetup(): Promise<boolean> {
     outPlatforms.telegram = {
       ...basePlatforms?.telegram,
       enabled: true,
+      aiCommand: defaultPlatformAi(basePlatforms?.telegram?.aiCommand),
       botToken: (config as { telegramBotToken?: string }).telegramBotToken ?? basePlatforms?.telegram?.botToken,
       allowedUserIds: telegramIds,
     };
   } else if (basePlatforms?.telegram) {
     outPlatforms.telegram = {
       ...basePlatforms.telegram,
+      aiCommand: defaultPlatformAi(basePlatforms.telegram.aiCommand),
       allowedUserIds: telegramIds.length > 0 ? telegramIds : basePlatforms.telegram.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.telegram = { enabled: false, allowedUserIds: telegramIds };
+    outPlatforms.telegram = { enabled: false, aiCommand: "claude", allowedUserIds: telegramIds };
   }
 
   if (selectedPlatforms.includes("feishu")) {
     outPlatforms.feishu = {
       ...basePlatforms?.feishu,
       enabled: true,
+      aiCommand: defaultPlatformAi(basePlatforms?.feishu?.aiCommand),
       appId: configPlatforms?.feishu?.appId,
       appSecret: configPlatforms?.feishu?.appSecret,
       allowedUserIds: feishuIds,
@@ -1017,16 +1007,18 @@ export async function runInteractiveSetup(): Promise<boolean> {
   } else if (basePlatforms?.feishu) {
     outPlatforms.feishu = {
       ...basePlatforms.feishu,
+      aiCommand: defaultPlatformAi(basePlatforms.feishu.aiCommand),
       allowedUserIds: feishuIds.length > 0 ? feishuIds : basePlatforms.feishu.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.feishu = { enabled: false, allowedUserIds: feishuIds };
+    outPlatforms.feishu = { enabled: false, aiCommand: "claude", allowedUserIds: feishuIds };
   }
 
   if (selectedPlatforms.includes("qq")) {
     outPlatforms.qq = {
       ...basePlatforms?.qq,
       enabled: true,
+      aiCommand: defaultPlatformAi(basePlatforms?.qq?.aiCommand),
       appId: configPlatforms?.qq?.appId,
       secret: configPlatforms?.qq?.secret,
       allowedUserIds: qqIdsFinal,
@@ -1034,10 +1026,11 @@ export async function runInteractiveSetup(): Promise<boolean> {
   } else if (basePlatforms?.qq) {
     outPlatforms.qq = {
       ...basePlatforms.qq,
+      aiCommand: defaultPlatformAi(basePlatforms.qq.aiCommand),
       allowedUserIds: qqIdsFinal.length > 0 ? qqIdsFinal : basePlatforms.qq.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.qq = { enabled: false, allowedUserIds: qqIdsFinal };
+    outPlatforms.qq = { enabled: false, aiCommand: "claude", allowedUserIds: qqIdsFinal };
   }
 
   if (selectedPlatforms.includes("workbuddy")) {
@@ -1045,6 +1038,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
     const baseWb = base?.platforms?.workbuddy as Record<string, unknown> | undefined;
     const wbOut: Record<string, unknown> = {
       enabled: true,
+      aiCommand: defaultPlatformAi(baseWb?.aiCommand),
       accessToken: wbConfig?.accessToken ?? baseWb?.accessToken,
       refreshToken: wbConfig?.refreshToken ?? baseWb?.refreshToken,
       userId: wbConfig?.userId ?? baseWb?.userId ?? "",
@@ -1056,16 +1050,18 @@ export async function runInteractiveSetup(): Promise<boolean> {
   } else if (basePlatforms?.workbuddy) {
     outPlatforms.workbuddy = {
       ...basePlatforms.workbuddy,
+      aiCommand: defaultPlatformAi(basePlatforms.workbuddy.aiCommand),
       allowedUserIds: workbuddyIds.length > 0 ? workbuddyIds : basePlatforms.workbuddy.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.workbuddy = { enabled: false, allowedUserIds: workbuddyIds };
+    outPlatforms.workbuddy = { enabled: false, aiCommand: "claude", allowedUserIds: workbuddyIds };
   }
 
   if (selectedPlatforms.includes("wework")) {
     outPlatforms.wework = {
       ...basePlatforms?.wework,
       enabled: true,
+      aiCommand: defaultPlatformAi(basePlatforms?.wework?.aiCommand),
       corpId: configPlatforms?.wework?.corpId,
       secret: configPlatforms?.wework?.secret,
       allowedUserIds: weworkIds,
@@ -1073,16 +1069,18 @@ export async function runInteractiveSetup(): Promise<boolean> {
   } else if (basePlatforms?.wework) {
     outPlatforms.wework = {
       ...basePlatforms.wework,
+      aiCommand: defaultPlatformAi(basePlatforms.wework.aiCommand),
       allowedUserIds: weworkIds.length > 0 ? weworkIds : basePlatforms.wework.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.wework = { enabled: false, allowedUserIds: weworkIds };
+    outPlatforms.wework = { enabled: false, aiCommand: "claude", allowedUserIds: weworkIds };
   }
 
   if (selectedPlatforms.includes("dingtalk")) {
     outPlatforms.dingtalk = {
       ...basePlatforms?.dingtalk,
       enabled: true,
+      aiCommand: defaultPlatformAi(basePlatforms?.dingtalk?.aiCommand),
       clientId: configPlatforms?.dingtalk?.clientId,
       clientSecret: configPlatforms?.dingtalk?.clientSecret,
       cardTemplateId: configPlatforms?.dingtalk?.cardTemplateId,
@@ -1091,10 +1089,11 @@ export async function runInteractiveSetup(): Promise<boolean> {
   } else if (basePlatforms?.dingtalk) {
     outPlatforms.dingtalk = {
       ...basePlatforms.dingtalk,
+      aiCommand: defaultPlatformAi(basePlatforms.dingtalk.aiCommand),
       allowedUserIds: dingtalkIds.length > 0 ? dingtalkIds : basePlatforms.dingtalk.allowedUserIds ?? [],
     };
   } else {
-    outPlatforms.dingtalk = { enabled: false, allowedUserIds: dingtalkIds };
+    outPlatforms.dingtalk = { enabled: false, aiCommand: "claude", allowedUserIds: dingtalkIds };
   }
 
   const dir = dirname(configPath);

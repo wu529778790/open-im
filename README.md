@@ -62,13 +62,12 @@ Session state is stored in **`~/.open-im/data/sessions.json`** (per user, not IM
 
 ### Per-platform AI
 
-Default: root **`aiCommand`**. Override with **`platforms.<name>.aiCommand`**:
+Set **`platforms.<name>.aiCommand`** per channel (`claude` / `codex` / `codebuddy`). If unset, the process **`AI_COMMAND`** env var is used when present; otherwise it defaults to **`claude`**.
 
 ```json
 {
-  "aiCommand": "claude",
   "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "codex" }
+    "telegram": { "enabled": true, "aiCommand": "codex", "botToken": "..." }
   }
 }
 ```
@@ -105,12 +104,11 @@ codebuddy login
 
 ```json
 {
-  "aiCommand": "claude",
   "tools": {
     "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
   },
   "platforms": {
-    "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
+    "telegram": { "enabled": true, "aiCommand": "claude", "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
   }
 }
 ```

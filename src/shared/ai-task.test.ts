@@ -41,9 +41,10 @@ describe("runAITask", () => {
     const taskPromise = runAITask(
       {
         config: {
-          aiCommand: "codex",
-          platforms: {},
-          enabledPlatforms: [],
+          platforms: {
+            wework: { enabled: true, aiCommand: "codex", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["wework"],
           claudeModel: "",
           codexProxy: "",
           wechatUserId: "",
@@ -123,9 +124,10 @@ describe("runAITask", () => {
     const taskPromise = runAITask(
       {
         config: {
-          aiCommand: "claude",
-          platforms: {},
-          enabledPlatforms: [],
+          platforms: {
+            telegram: { enabled: true, aiCommand: "claude", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["telegram"],
           claudeModel: "",
           codexProxy: "",
           wechatUserId: "",
@@ -199,9 +201,10 @@ describe("runAITask", () => {
     const taskPromise = runAITask(
       {
         config: {
-          aiCommand: "codex",
-          platforms: {},
-          enabledPlatforms: [],
+          platforms: {
+            feishu: { enabled: true, aiCommand: "codex", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["feishu"],
           claudeModel: "",
           codexProxy: "",
           wechatUserId: "",

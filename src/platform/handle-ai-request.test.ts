@@ -29,7 +29,18 @@ import type { TaskRunState } from '../shared/ai-task.js';
 import type { Config } from '../config.js';
 
 function makeConfig(): Config {
-  return { aiCommand: 'claude' } as unknown as Config;
+  const p = { enabled: true, aiCommand: 'claude' as const, allowedUserIds: [] as string[] };
+  return {
+    enabledPlatforms: [],
+    platforms: {
+      telegram: { ...p },
+      feishu: { ...p },
+      qq: { ...p },
+      wework: { ...p },
+      dingtalk: { ...p },
+      workbuddy: { ...p },
+    },
+  } as unknown as Config;
 }
 
 function makeSessionManager() {

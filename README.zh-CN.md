@@ -62,13 +62,12 @@ npx @wu529778790/open-im start
 
 ### 按平台指定 AI
 
-根级 **`aiCommand`** 为默认；用 **`platforms.<name>.aiCommand`** 覆盖：
+在每个已启用渠道上设置 **`platforms.<name>.aiCommand`**（`claude` / `codex` / `codebuddy`）。若未设置，会尝试进程环境变量 **`AI_COMMAND`**；再否则默认为 **`claude`**。
 
 ```json
 {
-  "aiCommand": "claude",
   "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "codex" }
+    "telegram": { "enabled": true, "aiCommand": "codex", "botToken": "..." }
   }
 }
 ```
@@ -105,12 +104,11 @@ codebuddy login
 
 ```json
 {
-  "aiCommand": "claude",
   "tools": {
     "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
   },
   "platforms": {
-    "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
+    "telegram": { "enabled": true, "aiCommand": "claude", "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
   }
 }
 ```

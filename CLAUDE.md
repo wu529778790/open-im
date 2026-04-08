@@ -89,7 +89,7 @@ Config loading order (environment variables take precedence):
 Key config options:
 - `enabledPlatforms` - Dynamically determined based on available credentials for platforms ('dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wework' | 'workbuddy')
 - `allowedUserIds` - Whitelist of user IDs (empty = all users)
-- `aiCommand` - Which AI tool to use (claude/codex/codebuddy)
+- `platforms.<name>.aiCommand` - Which AI tool to use for that channel (claude/codex/codebuddy); optional env `AI_COMMAND` applies when unset
 - `tools.claude.workDir` - Default working directory
 - `tools.claude.skipPermissions` - Auto-approve tool permissions (default: true)
 - `claudeTimeoutMs` - Claude timeout (default: 600000)

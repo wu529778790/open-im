@@ -24,35 +24,35 @@ function emptyPayload(): WebConfigPayload {
     platforms: {
       telegram: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         botToken: "",
         proxy: "",
         allowedUserIds: "",
       },
       feishu: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         appId: "",
         appSecret: "",
         allowedUserIds: "",
       },
       qq: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         appId: "",
         secret: "",
         allowedUserIds: "",
       },
       wework: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         corpId: "",
         secret: "",
         allowedUserIds: "",
       },
       dingtalk: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         clientId: "",
         clientSecret: "",
         cardTemplateId: "",
@@ -60,7 +60,7 @@ function emptyPayload(): WebConfigPayload {
       },
       workbuddy: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         accessToken: "",
         refreshToken: "",
         userId: "",
@@ -69,7 +69,6 @@ function emptyPayload(): WebConfigPayload {
       },
     },
     ai: {
-      aiCommand: "claude",
       claudeWorkDir: "",
       claudeConfigPath: "",
       claudeProxy: "",
@@ -155,9 +154,14 @@ export function Dashboard() {
       if (missing.length)
         errors.push(t("validationPlatformIncomplete", { platform: def.label, fields: missing.join(", ") }));
     });
-    const cmd = payload.ai.aiCommand;
-    if (cmd === "codex" && !payload.ai.codexCliPath.trim()) errors.push(t("validationAiCodexNoCli"));
-    if (cmd === "codebuddy" && !payload.ai.codebuddyCliPath.trim()) errors.push(t("validationAiCodebuddyNoCli"));
+    const anyCodex = PLATFORM_KEYS.some(
+      (k) => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codex",
+    );
+    const anyCodebuddy = PLATFORM_KEYS.some(
+      (k) => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codebuddy",
+    );
+    if (anyCodex && !payload.ai.codexCliPath.trim()) errors.push(t("validationAiCodexNoCli"));
+    if (anyCodebuddy && !payload.ai.codebuddyCliPath.trim()) errors.push(t("validationAiCodebuddyNoCli"));
     return errors;
   }, [payload, t]);
 
@@ -234,7 +238,7 @@ export function Dashboard() {
           setConfigJson("{}\n");
         }
 
-        setCurrentAiPanel(data.payload.ai.aiCommand || "claude");
+        setCurrentAiPanel("claude");
       } catch (e) {
         if (!cancelled) setMessage({ text: toErrorMsg(e), type: "error" });
       } finally {
@@ -601,22 +605,9 @@ export function Dashboard() {
                   <h3 className="card-title">{t("aiCommonTitle")}</h3>
                 </div>
                 <div className="ai-card-body">
-                  <div className="form-group">
-                    <label className="form-label">{t("aiTool")}</label>
-                    <select
-                      className="form-select"
-                      value={payload.ai.aiCommand}
-                      onChange={(e) => {
-                        const v = e.target.value as "claude" | "codex" | "codebuddy";
-                        updateAi({ aiCommand: v });
-                        setCurrentAiPanel(v);
-                      }}
-                    >
-                      <option value="claude">claude</option>
-                      <option value="codex">codex</option>
-                      <option value="codebuddy">codebuddy</option>
-                    </select>
-                  </div>
+                  <p className="form-hint" style={{ marginBottom: 12 }}>
+                    {t("aiPerPlatformHint")}
+                  </p>
                   <div className="form-group">
                     <label className="form-label">{t("workDir")}</label>
                     <input
@@ -899,10 +890,9 @@ function PlatformCard({
         ) : field === "aiCommand" ? (
           <select
             className="form-select"
-            value={String((values as Record<string, string>)[field] ?? "")}
+            value={String((values as Record<string, string>)[field] || "claude")}
             onChange={(e) => onChange({ aiCommand: e.target.value as AiCommand })}
           >
-            <option value="">(default)</option>
             <option value="claude">claude</option>
             <option value="codex">codex</option>
             <option value="codebuddy">codebuddy</option>
