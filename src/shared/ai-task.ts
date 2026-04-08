@@ -157,7 +157,6 @@ export function runAITask(
 
     // 使用 aiCommand 而不是 toolAdapter.toolId，确保 sessionId 的存储和查询使用相同的 key
     const aiCommand = resolvePlatformAiCommand(config, ctx.platform as Platform);
-    const toolId = toolAdapter.toolId as 'claude' | 'codex' | 'codebuddy';
 
     const startRun = () => {
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
@@ -196,7 +195,7 @@ export function runAITask(
           }
           wasThinking = true;
           thinkingText = t;
-          throttledUpdate(`💭 **${getAIToolDisplayName(toolId)} 思考中...**\n\n${t}`);
+          throttledUpdate(`💭 **${getAIToolDisplayName(aiCommand)} 思考中...**\n\n${t}`);
         },
         onText: (accumulated) => {
           if (!firstContentLogged) {
