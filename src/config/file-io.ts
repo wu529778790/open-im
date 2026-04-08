@@ -189,3 +189,28 @@ export function hasCodexAuth(): boolean {
 export function parseCommaSeparated(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
+
+/** Claude 认证相关的环境变量 key 列表 */
+const CLAUDE_AUTH_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+] as const;
+
+/**
+ * 将 ~/.claude/settings.json 中最新的 Claude 环境变量刷新到 process.env。
+ * 用于支持 cc switch 后立即生效，无需重启服务。
+ * 内部使用 mtime 缓存，文件未变更时几乎零开销。
+ */
+export function refreshClaudeEnvToProcess(): void {
+  const env = loadClaudeSettingsEnv();
+  for (const key of CLAUDE_AUTH_ENV_KEYS) {
+    if (key in env) {
+      process.env[key] = env[key];
+    } else {
+      delete process.env[key];
+    }
+  }
+}

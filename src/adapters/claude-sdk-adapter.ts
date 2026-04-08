@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { createLogger } from '../logger.js';
+import { refreshClaudeEnvToProcess } from '../config/file-io.js';
 import { toReplyPlainText } from '../shared/utils.js';
 import type { ToolAdapter, RunCallbacks, RunOptions, RunHandle } from './tool-adapter.interface.js';
 
@@ -163,7 +164,10 @@ async function getOrCreateSession(
   model: string | undefined,
   permissionMode: 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan'
 ): Promise<{ session: SDKSession; sessionId: string }> {
-  const resolvedModel = model?.trim() || 'claude-opus-4-5';
+  // 刷新 Claude 环境变量（支持 cc switch 后无需重启即可生效）
+  refreshClaudeEnvToProcess();
+
+  const resolvedModel = model?.trim() || process.env.ANTHROPIC_MODEL?.trim() || 'claude-opus-4-5';
 
   if (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
     throw new Error(`Session pool is full (${MAX_ACTIVE_SESSIONS}). Cannot create new session.`);
