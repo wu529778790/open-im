@@ -117,6 +117,7 @@ export function Dashboard() {
   const [payload, setPayload] = useState<WebConfigPayload>(emptyPayload);
   const [meta, setMeta] = useState<{ configPath: string }>({ configPath: "" });
   const [claudeSettingsJson, setClaudeSettingsJson] = useState("");
+  const [codexSettingsJson, setCodexSettingsJson] = useState("");
   const [configJson, setConfigJson] = useState("");
   const [originalConfigJson, setOriginalConfigJson] = useState("");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
@@ -190,8 +191,9 @@ export function Dashboard() {
         setPayload(coercePayload(data.payload));
         setMeta({ configPath: data.meta.configPath });
 
-        const [claude, file, ,] = await Promise.all([
+        const [claude, codex, file, ,] = await Promise.all([
           request("/api/claude/settings") as Promise<{ contents?: string }>,
+          request("/api/codex/settings") as Promise<{ contents?: string }>,
           request("/api/config/file") as Promise<{ contents?: string }>,
           refreshStatus(),
           refreshHealth(),
@@ -207,6 +209,17 @@ export function Dashboard() {
           }
         } else {
           setClaudeSettingsJson("{\n}\n");
+        }
+
+        const rawCodex = (codex.contents ?? "").trim();
+        if (rawCodex) {
+          try {
+            setCodexSettingsJson(prettyJson(rawCodex));
+          } catch {
+            setCodexSettingsJson(rawCodex);
+          }
+        } else {
+          setCodexSettingsJson("{\n}\n");
         }
 
         const rawJ = (file.contents ?? "").trim();
@@ -264,6 +277,13 @@ export function Dashboard() {
     });
   };
 
+  const saveCodexSettings = async () => {
+    await request("/api/codex/settings", {
+      method: "POST",
+      body: JSON.stringify({ contents: codexSettingsJson }),
+    });
+  };
+
   const saveOpenImConfigFile = async () => {
     const json = configJson.trim();
     if (!json) return;
@@ -303,7 +323,7 @@ export function Dashboard() {
     }
     setBusy(true);
     try {
-      await Promise.all([saveClaudeSettings(), saveOpenImConfigFile()]);
+      await Promise.all([saveClaudeSettings(), saveCodexSettings(), saveOpenImConfigFile()]);
       await request("/api/config/save?final=1", {
         method: "POST",
         body: JSON.stringify(buildPayload()),
@@ -326,6 +346,7 @@ export function Dashboard() {
     try {
       await Promise.all([
         saveClaudeSettings(),
+        saveCodexSettings(),
         request("/api/config/save", {
           method: "POST",
           body: JSON.stringify(buildPayload()),
@@ -663,6 +684,16 @@ export function Dashboard() {
                   </div>
                   <div className={`ai-tool-panel ${currentAiPanel === "codex" ? "active" : ""}`}>
                     <div className="form-group">
+                      <label className="form-label">{t("codexApiKey")}</label>
+                      <input
+                        className="form-input mono"
+                        type="password"
+                        value={payload.ai.codexApiKey ?? ""}
+                        onChange={(e) => updateAi({ codexApiKey: e.target.value })}
+                      />
+                      <p className="field-inline-tip" dangerouslySetInnerHTML={{ __html: t("codexApiKeyTip") }} />
+                    </div>
+                    <div className="form-group">
                       <label className="form-label">{t("codexCli")}</label>
                       <input
                         className="form-input mono"
@@ -767,6 +798,40 @@ export function Dashboard() {
                         void (async () => {
                           try {
                             await saveClaudeSettings();
+                            setMessage({ text: t("saveOk"), type: "success" });
+                          } catch (e) {
+                            setMessage({ text: toErrorMsg(e), type: "error" });
+                          }
+                        })()
+                      }
+                    >
+                      {t("saveBtn")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="card config-file-card">
+                <div className="card-header">
+                  <h3 className="card-title mono">{t("codexSettingsLabel")}</h3>
+                </div>
+                <div className="card-body">
+                  <p className="form-hint">{t("codexSettingsCardHint")}</p>
+                  <textarea
+                    className="form-input mono"
+                    rows={8}
+                    spellCheck={false}
+                    value={codexSettingsJson}
+                    onChange={(e) => setCodexSettingsJson(e.target.value)}
+                    style={{ minHeight: 160, resize: "vertical", whiteSpace: "pre" }}
+                  />
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            await saveCodexSettings();
                             setMessage({ text: t("saveOk"), type: "success" });
                           } catch (e) {
                             setMessage({ text: toErrorMsg(e), type: "error" });

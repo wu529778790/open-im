@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
-import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig } from "./config.js";
+import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig, CODEX_AUTH_PATHS } from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
@@ -206,6 +206,7 @@ interface WebConfigPayload {
     codexCliPath: string;
     codebuddyCliPath: string;
     codexProxy: string;
+    codexApiKey?: string;
     logDir?: string;
     logLevel: "default" | "DEBUG" | "INFO" | "WARN" | "ERROR";
   };
@@ -397,6 +398,19 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       codexCliPath: file.tools?.codex?.cliPath ?? "codex",
       codebuddyCliPath: file.tools?.codebuddy?.cliPath ?? "codebuddy",
       codexProxy: file.tools?.codex?.proxy ?? "",
+      codexApiKey: (() => {
+        if (process.env.OPENAI_API_KEY) return maskSecret(process.env.OPENAI_API_KEY);
+        for (const p of CODEX_AUTH_PATHS) {
+          try {
+            if (existsSync(p)) {
+              const raw = JSON.parse(readFileSync(p, "utf-8"));
+              const key = raw?.openai_api_key ?? raw?.apiKey;
+              if (typeof key === "string" && key) return maskSecret(key);
+            }
+          } catch { /* ignore */ }
+        }
+        return "";
+      })(),
       logDir: file.logDir ?? "",
       logLevel: (file.logLevel as "DEBUG" | "INFO" | "WARN" | "ERROR") ?? "default",
     },
@@ -988,6 +1002,14 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
             return;
           }
           saveFileConfig(toFileConfig(body, loadFileConfig()));
+          // Save Codex OPENAI_API_KEY to ~/.codex/auth.json if provided
+          const codexApiKey = clean(body.ai.codexApiKey);
+          if (codexApiKey && !isMasked(codexApiKey)) {
+            const codexAuthPath = CODEX_AUTH_PATHS[0];
+            const codexDir = dirname(codexAuthPath);
+            if (!existsSync(codexDir)) mkdirSync(codexDir, { recursive: true });
+            writeFileSync(codexAuthPath, JSON.stringify({ openai_api_key: codexApiKey }, null, 2), "utf-8");
+          }
           loadConfig();
           json(response, 200, { message: "Configuration saved." }, request);
           if (!options.persistent && requestUrl.searchParams.get("final") === "1") {
@@ -1047,6 +1069,55 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           }
           writeFileSync(settingsPath, pretty, "utf-8");
           json(response, 200, { message: "Claude settings.json saved.", path: settingsPath }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      // --- Codex settings (auth.json) ---
+      if (request.method === "GET" && requestUrl.pathname === "/api/codex/settings") {
+        try {
+          let foundPath = "";
+          let contents = "{}";
+          for (const p of CODEX_AUTH_PATHS) {
+            if (existsSync(p)) {
+              foundPath = p;
+              contents = readFileSync(p, "utf-8");
+              break;
+            }
+          }
+          if (!foundPath && CODEX_AUTH_PATHS.length > 0) {
+            foundPath = CODEX_AUTH_PATHS[0];
+          }
+          json(response, 200, { path: foundPath, contents }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/codex/settings") {
+        try {
+          const body = await readJson<{ contents?: string }>(request);
+          const raw = body.contents ?? "";
+          if (!raw.trim()) {
+            json(response, 400, { error: "contents is required" }, request);
+            return;
+          }
+          try {
+            JSON.parse(raw);
+          } catch (err) {
+            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` }, request);
+            return;
+          }
+          const settingsPath = CODEX_AUTH_PATHS[0];
+          const dir = dirname(settingsPath);
+          if (!existsSync(dir)) {
+            mkdirSync(dir, { recursive: true });
+          }
+          writeFileSync(settingsPath, raw, "utf-8");
+          json(response, 200, { message: "Codex settings saved.", path: settingsPath }, request);
         } catch (error) {
           json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }

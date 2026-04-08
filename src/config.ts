@@ -50,6 +50,7 @@ export {
   CLAUDE_AUTH_ENV_KEYS,
   refreshClaudeEnvToProcess,
   processEnvForNonClaudeCliChild,
+  CODEX_AUTH_PATHS,
 } from './config/file-io.js';
 
 import {
