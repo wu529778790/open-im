@@ -57,6 +57,7 @@ export interface WebConfigPayload {
     claudeProxy: string;
     codexCliPath: string;
     codexProxy: string;
+    codexApiKey?: string;
     codebuddyCliPath: string;
     hookPort: number;
     logLevel: string;

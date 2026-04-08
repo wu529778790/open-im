@@ -49,6 +49,7 @@ export {
   parseCommaSeparated,
   CLAUDE_AUTH_ENV_KEYS,
   refreshClaudeEnvToProcess,
+  CODEX_AUTH_PATHS,
 } from './config/file-io.js';
 
 import {
