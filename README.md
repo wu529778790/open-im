@@ -75,16 +75,21 @@ Default: root **`aiCommand`**. Override with **`platforms.<name>.aiCommand`**:
 
 ### Claude (Agent SDK)
 
-No local `claude` binary required. Credentials: env → **`config.json`** `env` → **`~/.claude/settings.json`**.
+No local `claude` binary required. Credentials: env → **`config.json`** **`tools.claude.env`** → **`~/.claude/settings.json`** (dashboard saves API fields here).
 
 Third-party / compatible API example:
 
 ```json
 {
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "your-token",
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
-    "ANTHROPIC_MODEL": "glm-4.7"
+  "tools": {
+    "claude": {
+      "workDir": "/path/to/project",
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "your-token",
+        "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
+        "ANTHROPIC_MODEL": "glm-4.7"
+      }
+    }
   }
 }
 ```
@@ -114,7 +119,7 @@ Add Feishu, QQ, WeCom, DingTalk, WorkBuddy under **`platforms`** as needed. Run 
 
 ### Environment variables
 
-Use **`config.json`** or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`**, **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
+Use **`config.json`** (platforms, `tools.*`, etc.) or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`** (shell or **`tools.claude.env`**), **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc. The root-level **`config.json` `env`** field is no longer read.
 
 ### Privacy
 

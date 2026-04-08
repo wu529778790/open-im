@@ -75,16 +75,21 @@ npx @wu529778790/open-im start
 
 ### Claude（Agent SDK）
 
-无需本地 `claude` 可执行文件。凭证顺序：环境变量 → **`config.json`** 的 **`env`** → **`~/.claude/settings.json`**。
+无需本地 `claude` 可执行文件。凭证顺序：环境变量 → **`config.json`** 的 **`tools.claude.env`** → **`~/.claude/settings.json`**（控制台保存的 API 配置写入后者）。
 
 第三方兼容接口示例：
 
 ```json
 {
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "your-token",
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
-    "ANTHROPIC_MODEL": "glm-4.7"
+  "tools": {
+    "claude": {
+      "workDir": "/path/to/project",
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "your-token",
+        "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
+        "ANTHROPIC_MODEL": "glm-4.7"
+      }
+    }
   }
 }
 ```
@@ -114,7 +119,7 @@ codebuddy login
 
 ### 环境变量
 
-可在 **`config.json`** 或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。
+可在 **`config.json`**（平台与 `tools.*` 等）或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**（shell 或 **`tools.claude.env`**）、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。根级 **`config.json` `env`** 已不再使用。
 
 ### 隐私
 

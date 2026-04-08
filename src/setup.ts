@@ -29,10 +29,9 @@ interface ExistingConfig {
     wework?: { enabled?: boolean; corpId?: string; secret?: string; allowedUserIds?: string[] };
     dingtalk?: { enabled?: boolean; clientId?: string; clientSecret?: string; allowedUserIds?: string[]; cardTemplateId?: string };
   };
-  env?: Record<string, string>;
   aiCommand?: string;
   tools?: {
-    claude?: { cliPath?: string; workDir?: string; model?: string };
+    claude?: { cliPath?: string; workDir?: string; model?: string; env?: Record<string, string> };
     codex?: { cliPath?: string; workDir?: string; proxy?: string };
     codebuddy?: { cliPath?: string };
   };
@@ -812,26 +811,28 @@ export async function runInteractiveSetup(): Promise<boolean> {
     opusModel?: string;
   } = {};
   if (commonResp.aiCommand === "claude") {
-    // 检查是否已配置 API 密钥（环境变量、open-im config、或 ~/.claude/settings.json）
+    const legacyRootEnv = (existing as { env?: Record<string, string> } | null)?.env;
+    const claudeFileEnv = existing?.tools?.claude?.env ?? legacyRootEnv;
+    // 检查是否已配置 API 密钥（环境变量、tools.claude.env、旧版根 env、或 ~/.claude/settings.json）
     const hasExistingApiKey = !!(
       process.env.ANTHROPIC_API_KEY ||
       process.env.ANTHROPIC_AUTH_TOKEN ||
       process.env.CLAUDE_CODE_OAUTH_TOKEN ||
-      existing?.env?.ANTHROPIC_API_KEY ||
-      existing?.env?.ANTHROPIC_AUTH_TOKEN ||
+      claudeFileEnv?.ANTHROPIC_API_KEY ||
+      claudeFileEnv?.ANTHROPIC_AUTH_TOKEN ||
       hasClaudeCredsInSettings()
     );
 
     if (hasExistingApiKey) {
       // 已经配置过，直接保留原有配置，跳过询问
-      if (existing?.env) {
+      if (claudeFileEnv && Object.keys(claudeFileEnv).length > 0) {
         claudeApiConfig = {
-          apiKey: existing.env.ANTHROPIC_API_KEY || existing.env.ANTHROPIC_AUTH_TOKEN,
-          baseUrl: existing.env.ANTHROPIC_BASE_URL,
-          model: existing.env.ANTHROPIC_MODEL,
-          haikuModel: existing.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
-          sonnetModel: existing.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
-          opusModel: existing.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+          apiKey: claudeFileEnv.ANTHROPIC_API_KEY || claudeFileEnv.ANTHROPIC_AUTH_TOKEN,
+          baseUrl: claudeFileEnv.ANTHROPIC_BASE_URL,
+          model: claudeFileEnv.ANTHROPIC_MODEL,
+          haikuModel: claudeFileEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+          sonnetModel: claudeFileEnv.ANTHROPIC_DEFAULT_SONNET_MODEL,
+          opusModel: claudeFileEnv.ANTHROPIC_DEFAULT_OPUS_MODEL,
         };
       }
     } else {
@@ -925,20 +926,10 @@ export async function runInteractiveSetup(): Promise<boolean> {
     claudeWorkDir: _cwd,
     claudeTimeoutMs: _ctm,
     claudeModel: _cm,
+    env: _stripLegacyRootEnv,
     ...baseRest
   } = (base ?? {}) as Record<string, unknown>;
 
-  // Claude API 凭证不存入 config.json，仅从 ~/.claude/settings.json 或环境变量读取
-  const ANTHROPIC_KEYS = [
-    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
-  ];
-  const envConfig: Record<string, string> = {};
-  for (const [k, v] of Object.entries(base?.env ?? {})) {
-    if (v != null && typeof v === "string" && !ANTHROPIC_KEYS.includes(k)) {
-      envConfig[k] = v;
-    }
-  }
   // 若用户在向导中输入了 Claude 配置，写入 ~/.claude/settings.json（与 Claude Code 共用）
   if (claudeApiConfig.apiKey || claudeApiConfig.baseUrl || claudeApiConfig.model) {
     const claudeExisting = loadClaudeSettings();
@@ -971,7 +962,6 @@ export async function runInteractiveSetup(): Promise<boolean> {
   const out: Record<string, unknown> = {
     ...baseRest,
     platforms: { ...(base?.platforms ?? {}) },
-    env: Object.keys(envConfig).length > 0 ? envConfig : undefined,
     aiCommand: aiCmd,
     tools: {
       claude: {

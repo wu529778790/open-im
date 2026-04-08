@@ -58,7 +58,7 @@ export class CodexAdapter implements ToolAdapter {
           const msg = typeof err === "string" ? err : String(err);
           const friendly =
             msg.includes("Authentication") || msg.includes("login")
-              ? "Codex 需要先登录。请在终端运行 codex login，或在 ~/.open-im/config.json 的 env 中添加 OPENAI_API_KEY。"
+              ? "Codex 需要先登录。请在终端运行 codex login，或在 shell 中 export OPENAI_API_KEY。"
               : msg.includes("stream disconnected") ||
                   msg.includes("error sending request") ||
                   msg.includes("Connection refused") ||

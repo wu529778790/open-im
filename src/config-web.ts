@@ -696,9 +696,12 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
     saveClaudeSettingsEnv(claudeEnv);
   }
   // claudeConfigPath is informational only, not saved
+  const { env: _discardLegacyRootEnv, ...existingWithoutRootEnv } = existing as FileConfig & {
+    env?: Record<string, string>;
+  };
 
   return {
-    ...existing,
+    ...existingWithoutRootEnv,
     aiCommand: payload.ai.aiCommand,
     logDir: payload.ai.logDir === undefined ? existing.logDir : clean(payload.ai.logDir),
     logLevel: payload.ai.logLevel === "default" ? undefined : payload.ai.logLevel,

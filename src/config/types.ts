@@ -207,7 +207,6 @@ export interface FileConfig {
     workbuddy?: FilePlatformWorkBuddy;
   };
 
-  env?: Record<string, string>;
   aiCommand?: string;
   tools?: {
     claude?: FileToolClaude;

@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createLogger } from '../logger.js';
+import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
 
 const log = createLogger('CodexCli');
 const windowsCodexLaunchCache = new Map<string, { command: string; args: string[] } | null>();
@@ -222,10 +223,7 @@ export function runCodex(
 ): CodexRunHandle {
   const args = buildCodexArgs(prompt, sessionId, workDir, options);
 
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (v !== undefined) env[k] = v;
-  }
+  const env = processEnvForNonClaudeCliChild();
   if (options?.chatId) env.CC_IM_CHAT_ID = options.chatId;
   if (options?.hookPort) env.CC_IM_HOOK_PORT = String(options.hookPort);
   if (options?.proxy) {

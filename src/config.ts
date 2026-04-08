@@ -49,6 +49,7 @@ export {
   parseCommaSeparated,
   CLAUDE_AUTH_ENV_KEYS,
   refreshClaudeEnvToProcess,
+  processEnvForNonClaudeCliChild,
 } from './config/file-io.js';
 
 import {
@@ -98,20 +99,8 @@ export function needsSetup(): boolean {
 export function loadConfig(): Config {
   const file = loadFileConfig();
 
-  // 将配置文件中的 env 设置到环境变量（优先级低于现有环境变量）
-  const mergeEnv = (env: Record<string, unknown>) => {
-    for (const [key, value] of Object.entries(env)) {
-      if (!(key in process.env) && value != null && typeof key === 'string') {
-        process.env[key] = String(value);
-      }
-    }
-  };
-  // 1. 全局 env（最低优先级之一）
-  if (file.env) mergeEnv(file.env as Record<string, unknown>);
-
-  // 2. tools.claude.env 和 Claude Code 的 ~/.claude/settings.json 不在此处合并到 process.env，
-  //    改由 Claude adapter 在创建 session 前按需加载（refreshClaudeEnvToProcess），
-  //    避免 Claude 凭证泄漏到 Codex / CodeBuddy 等子进程。
+  // tools.claude.env 与 ~/.claude/settings.json 不在此处合并到 process.env，
+  // 由 Claude adapter 在创建 session 前 refreshClaudeEnvToProcess，避免污染 Codex/CodeBuddy 子进程。
 
   const fileTelegram = file.platforms?.telegram;
   const fileFeishu = file.platforms?.feishu;
@@ -405,7 +394,7 @@ export function loadConfig(): Config {
     if (!hasCodexAuth()) {
       log.warn(
         'Codex 模式：未检测到 OPENAI_API_KEY 或 Codex 登录态。首次使用请先运行 codex login，' +
-        '或在 ~/.open-im/config.json 的 env 中添加 "OPENAI_API_KEY": "你的 API Key"。'
+        '或在 shell 中 export OPENAI_API_KEY。'
       );
     }
   }
