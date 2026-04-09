@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "web/dist",
+    "scripts/git-hooks",
     "README.md",
     "LICENSE"
   ],

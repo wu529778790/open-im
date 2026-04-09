@@ -38,6 +38,12 @@ export function getPublicWebDashboardUrl(): string {
 }
 export const IMAGE_DIR = join(tmpdir(), "open-im-images");
 
+/**
+ * Co-authored-by 使用的固定提交者地址（开箱即用，形如 GitHub noreply）。
+ * 若希望贡献图关联到具体用户，请将该地址加入对应 GitHub 账号的已验证联系方式，或 fork 后自行修改常量。
+ */
+export const DEFAULT_OPEN_IM_COAUTHOR_ADDR = "529778790@qq.com";
+
 export const TERMINAL_ONLY_COMMANDS = new Set([
   "/context",
   "/rewind",
