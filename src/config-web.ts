@@ -7,7 +7,18 @@ import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
-import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig, CODEX_AUTH_PATHS } from "./config.js";
+import {
+  CONFIG_PATH,
+  getClaudeConfigHome,
+  loadClaudeSettingsEnv,
+  saveClaudeSettingsEnv,
+  loadConfig,
+  loadFileConfig,
+  saveFileConfig,
+  normalizeAiCommand,
+  type FileConfig,
+  CODEX_AUTH_PATHS,
+} from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
@@ -346,35 +357,35 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
     platforms: {
       telegram: {
         enabled: file.platforms?.telegram?.enabled ?? Boolean(file.platforms?.telegram?.botToken),
-        aiCommand: (file.platforms?.telegram?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.telegram?.aiCommand, "claude"),
         botToken: maskSecret(file.platforms?.telegram?.botToken),
         proxy: file.platforms?.telegram?.proxy ?? "",
         allowedUserIds: (file.platforms?.telegram?.allowedUserIds ?? []).join(", "),
       },
       feishu: {
         enabled: file.platforms?.feishu?.enabled ?? Boolean(file.platforms?.feishu?.appId && file.platforms?.feishu?.appSecret),
-        aiCommand: (file.platforms?.feishu?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.feishu?.aiCommand, "claude"),
         appId: file.platforms?.feishu?.appId ?? "",
         appSecret: maskSecret(file.platforms?.feishu?.appSecret),
         allowedUserIds: (file.platforms?.feishu?.allowedUserIds ?? []).join(", "),
       },
       qq: {
         enabled: file.platforms?.qq?.enabled ?? Boolean(file.platforms?.qq?.appId && file.platforms?.qq?.secret),
-        aiCommand: (file.platforms?.qq?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.qq?.aiCommand, "claude"),
         appId: file.platforms?.qq?.appId ?? "",
         secret: maskSecret(file.platforms?.qq?.secret),
         allowedUserIds: (file.platforms?.qq?.allowedUserIds ?? []).join(", "),
       },
       wework: {
         enabled: file.platforms?.wework?.enabled ?? Boolean(file.platforms?.wework?.corpId && file.platforms?.wework?.secret),
-        aiCommand: (file.platforms?.wework?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.wework?.aiCommand, "claude"),
         corpId: file.platforms?.wework?.corpId ?? "",
         secret: maskSecret(file.platforms?.wework?.secret),
         allowedUserIds: (file.platforms?.wework?.allowedUserIds ?? []).join(", "),
       },
       dingtalk: {
         enabled: file.platforms?.dingtalk?.enabled ?? Boolean(file.platforms?.dingtalk?.clientId && file.platforms?.dingtalk?.clientSecret),
-        aiCommand: (file.platforms?.dingtalk?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.dingtalk?.aiCommand, "claude"),
         clientId: file.platforms?.dingtalk?.clientId ?? "",
         clientSecret: maskSecret(file.platforms?.dingtalk?.clientSecret),
         cardTemplateId: file.platforms?.dingtalk?.cardTemplateId ?? "",
@@ -382,7 +393,7 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       },
       workbuddy: {
         enabled: file.platforms?.workbuddy?.enabled ?? Boolean(file.platforms?.workbuddy?.accessToken && file.platforms?.workbuddy?.refreshToken && file.platforms?.workbuddy?.userId),
-        aiCommand: (file.platforms?.workbuddy?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "claude",
+        aiCommand: normalizeAiCommand(file.platforms?.workbuddy?.aiCommand, "claude"),
         accessToken: maskSecret(file.platforms?.workbuddy?.accessToken),
         refreshToken: maskSecret(file.platforms?.workbuddy?.refreshToken),
         userId: file.platforms?.workbuddy?.userId ?? "",

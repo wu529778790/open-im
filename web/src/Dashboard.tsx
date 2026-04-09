@@ -19,6 +19,20 @@ function prettyJson(raw: string): string {
   return JSON.stringify(JSON.parse(raw), null, 2) + "\n";
 }
 
+/** 与运行时 normalizeAiCommand 一致，避免非法/大小写错误的字符串导致 <select> 无法匹配选项 */
+function normalizeWebAiCommand(v: unknown): AiCommand {
+  return v === "codex" || v === "codebuddy" || v === "claude" || v === "" ? (v as AiCommand) : "claude";
+}
+
+function pickInitialAiPanel(platforms: WebConfigPayload["platforms"]): "claude" | "codex" | "codebuddy" {
+  for (const k of PLATFORM_KEYS) {
+    if (!platforms[k].enabled) continue;
+    const c = platforms[k].aiCommand;
+    if (c === "codex" || c === "codebuddy" || c === "claude") return c;
+  }
+  return "claude";
+}
+
 function emptyPayload(): WebConfigPayload {
   return {
     platforms: {
@@ -83,14 +97,18 @@ function emptyPayload(): WebConfigPayload {
 
 function coercePayload(raw: WebConfigPayload): WebConfigPayload {
   const base = emptyPayload();
+  const mergePlatform = <K extends PlatformKey>(k: K) => {
+    const m = { ...base.platforms[k], ...raw.platforms[k] };
+    return { ...m, aiCommand: normalizeWebAiCommand(m.aiCommand) };
+  };
   return {
     platforms: {
-      telegram: { ...base.platforms.telegram, ...raw.platforms.telegram },
-      feishu: { ...base.platforms.feishu, ...raw.platforms.feishu },
-      qq: { ...base.platforms.qq, ...raw.platforms.qq },
-      wework: { ...base.platforms.wework, ...raw.platforms.wework },
-      dingtalk: { ...base.platforms.dingtalk, ...raw.platforms.dingtalk },
-      workbuddy: { ...base.platforms.workbuddy, ...raw.platforms.workbuddy },
+      telegram: mergePlatform("telegram"),
+      feishu: mergePlatform("feishu"),
+      qq: mergePlatform("qq"),
+      wework: mergePlatform("wework"),
+      dingtalk: mergePlatform("dingtalk"),
+      workbuddy: mergePlatform("workbuddy"),
     },
     ai: {
       ...base.ai,
@@ -192,7 +210,9 @@ export function Dashboard() {
       try {
         const data = (await request("/api/config")) as ConfigApiResponse;
         if (cancelled) return;
-        setPayload(coercePayload(data.payload));
+        const coerced = coercePayload(data.payload);
+        setPayload(coerced);
+        setCurrentAiPanel(pickInitialAiPanel(coerced.platforms));
         setMeta({ configPath: data.meta.configPath });
 
         const [claude, codex, file, ,] = await Promise.all([
@@ -238,7 +258,6 @@ export function Dashboard() {
           setConfigJson("{}\n");
         }
 
-        setCurrentAiPanel("claude");
       } catch (e) {
         if (!cancelled) setMessage({ text: toErrorMsg(e), type: "error" });
       } finally {
@@ -447,6 +466,10 @@ export function Dashboard() {
       ...p,
       platforms: { ...p.platforms, [key]: { ...p.platforms[key], ...patch } },
     }));
+    const cmd = patch.aiCommand;
+    if (cmd === "claude" || cmd === "codex" || cmd === "codebuddy") {
+      setCurrentAiPanel(cmd);
+    }
   };
 
   const updateAi = (patch: Partial<WebConfigPayload["ai"]>) => {
