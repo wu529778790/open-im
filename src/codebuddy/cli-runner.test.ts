@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCodeBuddyArgs, extractBufferedPayloads, flushBufferedPayloads } from './cli-runner.js';
+import {
+  buildCodeBuddyArgs,
+  extractBufferedPayloads,
+  flushBufferedPayloads,
+  mergeAssistantReply,
+} from './cli-runner.js';
 
 describe('buildCodeBuddyArgs', () => {
   it('builds print-mode stream-json args for new sessions', () => {
@@ -45,6 +50,22 @@ describe('buildCodeBuddyArgs', () => {
       '--output-format',
       'stream-json',
     ]);
+  });
+});
+
+describe('mergeAssistantReply', () => {
+  it('treats longer prefix extension as cumulative stream', () => {
+    expect(mergeAssistantReply('hi', 'hi there')).toBe('hi there');
+  });
+
+  it('appends unrelated follow-up after tool rounds', () => {
+    expect(
+      mergeAssistantReply('现在读取核心签署服务：', '这里是对 SES/AES 链路的完整梳理。'),
+    ).toBe('现在读取核心签署服务：\n\n这里是对 SES/AES 链路的完整梳理。');
+  });
+
+  it('keeps the longer block when one contains the other', () => {
+    expect(mergeAssistantReply('short', 'short but longer')).toBe('short but longer');
   });
 });
 
