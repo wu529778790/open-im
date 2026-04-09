@@ -263,10 +263,8 @@ export async function main() {
   log.info(`启用平台: ${config.enabledPlatforms.join(", ")}`);
 
   const sessionManager = new SessionManager(startupCwd, config.claudeWorkDir);
-
-  // CLI 工具（Codex/CodeBuddy）的 session 是进程级别的，服务重启后一定无效。
-  // 启动时仅清除 CLI 工具自己的 sessionId，保留 Claude 的持久上下文。
-  sessionManager.clearAllCliSessionIds();
+  // Codex/CodeBuddy 的 sessionId 持久化在 sessions.json；重启后沿用以便 --resume 续聊。
+  // 若 CLI 判定会话无效，ai-task 会通过 onSessionInvalid 清理并提示重试。
 
   // Track active platform handles and successfully initialized platforms
   const activeHandles = new Map<Platform, PlatformHandle>();

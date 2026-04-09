@@ -162,42 +162,6 @@ export class SessionManager {
     return realPath;
   }
 
-  /**
-   * 服务启动时调用：清除所有用户的 CLI sessionId。
-   * Codex/CodeBuddy 的 session 是进程级别的，服务重启后旧 session 一定无效。
-   */
-  clearAllCliSessionIds(): void {
-    let changed = false;
-    for (const [, s] of this.sessions) {
-      for (const toolId of ['codex', 'codebuddy'] as const) {
-        if (this.getToolSessionId(s, toolId) !== undefined) {
-          this.clearToolSessionId(s, toolId);
-          changed = true;
-        }
-      }
-      if (s.threads) {
-        for (const t of Object.values(s.threads)) {
-          for (const toolId of ['codex', 'codebuddy'] as const) {
-            if (t.sessionIds?.[toolId] !== undefined) {
-              delete t.sessionIds[toolId];
-              changed = true;
-            }
-          }
-        }
-      }
-    }
-    for (const key of [...this.convSessionMap.keys()]) {
-      if (key.endsWith(':codex') || key.endsWith(':codebuddy')) {
-        this.convSessionMap.delete(key);
-        changed = true;
-      }
-    }
-    if (changed) {
-      this.flushSync();
-      log.info('Cleared CLI session IDs for codex/codebuddy on startup');
-    }
-  }
-
   newSession(userId: string): boolean {
     const s = this.sessions.get(userId);
     if (s) {
