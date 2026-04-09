@@ -62,29 +62,33 @@ Session state is stored in **`~/.open-im/data/sessions.json`** (per user, not IM
 
 ### Per-platform AI
 
-Default: root **`aiCommand`**. Override with **`platforms.<name>.aiCommand`**:
+Set **`platforms.<name>.aiCommand`** per channel (`claude` / `codex` / `codebuddy`). If unset, the process **`AI_COMMAND`** env var is used when present; otherwise it defaults to **`claude`**.
 
 ```json
 {
-  "aiCommand": "claude",
   "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "codex" }
+    "telegram": { "enabled": true, "aiCommand": "codex", "botToken": "..." }
   }
 }
 ```
 
 ### Claude (Agent SDK)
 
-No local `claude` binary required. Credentials: env → **`config.json`** `env` → **`~/.claude/settings.json`**.
+No local `claude` binary required. Credentials: env → **`config.json`** **`tools.claude.env`** → **`~/.claude/settings.json`** (dashboard saves API fields here).
 
 Third-party / compatible API example:
 
 ```json
 {
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "your-token",
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
-    "ANTHROPIC_MODEL": "glm-4.7"
+  "tools": {
+    "claude": {
+      "workDir": "/path/to/project",
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "your-token",
+        "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
+        "ANTHROPIC_MODEL": "glm-4.7"
+      }
+    }
   }
 }
 ```
@@ -100,12 +104,11 @@ codebuddy login
 
 ```json
 {
-  "aiCommand": "claude",
   "tools": {
     "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
   },
   "platforms": {
-    "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
+    "telegram": { "enabled": true, "aiCommand": "claude", "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
   }
 }
 ```
@@ -114,7 +117,7 @@ Add Feishu, QQ, WeCom, DingTalk, WorkBuddy under **`platforms`** as needed. Run 
 
 ### Environment variables
 
-Use **`config.json`** or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`**, **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
+Use **`config.json`** (platforms, `tools.*`, etc.) or environment variables; the dashboard exposes common options. Typical keys: **`ANTHROPIC_*`** (shell or **`tools.claude.env`**), **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc. The root-level **`config.json` `env`** field is no longer read.
 
 ### Privacy
 

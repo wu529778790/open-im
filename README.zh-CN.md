@@ -62,29 +62,33 @@ npx @wu529778790/open-im start
 
 ### 按平台指定 AI
 
-根级 **`aiCommand`** 为默认；用 **`platforms.<name>.aiCommand`** 覆盖：
+在每个已启用渠道上设置 **`platforms.<name>.aiCommand`**（`claude` / `codex` / `codebuddy`）。若未设置，会尝试进程环境变量 **`AI_COMMAND`**；再否则默认为 **`claude`**。
 
 ```json
 {
-  "aiCommand": "claude",
   "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "codex" }
+    "telegram": { "enabled": true, "aiCommand": "codex", "botToken": "..." }
   }
 }
 ```
 
 ### Claude（Agent SDK）
 
-无需本地 `claude` 可执行文件。凭证顺序：环境变量 → **`config.json`** 的 **`env`** → **`~/.claude/settings.json`**。
+无需本地 `claude` 可执行文件。凭证顺序：环境变量 → **`config.json`** 的 **`tools.claude.env`** → **`~/.claude/settings.json`**（控制台保存的 API 配置写入后者）。
 
 第三方兼容接口示例：
 
 ```json
 {
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "your-token",
-    "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
-    "ANTHROPIC_MODEL": "glm-4.7"
+  "tools": {
+    "claude": {
+      "workDir": "/path/to/project",
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "your-token",
+        "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
+        "ANTHROPIC_MODEL": "glm-4.7"
+      }
+    }
   }
 }
 ```
@@ -100,12 +104,11 @@ codebuddy login
 
 ```json
 {
-  "aiCommand": "claude",
   "tools": {
     "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
   },
   "platforms": {
-    "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
+    "telegram": { "enabled": true, "aiCommand": "claude", "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
   }
 }
 ```
@@ -114,7 +117,7 @@ codebuddy login
 
 ### 环境变量
 
-可在 **`config.json`** 或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。
+可在 **`config.json`**（平台与 `tools.*` 等）或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**（shell 或 **`tools.claude.env`**）、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。根级 **`config.json` `env`** 已不再使用。
 
 ### 隐私
 

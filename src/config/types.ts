@@ -30,7 +30,6 @@ export interface Config {
   dingtalkAllowedUserIds: string[];
   workbuddyAllowedUserIds: string[];
 
-  aiCommand: AiCommand;
   codexCliPath: string;
   codebuddyCliPath: string;
   /** Claude 访问 API 的代理（如 http://127.0.0.1:7890） */
@@ -207,7 +206,7 @@ export interface FileConfig {
     workbuddy?: FilePlatformWorkBuddy;
   };
 
-  env?: Record<string, string>;
+  /** @deprecated 仅旧配置兼容；运行时以各 platforms.*.aiCommand 为准 */
   aiCommand?: string;
   tools?: {
     claude?: FileToolClaude;

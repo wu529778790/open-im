@@ -34,7 +34,25 @@ export type {
   FileConfig,
 } from './config/types.js';
 
-import type { Platform, AiCommand, Config, FilePlatformWechat } from './config/types.js';
+import type { Platform, AiCommand, Config, FileConfig, FilePlatformWechat } from './config/types.js';
+
+/** 分渠道 AI 工具：未配置时使用 AI_COMMAND / 旧版根级 aiCommand / 默认 claude */
+function resolveFilePlatformAi(file: FileConfig, platform: Platform): AiCommand {
+  const pf = file.platforms;
+  const raw =
+    platform === 'telegram'
+      ? pf?.telegram?.aiCommand
+      : platform === 'feishu'
+        ? pf?.feishu?.aiCommand
+        : platform === 'qq'
+          ? pf?.qq?.aiCommand
+          : platform === 'wework'
+            ? pf?.wework?.aiCommand
+            : platform === 'dingtalk'
+              ? pf?.dingtalk?.aiCommand
+              : pf?.workbuddy?.aiCommand;
+  return normalizeAiCommand(raw ?? process.env.AI_COMMAND ?? file.aiCommand, 'claude');
+}
 
 // Re-export file I/O and credential helpers from sub-modules
 export {
@@ -49,6 +67,8 @@ export {
   parseCommaSeparated,
   CLAUDE_AUTH_ENV_KEYS,
   refreshClaudeEnvToProcess,
+  processEnvForNonClaudeCliChild,
+  CODEX_AUTH_PATHS,
 } from './config/file-io.js';
 
 import {
@@ -98,20 +118,8 @@ export function needsSetup(): boolean {
 export function loadConfig(): Config {
   const file = loadFileConfig();
 
-  // 将配置文件中的 env 设置到环境变量（优先级低于现有环境变量）
-  const mergeEnv = (env: Record<string, unknown>) => {
-    for (const [key, value] of Object.entries(env)) {
-      if (!(key in process.env) && value != null && typeof key === 'string') {
-        process.env[key] = String(value);
-      }
-    }
-  };
-  // 1. 全局 env（最低优先级之一）
-  if (file.env) mergeEnv(file.env as Record<string, unknown>);
-
-  // 2. tools.claude.env 和 Claude Code 的 ~/.claude/settings.json 不在此处合并到 process.env，
-  //    改由 Claude adapter 在创建 session 前按需加载（refreshClaudeEnvToProcess），
-  //    避免 Claude 凭证泄漏到 Codex / CodeBuddy 等子进程。
+  // tools.claude.env 与 ~/.claude/settings.json 不在此处合并到 process.env，
+  // 由 Claude adapter 在创建 session 前 refreshClaudeEnvToProcess，避免污染 Codex/CodeBuddy 子进程。
 
   const fileTelegram = file.platforms?.telegram;
   const fileFeishu = file.platforms?.feishu;
@@ -265,7 +273,6 @@ export function loadConfig(): Config {
       : fileWorkBuddy?.allowedUserIds ?? allowedUserIds;
 
   // 5. AI / 工作目录 / 安全配置（从 tools 读取）
-  const aiCommand = normalizeAiCommand(process.env.AI_COMMAND ?? file.aiCommand, 'claude');
   const tc = file.tools?.claude ?? {};
   const tcod = file.tools?.codex ?? {};
   const tcb = file.tools?.codebuddy ?? {};
@@ -322,9 +329,12 @@ export function loadConfig(): Config {
     claudeSessionIdleTtlMinutes = 30;
   }
 
-  // 6. 校验 Claude API 凭证（SDK 模式需要）
-  // 支持：官方 API Key、Auth Token、或自定义 API（第三方模型等，BASE_URL + token）
-  if (aiCommand === 'claude') {
+  // 6. 校验 Claude API 凭证（任一已启用渠道使用 claude 时需配置）
+  const toolsNeeded = new Set<AiCommand>();
+  for (const p of enabledPlatforms) {
+    toolsNeeded.add(resolveFilePlatformAi(file, p));
+  }
+  if (toolsNeeded.has('claude')) {
     // 校验凭证时直接从各来源读取，不修改 process.env
     const claudeToolEnvForCheck = file.tools?.claude?.env as Record<string, string> | undefined;
     const claudeSettingsForCheck = loadClaudeSettingsEnv();
@@ -368,8 +378,8 @@ export function loadConfig(): Config {
     }
   }
 
-  // 7. 校验 Codex CLI（使用 codex 时）
-  if (aiCommand === 'codex') {
+  // 7. 校验 Codex CLI（任一已启用渠道使用 codex 时）
+  if (toolsNeeded.has('codex')) {
     if (isAbsolute(codexCliPath) || codexCliPath.includes('/') || codexCliPath.includes('\\')) {
       try {
         accessSync(codexCliPath, constants.F_OK);
@@ -405,13 +415,13 @@ export function loadConfig(): Config {
     if (!hasCodexAuth()) {
       log.warn(
         'Codex 模式：未检测到 OPENAI_API_KEY 或 Codex 登录态。首次使用请先运行 codex login，' +
-        '或在 ~/.open-im/config.json 的 env 中添加 "OPENAI_API_KEY": "你的 API Key"。'
+        '或在 shell 中 export OPENAI_API_KEY。'
       );
     }
   }
 
-  // 8. 校验 CodeBuddy CLI（使用 codebuddy 时）
-  if (aiCommand === 'codebuddy') {
+  // 8. 校验 CodeBuddy CLI（任一已启用渠道使用 codebuddy 时）
+  if (toolsNeeded.has('codebuddy')) {
     if (isAbsolute(codebuddyCliPath) || codebuddyCliPath.includes('/') || codebuddyCliPath.includes('\\')) {
       try {
         accessSync(codebuddyCliPath, constants.F_OK);
@@ -509,66 +519,66 @@ export function loadConfig(): Config {
     telegram: telegramEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.telegram?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'telegram'),
           proxy: process.env.TELEGRAM_PROXY ?? file.platforms?.telegram?.proxy,
           allowedUserIds: telegramAllowedUserIds,
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.telegram?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'telegram'),
           proxy: process.env.TELEGRAM_PROXY ?? file.platforms?.telegram?.proxy,
           allowedUserIds: telegramAllowedUserIds,
         },
     feishu: feishuEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.feishu?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'feishu'),
           allowedUserIds: feishuAllowedUserIds,
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.feishu?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'feishu'),
           allowedUserIds: feishuAllowedUserIds,
         },
     qq: qqEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.qq?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'qq'),
           allowedUserIds: qqAllowedUserIds,
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.qq?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'qq'),
           allowedUserIds: qqAllowedUserIds,
         },
     wework: weworkEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.wework?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'wework'),
           allowedUserIds: weworkAllowedUserIds,
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.wework?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'wework'),
           allowedUserIds: weworkAllowedUserIds,
         },
     dingtalk: dingtalkEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.dingtalk?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'dingtalk'),
           allowedUserIds: dingtalkAllowedUserIds,
           cardTemplateId: dingtalkCardTemplateId,
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.dingtalk?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'dingtalk'),
           allowedUserIds: dingtalkAllowedUserIds,
           cardTemplateId: dingtalkCardTemplateId,
         },
     workbuddy: workbuddyEnabled
       ? {
           enabled: true,
-          aiCommand: normalizeAiCommand(file.platforms?.workbuddy?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'workbuddy'),
           allowedUserIds: workbuddyAllowedUserIds,
           accessToken: workbuddyAccessToken,
           refreshToken: workbuddyRefreshToken,
@@ -579,7 +589,7 @@ export function loadConfig(): Config {
         }
       : {
           enabled: false,
-          aiCommand: normalizeAiCommand(file.platforms?.workbuddy?.aiCommand, aiCommand),
+          aiCommand: resolveFilePlatformAi(file, 'workbuddy'),
           allowedUserIds: workbuddyAllowedUserIds,
           accessToken: workbuddyAccessToken,
           refreshToken: workbuddyRefreshToken,
@@ -610,7 +620,6 @@ export function loadConfig(): Config {
     weworkAllowedUserIds,
     dingtalkAllowedUserIds,
     workbuddyAllowedUserIds,
-    aiCommand,
     codexCliPath,
     codebuddyCliPath,
     claudeProxy,
@@ -644,11 +653,12 @@ export function getPlatformsWithCredentials(config: Config): Platform[] {
 }
 
 export function resolvePlatformAiCommand(config: Config, platform: Platform): AiCommand {
-  return config.platforms[platform]?.aiCommand ?? config.aiCommand;
+  const v = config.platforms[platform]?.aiCommand;
+  return v === 'claude' || v === 'codex' || v === 'codebuddy' ? v : 'claude';
 }
 
 export function getConfiguredAiCommands(config: Config): AiCommand[] {
-  const commands = new Set<AiCommand>([config.aiCommand]);
+  const commands = new Set<AiCommand>();
   for (const platform of config.enabledPlatforms) {
     commands.add(resolvePlatformAiCommand(config, platform));
   }

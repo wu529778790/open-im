@@ -7,7 +7,18 @@ import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
-import { CONFIG_PATH, getClaudeConfigHome, loadClaudeSettingsEnv, saveClaudeSettingsEnv, loadConfig, loadFileConfig, saveFileConfig, type FileConfig } from "./config.js";
+import {
+  CONFIG_PATH,
+  getClaudeConfigHome,
+  loadClaudeSettingsEnv,
+  saveClaudeSettingsEnv,
+  loadConfig,
+  loadFileConfig,
+  saveFileConfig,
+  normalizeAiCommand,
+  type FileConfig,
+  CODEX_AUTH_PATHS,
+} from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
@@ -196,7 +207,6 @@ interface WebConfigPayload {
     workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
   };
   ai: {
-    aiCommand: "claude" | "codex" | "codebuddy";
     claudeWorkDir: string;
     claudeConfigPath: string;
     claudeAuthToken: string;
@@ -206,6 +216,7 @@ interface WebConfigPayload {
     codexCliPath: string;
     codebuddyCliPath: string;
     codexProxy: string;
+    codexApiKey?: string;
     logDir?: string;
     logLevel: "default" | "DEBUG" | "INFO" | "WARN" | "ERROR";
   };
@@ -285,6 +296,12 @@ function clean(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function persistedPlatformAi(v: string | undefined): "claude" | "codex" | "codebuddy" {
+  const c = clean(v);
+  if (c === "codex" || c === "codebuddy" || c === "claude") return c;
+  return "claude";
+}
+
 function isMasked(value: string | undefined): boolean {
   return typeof value === "string" && value.includes("****");
 }
@@ -340,35 +357,35 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
     platforms: {
       telegram: {
         enabled: file.platforms?.telegram?.enabled ?? Boolean(file.platforms?.telegram?.botToken),
-        aiCommand: (file.platforms?.telegram?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.telegram?.aiCommand, "claude"),
         botToken: maskSecret(file.platforms?.telegram?.botToken),
         proxy: file.platforms?.telegram?.proxy ?? "",
         allowedUserIds: (file.platforms?.telegram?.allowedUserIds ?? []).join(", "),
       },
       feishu: {
         enabled: file.platforms?.feishu?.enabled ?? Boolean(file.platforms?.feishu?.appId && file.platforms?.feishu?.appSecret),
-        aiCommand: (file.platforms?.feishu?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.feishu?.aiCommand, "claude"),
         appId: file.platforms?.feishu?.appId ?? "",
         appSecret: maskSecret(file.platforms?.feishu?.appSecret),
         allowedUserIds: (file.platforms?.feishu?.allowedUserIds ?? []).join(", "),
       },
       qq: {
         enabled: file.platforms?.qq?.enabled ?? Boolean(file.platforms?.qq?.appId && file.platforms?.qq?.secret),
-        aiCommand: (file.platforms?.qq?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.qq?.aiCommand, "claude"),
         appId: file.platforms?.qq?.appId ?? "",
         secret: maskSecret(file.platforms?.qq?.secret),
         allowedUserIds: (file.platforms?.qq?.allowedUserIds ?? []).join(", "),
       },
       wework: {
         enabled: file.platforms?.wework?.enabled ?? Boolean(file.platforms?.wework?.corpId && file.platforms?.wework?.secret),
-        aiCommand: (file.platforms?.wework?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.wework?.aiCommand, "claude"),
         corpId: file.platforms?.wework?.corpId ?? "",
         secret: maskSecret(file.platforms?.wework?.secret),
         allowedUserIds: (file.platforms?.wework?.allowedUserIds ?? []).join(", "),
       },
       dingtalk: {
         enabled: file.platforms?.dingtalk?.enabled ?? Boolean(file.platforms?.dingtalk?.clientId && file.platforms?.dingtalk?.clientSecret),
-        aiCommand: (file.platforms?.dingtalk?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.dingtalk?.aiCommand, "claude"),
         clientId: file.platforms?.dingtalk?.clientId ?? "",
         clientSecret: maskSecret(file.platforms?.dingtalk?.clientSecret),
         cardTemplateId: file.platforms?.dingtalk?.cardTemplateId ?? "",
@@ -376,7 +393,7 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       },
       workbuddy: {
         enabled: file.platforms?.workbuddy?.enabled ?? Boolean(file.platforms?.workbuddy?.accessToken && file.platforms?.workbuddy?.refreshToken && file.platforms?.workbuddy?.userId),
-        aiCommand: (file.platforms?.workbuddy?.aiCommand as "" | "claude" | "codex" | "codebuddy" | undefined) ?? "",
+        aiCommand: normalizeAiCommand(file.platforms?.workbuddy?.aiCommand, "claude"),
         accessToken: maskSecret(file.platforms?.workbuddy?.accessToken),
         refreshToken: maskSecret(file.platforms?.workbuddy?.refreshToken),
         userId: file.platforms?.workbuddy?.userId ?? "",
@@ -385,7 +402,6 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       },
     },
     ai: {
-      aiCommand: (file.aiCommand as "claude" | "codex" | "codebuddy") ?? "claude",
       claudeWorkDir: file.tools?.claude?.workDir ?? process.cwd(),
       claudeConfigPath: process.platform === 'win32'
         ? getClaudeConfigHome() + "\\.claude\\settings.json"
@@ -397,6 +413,19 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       codexCliPath: file.tools?.codex?.cliPath ?? "codex",
       codebuddyCliPath: file.tools?.codebuddy?.cliPath ?? "codebuddy",
       codexProxy: file.tools?.codex?.proxy ?? "",
+      codexApiKey: (() => {
+        if (process.env.OPENAI_API_KEY) return maskSecret(process.env.OPENAI_API_KEY);
+        for (const p of CODEX_AUTH_PATHS) {
+          try {
+            if (existsSync(p)) {
+              const raw = JSON.parse(readFileSync(p, "utf-8"));
+              const key = raw?.openai_api_key ?? raw?.apiKey;
+              if (typeof key === "string" && key) return maskSecret(key);
+            }
+          } catch { /* ignore */ }
+        }
+        return "";
+      })(),
       logDir: file.logDir ?? "",
       logLevel: (file.logLevel as "DEBUG" | "INFO" | "WARN" | "ERROR") ?? "default",
     },
@@ -517,7 +546,6 @@ function createProbeConfig(values: Partial<Config>): Config {
     weworkAllowedUserIds: [],
     dingtalkAllowedUserIds: [],
     workbuddyAllowedUserIds: [],
-    aiCommand: "claude",
     codexCliPath: "codex",
     claudeWorkDir: process.cwd(),
     claudeSessionIdleTtlMinutes: 30,
@@ -696,10 +724,12 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
     saveClaudeSettingsEnv(claudeEnv);
   }
   // claudeConfigPath is informational only, not saved
+  const { env: _discardLegacyRootEnv, aiCommand: _discardLegacyGlobalAi, ...existingWithoutRootEnv } = existing as FileConfig & {
+    env?: Record<string, string>;
+  };
 
   return {
-    ...existing,
-    aiCommand: payload.ai.aiCommand,
+    ...existingWithoutRootEnv,
     logDir: payload.ai.logDir === undefined ? existing.logDir : clean(payload.ai.logDir),
     logLevel: payload.ai.logLevel === "default" ? undefined : payload.ai.logLevel,
     tools: {
@@ -725,7 +755,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       telegram: {
         ...existing.platforms?.telegram,
         enabled: payload.platforms.telegram.enabled,
-        aiCommand: clean(payload.platforms.telegram.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.telegram.aiCommand),
         botToken: resolveSecret(payload.platforms.telegram.botToken, existing.platforms?.telegram?.botToken),
         proxy: clean(payload.platforms.telegram.proxy),
         allowedUserIds: splitCsv(payload.platforms.telegram.allowedUserIds),
@@ -733,7 +763,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       feishu: {
         ...existing.platforms?.feishu,
         enabled: payload.platforms.feishu.enabled,
-        aiCommand: clean(payload.platforms.feishu.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.feishu.aiCommand),
         appId: clean(payload.platforms.feishu.appId),
         appSecret: resolveSecret(payload.platforms.feishu.appSecret, existing.platforms?.feishu?.appSecret),
         allowedUserIds: splitCsv(payload.platforms.feishu.allowedUserIds),
@@ -741,7 +771,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       qq: {
         ...existing.platforms?.qq,
         enabled: payload.platforms.qq.enabled,
-        aiCommand: clean(payload.platforms.qq.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.qq.aiCommand),
         appId: clean(payload.platforms.qq.appId),
         secret: resolveSecret(payload.platforms.qq.secret, existing.platforms?.qq?.secret),
         allowedUserIds: splitCsv(payload.platforms.qq.allowedUserIds),
@@ -749,7 +779,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       wework: {
         ...existing.platforms?.wework,
         enabled: payload.platforms.wework.enabled,
-        aiCommand: clean(payload.platforms.wework.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.wework.aiCommand),
         corpId: clean(payload.platforms.wework.corpId),
         secret: resolveSecret(payload.platforms.wework.secret, existing.platforms?.wework?.secret),
         allowedUserIds: splitCsv(payload.platforms.wework.allowedUserIds),
@@ -757,7 +787,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       dingtalk: {
         ...existing.platforms?.dingtalk,
         enabled: payload.platforms.dingtalk.enabled,
-        aiCommand: clean(payload.platforms.dingtalk.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.dingtalk.aiCommand),
         clientId: clean(payload.platforms.dingtalk.clientId),
         clientSecret: resolveSecret(payload.platforms.dingtalk.clientSecret, existing.platforms?.dingtalk?.clientSecret),
         cardTemplateId: clean(payload.platforms.dingtalk.cardTemplateId),
@@ -766,7 +796,7 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
       workbuddy: {
         ...existing.platforms?.workbuddy,
         enabled: payload.platforms.workbuddy.enabled,
-        aiCommand: clean(payload.platforms.workbuddy.aiCommand) as "claude" | "codex" | "codebuddy" | undefined,
+        aiCommand: persistedPlatformAi(payload.platforms.workbuddy.aiCommand),
         accessToken: resolveSecret(payload.platforms.workbuddy.accessToken, existing.platforms?.workbuddy?.accessToken),
         refreshToken: resolveSecret(payload.platforms.workbuddy.refreshToken, existing.platforms?.workbuddy?.refreshToken),
         userId: clean(payload.platforms.workbuddy.userId),
@@ -985,6 +1015,14 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
             return;
           }
           saveFileConfig(toFileConfig(body, loadFileConfig()));
+          // Save Codex OPENAI_API_KEY to ~/.codex/auth.json if provided
+          const codexApiKey = clean(body.ai.codexApiKey);
+          if (codexApiKey && !isMasked(codexApiKey)) {
+            const codexAuthPath = CODEX_AUTH_PATHS[0];
+            const codexDir = dirname(codexAuthPath);
+            if (!existsSync(codexDir)) mkdirSync(codexDir, { recursive: true });
+            writeFileSync(codexAuthPath, JSON.stringify({ openai_api_key: codexApiKey }, null, 2), "utf-8");
+          }
           loadConfig();
           json(response, 200, { message: "Configuration saved." }, request);
           if (!options.persistent && requestUrl.searchParams.get("final") === "1") {
@@ -1044,6 +1082,55 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           }
           writeFileSync(settingsPath, pretty, "utf-8");
           json(response, 200, { message: "Claude settings.json saved.", path: settingsPath }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      // --- Codex settings (auth.json) ---
+      if (request.method === "GET" && requestUrl.pathname === "/api/codex/settings") {
+        try {
+          let foundPath = "";
+          let contents = "{}";
+          for (const p of CODEX_AUTH_PATHS) {
+            if (existsSync(p)) {
+              foundPath = p;
+              contents = readFileSync(p, "utf-8");
+              break;
+            }
+          }
+          if (!foundPath && CODEX_AUTH_PATHS.length > 0) {
+            foundPath = CODEX_AUTH_PATHS[0];
+          }
+          json(response, 200, { path: foundPath, contents }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/codex/settings") {
+        try {
+          const body = await readJson<{ contents?: string }>(request);
+          const raw = body.contents ?? "";
+          if (!raw.trim()) {
+            json(response, 400, { error: "contents is required" }, request);
+            return;
+          }
+          try {
+            JSON.parse(raw);
+          } catch (err) {
+            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` }, request);
+            return;
+          }
+          const settingsPath = CODEX_AUTH_PATHS[0];
+          const dir = dirname(settingsPath);
+          if (!existsSync(dir)) {
+            mkdirSync(dir, { recursive: true });
+          }
+          writeFileSync(settingsPath, raw, "utf-8");
+          json(response, 200, { message: "Codex settings saved.", path: settingsPath }, request);
         } catch (error) {
           json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }

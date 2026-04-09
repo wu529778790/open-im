@@ -51,12 +51,12 @@ export interface WebConfigPayload {
     };
   };
   ai: {
-    aiCommand: "claude" | "codex" | "codebuddy";
     claudeWorkDir: string;
     claudeConfigPath: string;
     claudeProxy: string;
     codexCliPath: string;
     codexProxy: string;
+    codexApiKey?: string;
     codebuddyCliPath: string;
     hookPort: number;
     logLevel: string;

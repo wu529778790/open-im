@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { createLogger } from '../logger.js';
+import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
 
 const log = createLogger('CodeBuddyCli');
 
@@ -230,10 +231,7 @@ export function runCodeBuddy(
     permissionMode: normalizePermissionMode(options?.permissionMode) as CodeBuddyRunOptions['permissionMode'],
   });
 
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) env[key] = value;
-  }
+  const env = processEnvForNonClaudeCliChild();
   if (process.platform === 'win32') {
     env.LANG = env.LANG || 'C.UTF-8';
     env.LC_ALL = env.LC_ALL || 'C.UTF-8';

@@ -19,40 +19,54 @@ function prettyJson(raw: string): string {
   return JSON.stringify(JSON.parse(raw), null, 2) + "\n";
 }
 
+/** 与运行时 normalizeAiCommand 一致，避免非法/大小写错误的字符串导致 <select> 无法匹配选项 */
+function normalizeWebAiCommand(v: unknown): AiCommand {
+  return v === "codex" || v === "codebuddy" || v === "claude" || v === "" ? (v as AiCommand) : "claude";
+}
+
+function pickInitialAiPanel(platforms: WebConfigPayload["platforms"]): "claude" | "codex" | "codebuddy" {
+  for (const k of PLATFORM_KEYS) {
+    if (!platforms[k].enabled) continue;
+    const c = platforms[k].aiCommand;
+    if (c === "codex" || c === "codebuddy" || c === "claude") return c;
+  }
+  return "claude";
+}
+
 function emptyPayload(): WebConfigPayload {
   return {
     platforms: {
       telegram: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         botToken: "",
         proxy: "",
         allowedUserIds: "",
       },
       feishu: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         appId: "",
         appSecret: "",
         allowedUserIds: "",
       },
       qq: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         appId: "",
         secret: "",
         allowedUserIds: "",
       },
       wework: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         corpId: "",
         secret: "",
         allowedUserIds: "",
       },
       dingtalk: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         clientId: "",
         clientSecret: "",
         cardTemplateId: "",
@@ -60,7 +74,7 @@ function emptyPayload(): WebConfigPayload {
       },
       workbuddy: {
         enabled: false,
-        aiCommand: "",
+        aiCommand: "claude",
         accessToken: "",
         refreshToken: "",
         userId: "",
@@ -69,7 +83,6 @@ function emptyPayload(): WebConfigPayload {
       },
     },
     ai: {
-      aiCommand: "claude",
       claudeWorkDir: "",
       claudeConfigPath: "",
       claudeProxy: "",
@@ -84,14 +97,18 @@ function emptyPayload(): WebConfigPayload {
 
 function coercePayload(raw: WebConfigPayload): WebConfigPayload {
   const base = emptyPayload();
+  const mergePlatform = <K extends PlatformKey>(k: K) => {
+    const m = { ...base.platforms[k], ...raw.platforms[k] };
+    return { ...m, aiCommand: normalizeWebAiCommand(m.aiCommand) };
+  };
   return {
     platforms: {
-      telegram: { ...base.platforms.telegram, ...raw.platforms.telegram },
-      feishu: { ...base.platforms.feishu, ...raw.platforms.feishu },
-      qq: { ...base.platforms.qq, ...raw.platforms.qq },
-      wework: { ...base.platforms.wework, ...raw.platforms.wework },
-      dingtalk: { ...base.platforms.dingtalk, ...raw.platforms.dingtalk },
-      workbuddy: { ...base.platforms.workbuddy, ...raw.platforms.workbuddy },
+      telegram: mergePlatform("telegram"),
+      feishu: mergePlatform("feishu"),
+      qq: mergePlatform("qq"),
+      wework: mergePlatform("wework"),
+      dingtalk: mergePlatform("dingtalk"),
+      workbuddy: mergePlatform("workbuddy"),
     },
     ai: {
       ...base.ai,
@@ -117,6 +134,7 @@ export function Dashboard() {
   const [payload, setPayload] = useState<WebConfigPayload>(emptyPayload);
   const [meta, setMeta] = useState<{ configPath: string }>({ configPath: "" });
   const [claudeSettingsJson, setClaudeSettingsJson] = useState("");
+  const [codexSettingsJson, setCodexSettingsJson] = useState("");
   const [configJson, setConfigJson] = useState("");
   const [originalConfigJson, setOriginalConfigJson] = useState("");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
@@ -154,9 +172,14 @@ export function Dashboard() {
       if (missing.length)
         errors.push(t("validationPlatformIncomplete", { platform: def.label, fields: missing.join(", ") }));
     });
-    const cmd = payload.ai.aiCommand;
-    if (cmd === "codex" && !payload.ai.codexCliPath.trim()) errors.push(t("validationAiCodexNoCli"));
-    if (cmd === "codebuddy" && !payload.ai.codebuddyCliPath.trim()) errors.push(t("validationAiCodebuddyNoCli"));
+    const anyCodex = PLATFORM_KEYS.some(
+      (k) => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codex",
+    );
+    const anyCodebuddy = PLATFORM_KEYS.some(
+      (k) => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codebuddy",
+    );
+    if (anyCodex && !payload.ai.codexCliPath.trim()) errors.push(t("validationAiCodexNoCli"));
+    if (anyCodebuddy && !payload.ai.codebuddyCliPath.trim()) errors.push(t("validationAiCodebuddyNoCli"));
     return errors;
   }, [payload, t]);
 
@@ -187,11 +210,14 @@ export function Dashboard() {
       try {
         const data = (await request("/api/config")) as ConfigApiResponse;
         if (cancelled) return;
-        setPayload(coercePayload(data.payload));
+        const coerced = coercePayload(data.payload);
+        setPayload(coerced);
+        setCurrentAiPanel(pickInitialAiPanel(coerced.platforms));
         setMeta({ configPath: data.meta.configPath });
 
-        const [claude, file, ,] = await Promise.all([
+        const [claude, codex, file, ,] = await Promise.all([
           request("/api/claude/settings") as Promise<{ contents?: string }>,
+          request("/api/codex/settings") as Promise<{ contents?: string }>,
           request("/api/config/file") as Promise<{ contents?: string }>,
           refreshStatus(),
           refreshHealth(),
@@ -209,6 +235,17 @@ export function Dashboard() {
           setClaudeSettingsJson("{\n}\n");
         }
 
+        const rawCodex = (codex.contents ?? "").trim();
+        if (rawCodex) {
+          try {
+            setCodexSettingsJson(prettyJson(rawCodex));
+          } catch {
+            setCodexSettingsJson(rawCodex);
+          }
+        } else {
+          setCodexSettingsJson("{\n}\n");
+        }
+
         const rawJ = (file.contents ?? "").trim();
         setOriginalConfigJson(rawJ);
         if (rawJ) {
@@ -221,7 +258,6 @@ export function Dashboard() {
           setConfigJson("{}\n");
         }
 
-        setCurrentAiPanel(data.payload.ai.aiCommand || "claude");
       } catch (e) {
         if (!cancelled) setMessage({ text: toErrorMsg(e), type: "error" });
       } finally {
@@ -264,6 +300,13 @@ export function Dashboard() {
     });
   };
 
+  const saveCodexSettings = async () => {
+    await request("/api/codex/settings", {
+      method: "POST",
+      body: JSON.stringify({ contents: codexSettingsJson }),
+    });
+  };
+
   const saveOpenImConfigFile = async () => {
     const json = configJson.trim();
     if (!json) return;
@@ -303,7 +346,7 @@ export function Dashboard() {
     }
     setBusy(true);
     try {
-      await Promise.all([saveClaudeSettings(), saveOpenImConfigFile()]);
+      await Promise.all([saveClaudeSettings(), saveCodexSettings(), saveOpenImConfigFile()]);
       await request("/api/config/save?final=1", {
         method: "POST",
         body: JSON.stringify(buildPayload()),
@@ -326,6 +369,7 @@ export function Dashboard() {
     try {
       await Promise.all([
         saveClaudeSettings(),
+        saveCodexSettings(),
         request("/api/config/save", {
           method: "POST",
           body: JSON.stringify(buildPayload()),
@@ -422,6 +466,10 @@ export function Dashboard() {
       ...p,
       platforms: { ...p.platforms, [key]: { ...p.platforms[key], ...patch } },
     }));
+    const cmd = patch.aiCommand;
+    if (cmd === "claude" || cmd === "codex" || cmd === "codebuddy") {
+      setCurrentAiPanel(cmd);
+    }
   };
 
   const updateAi = (patch: Partial<WebConfigPayload["ai"]>) => {
@@ -580,22 +628,9 @@ export function Dashboard() {
                   <h3 className="card-title">{t("aiCommonTitle")}</h3>
                 </div>
                 <div className="ai-card-body">
-                  <div className="form-group">
-                    <label className="form-label">{t("aiTool")}</label>
-                    <select
-                      className="form-select"
-                      value={payload.ai.aiCommand}
-                      onChange={(e) => {
-                        const v = e.target.value as "claude" | "codex" | "codebuddy";
-                        updateAi({ aiCommand: v });
-                        setCurrentAiPanel(v);
-                      }}
-                    >
-                      <option value="claude">claude</option>
-                      <option value="codex">codex</option>
-                      <option value="codebuddy">codebuddy</option>
-                    </select>
-                  </div>
+                  <p className="form-hint" style={{ marginBottom: 12 }}>
+                    {t("aiPerPlatformHint")}
+                  </p>
                   <div className="form-group">
                     <label className="form-label">{t("workDir")}</label>
                     <input
@@ -662,6 +697,16 @@ export function Dashboard() {
                     </div>
                   </div>
                   <div className={`ai-tool-panel ${currentAiPanel === "codex" ? "active" : ""}`}>
+                    <div className="form-group">
+                      <label className="form-label">{t("codexApiKey")}</label>
+                      <input
+                        className="form-input mono"
+                        type="password"
+                        value={payload.ai.codexApiKey ?? ""}
+                        onChange={(e) => updateAi({ codexApiKey: e.target.value })}
+                      />
+                      <p className="field-inline-tip" dangerouslySetInnerHTML={{ __html: t("codexApiKeyTip") }} />
+                    </div>
                     <div className="form-group">
                       <label className="form-label">{t("codexCli")}</label>
                       <input
@@ -779,6 +824,40 @@ export function Dashboard() {
                   </div>
                 </div>
               </div>
+              <div className="card config-file-card">
+                <div className="card-header">
+                  <h3 className="card-title mono">{t("codexSettingsLabel")}</h3>
+                </div>
+                <div className="card-body">
+                  <p className="form-hint">{t("codexSettingsCardHint")}</p>
+                  <textarea
+                    className="form-input mono"
+                    rows={8}
+                    spellCheck={false}
+                    value={codexSettingsJson}
+                    onChange={(e) => setCodexSettingsJson(e.target.value)}
+                    style={{ minHeight: 160, resize: "vertical", whiteSpace: "pre" }}
+                  />
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            await saveCodexSettings();
+                            setMessage({ text: t("saveOk"), type: "success" });
+                          } catch (e) {
+                            setMessage({ text: toErrorMsg(e), type: "error" });
+                          }
+                        })()
+                      }
+                    >
+                      {t("saveBtn")}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -834,10 +913,9 @@ function PlatformCard({
         ) : field === "aiCommand" ? (
           <select
             className="form-select"
-            value={String((values as Record<string, string>)[field] ?? "")}
+            value={String((values as Record<string, string>)[field] || "claude")}
             onChange={(e) => onChange({ aiCommand: e.target.value as AiCommand })}
           >
-            <option value="">(default)</option>
             <option value="claude">claude</option>
             <option value="codex">codex</option>
             <option value="codebuddy">codebuddy</option>

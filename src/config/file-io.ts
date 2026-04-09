@@ -32,9 +32,33 @@ export const CLAUDE_AUTH_ENV_KEYS = [
   'ANTHROPIC_MODEL',
 ] as const;
 
+/**
+ * 不应传入 Codex / CodeBuddy 等子进程的环境变量。
+ * Claude 适配器会通过 refreshClaudeEnvToProcess 把这些写入 process.env；
+ * 若原样拷贝给 CLI 子进程，可能导致错误使用 ANTHROPIC_BASE_URL 等「访问地址」。
+ */
+const NON_CLAUDE_CLI_STRIP_KEYS = new Set<string>([
+  ...CLAUDE_AUTH_ENV_KEYS,
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+]);
+
+/**
+ * 供非 Claude CLI 子进程使用的环境：拷贝当前 process.env，并移除 Anthropic/Claude 专用项。
+ */
+export function processEnvForNonClaudeCliChild(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined || NON_CLAUDE_CLI_STRIP_KEYS.has(k)) continue;
+    env[k] = v;
+  }
+  return env;
+}
+
 // Config cache with mtime tracking
 let cachedConfig: { config: FileConfig; mtime: number } | null = null;
-let cachedClaudeEnv: { env: Record<string, string>; mtime: number } | null = null;
+let cachedClaudeEnv: { env: Record<string, string>; fingerprint: string } | null = null;
 
 // 保存进程启动时 shell 环境中的 Claude 相关 key 原始值（优先级最高，不可被文件配置覆盖）
 const originalShellEnv: Partial<Record<string, string>> = {};
@@ -122,39 +146,63 @@ export function getClaudeConfigHome(): string {
   return process.env.HOME || process.env.USERPROFILE || homedir();
 }
 
-export function loadClaudeSettingsEnv(): Record<string, string> {
-  const home = getClaudeConfigHome();
-  const paths = [
-    join(home, '.claude', 'settings.json'),
-    join(home, '.claude.json'),
-  ];
-  for (const p of paths) {
-    try {
-      if (existsSync(p)) {
-        const stats = statSync(p);
-        const currentMtime = stats.mtimeMs;
-        if (cachedClaudeEnv && cachedClaudeEnv.mtime === currentMtime && cachedClaudeEnv.env) {
-          return cachedClaudeEnv.env;
-        }
+function claudeSettingsJsonPath(home: string): string {
+  return join(home, '.claude', 'settings.json');
+}
 
-        const raw = JSON.parse(readFileSync(p, 'utf-8'));
-        const env = raw?.env;
-        if (env && typeof env === 'object') {
-          const result: Record<string, string> = {};
-          for (const [k, v] of Object.entries(env)) {
-            if (v != null && typeof k === 'string') {
-              result[k] = String(v);
-            }
-          }
-          cachedClaudeEnv = { env: result, mtime: currentMtime };
-          return result;
-        }
-      }
-    } catch {
-      /* file not found or parse error, try next path */
+/**
+ * 从单个 Claude settings JSON 根对象解析 env（与 Claude Code 行为对齐）。
+ * - `env` 对象内字段优先于根上同名认证键
+ * - 根上可存在 ANTHROPIC_* / CLAUDE_CODE_OAUTH_TOKEN（部分用户或旧版会写在顶层）
+ */
+function extractAuthEnvFromClaudeSettingsRoot(raw: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of CLAUDE_AUTH_ENV_KEYS) {
+    const v = raw[key];
+    if (v != null && typeof v === 'string' && v.length > 0) {
+      out[key] = v;
     }
   }
-  return {};
+  const env = raw.env;
+  if (env && typeof env === 'object' && !Array.isArray(env)) {
+    for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+      if (v != null && typeof k === 'string') {
+        out[k] = String(v);
+      }
+    }
+  }
+  return out;
+}
+
+export function loadClaudeSettingsEnv(): Record<string, string> {
+  const home = getClaudeConfigHome();
+  const p = claudeSettingsJsonPath(home);
+  let fingerprint = '';
+  try {
+    if (existsSync(p)) {
+      fingerprint = `${p}:${statSync(p).mtimeMs}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (cachedClaudeEnv && cachedClaudeEnv.fingerprint === fingerprint) {
+    return cachedClaudeEnv.env;
+  }
+
+  let merged: Record<string, string> = {};
+  try {
+    if (existsSync(p)) {
+      const raw = JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
+      if (raw && typeof raw === 'object') {
+        merged = extractAuthEnvFromClaudeSettingsRoot(raw);
+      }
+    }
+  } catch {
+    /* 文件损坏或不可读 */
+  }
+
+  cachedClaudeEnv = { env: merged, fingerprint };
+  return merged;
 }
 
 export function saveClaudeSettingsEnv(env: Record<string, string>): void {
@@ -209,8 +257,9 @@ export function parseCommaSeparated(value: string): string[] {
 
 /**
  * 将最新的 Claude 认证环境变量按优先级合并到 process.env。
- * 优先级：shell 环境变量 > tools.claude.env（config.json） > ~/.claude/settings.json
- * 启动时调用一次；cc switch 后再次调用即可生效。
+ * 优先级：shell 环境变量 > ~/.open-im/config.json 的 tools.claude.env >
+ * 本机 Claude 配置（~/.claude/settings.json，与 Claude Code 共用）。
+ * 多数用户只维护本机 settings；每次创建 Claude SDK 会话前调用，本机文件变更后下次会话即生效。
  */
 export function refreshClaudeEnvToProcess(): void {
   const file = loadFileConfig();
