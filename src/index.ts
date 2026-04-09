@@ -42,6 +42,7 @@ import {
 import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
 import { createRequire } from "node:module";
 import { escapePathForMarkdown } from "./shared/utils.js";
+import { applyOpenImGitCoauthorToProcessEnv } from "./shared/git-coauthor.js";
 
 const require = createRequire(import.meta.url);
 const { version: APP_VERSION } = require("../package.json") as {
@@ -204,6 +205,7 @@ export async function main() {
       logLevel: config.logLevel,
       telemetry: config.telemetry,
     });
+    applyOpenImGitCoauthorToProcessEnv();
   } catch (err) {
     if (
       err instanceof Error &&
@@ -219,6 +221,7 @@ export async function main() {
         logLevel: config.logLevel,
         telemetry: config.telemetry,
       });
+      applyOpenImGitCoauthorToProcessEnv();
     } else {
       throw err;
     }

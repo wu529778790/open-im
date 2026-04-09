@@ -38,6 +38,10 @@ Config: **`~/.open-im/config.json`**
 
 After `start`, the CLI prints the dashboard URL (default **`http://127.0.0.1:39282`**).
 
+## Git co-authors
+
+`Co-authored-by` is appended by default on AI-driven commits. **Disable:** set **`OPEN_IM_GIT_COAUTHOR=0`** in the environment and restart the bridge.
+
 ## Web dashboard
 
 `open-im start` and `open-im dashboard` serve the built-in SPA and **`/api/*`** on **`OPEN_IM_WEB_PORT`** (default **39282**). Open **`http://127.0.0.1:39282`** in a browser (same origin as the API). Override the displayed URL with **`OPEN_IM_PUBLIC_WEB_URL`** if behind a proxy.

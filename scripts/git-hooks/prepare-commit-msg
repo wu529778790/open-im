@@ -1,0 +1,18 @@
+#!/bin/sh
+# open-im: 在 git commit 时追加 Co-authored-by。
+# OPEN_IM_GIT_COAUTHOR_LINE：由桥接进程默认注入（共同作者默认开启），无需在 shell 里手动 export。
+# 若为空则跳过（例如未启动桥接、或已设 OPEN_IM_GIT_COAUTHOR=0 后重启）。
+# 安装：由桥接启动时自动复制并配置 core.hooksPath（若尚未占用）
+
+COMMIT_MSG_FILE=$1
+
+if [ -z "$OPEN_IM_GIT_COAUTHOR_LINE" ] || [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ]; then
+  exit 0
+fi
+
+if grep -qF "$OPEN_IM_GIT_COAUTHOR_LINE" "$COMMIT_MSG_FILE" 2>/dev/null; then
+  exit 0
+fi
+
+printf '\n%s\n' "$OPEN_IM_GIT_COAUTHOR_LINE" >>"$COMMIT_MSG_FILE"
+exit 0

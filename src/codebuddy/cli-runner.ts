@@ -217,6 +217,23 @@ function extractToolUses(content: unknown): Array<{ name: string; input?: Record
   return toolUses;
 }
 
+/**
+ * CodeBuddy 会在工具调用前后发来多段 `assistant`：本轮内多为前缀增长的流式全文，
+ * 工具后的新轮次则是独立正文。不能每次 `accumulated = text`，否则只剩开场白。
+ */
+export function mergeAssistantReply(previous: string, incoming: string): string {
+  const a = previous.trimEnd();
+  const b = incoming.trim();
+  if (!b) return a;
+  if (!a) return b;
+  if (a === b) return a;
+  if (b.startsWith(a)) return b;
+  if (a.startsWith(b)) return a;
+  if (a.includes(b)) return a;
+  if (b.includes(a)) return b;
+  return `${a}\n\n${b}`;
+}
+
 export function runCodeBuddy(
   cliPath: string,
   prompt: string,
@@ -258,6 +275,7 @@ export function runCodeBuddy(
   let completed = false;
   let sessionReported = false;
   let currentModel: string | undefined;
+  let assistantMessageCount = 0;
   const toolStats: Record<string, number> = {};
   const startTime = Date.now();
 
@@ -299,6 +317,7 @@ export function runCodeBuddy(
           : undefined;
       if (!message) return;
 
+      assistantMessageCount += 1;
       if (typeof message.model === 'string') currentModel = message.model;
 
       const { text, thinking } = extractTextBlocks(message.content);
@@ -308,12 +327,12 @@ export function runCodeBuddy(
       }
 
       if (thinking) {
-        accumulatedThinking = thinking;
+        accumulatedThinking = mergeAssistantReply(accumulatedThinking, thinking);
         callbacks.onThinking?.(accumulatedThinking);
       }
 
       if (text) {
-        accumulated = text;
+        accumulated = mergeAssistantReply(accumulated, text);
         callbacks.onText(accumulated);
       }
       return;
@@ -321,12 +340,17 @@ export function runCodeBuddy(
 
     if (type === 'result') {
       if (completed) return;
-      completed = true;
       const isError = payload.is_error === true;
+      const rawResult = typeof payload.result === 'string' ? payload.result : undefined;
       const resultText =
-        typeof payload.result === 'string'
-          ? payload.result
-          : accumulated;
+        rawResult !== undefined && rawResult.trim() !== '' ? rawResult : accumulated;
+
+      if (!isError && !resultText.trim()) {
+        log.debug('CodeBuddy: ignoring empty success result (waiting for more stream or process exit)');
+        return;
+      }
+
+      completed = true;
 
       if (isError) {
         const errors = Array.isArray(payload.errors)
@@ -343,7 +367,7 @@ export function runCodeBuddy(
         cost: 0,
         durationMs: Date.now() - startTime,
         model: currentModel,
-        numTurns: 1,
+        numTurns: Math.max(1, assistantMessageCount),
         toolStats,
       });
     }
@@ -396,7 +420,7 @@ export function runCodeBuddy(
       cost: 0,
       durationMs: Date.now() - startTime,
       model: currentModel,
-      numTurns: accumulated ? 1 : 0,
+      numTurns: Math.max(accumulated ? 1 : 0, assistantMessageCount),
       toolStats,
     });
   });

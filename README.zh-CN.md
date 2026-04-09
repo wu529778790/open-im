@@ -38,6 +38,10 @@ npx @wu529778790/open-im start
 
 `start` 后会提示控制台地址（默认 **`http://127.0.0.1:39282`**）。
 
+## Git 共同作者
+
+默认在 AI 发起的提交里追加 `Co-authored-by`。**关闭**：设置环境变量 **`OPEN_IM_GIT_COAUTHOR=0`** 并重启桥接。
+
 ## Web 控制台
 
 `open-im start` / `open-im dashboard` 在 **`OPEN_IM_WEB_PORT`**（默认 **39282**）提供内置页面与 **`/api/*`**。浏览器打开 **`http://127.0.0.1:39282`** 即可（与 API 同源）。反向代理时可设 **`OPEN_IM_PUBLIC_WEB_URL`**。
