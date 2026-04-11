@@ -58,7 +58,7 @@ describe('RequestQueue', () => {
     expect(execute).toHaveBeenCalledWith('second', expect.any(AbortSignal));
   });
 
-  it('isolates queues per user:convId', () => {
+  it('isolates queues per user', () => {
     const queue = new RequestQueue();
     const execute = vi.fn().mockReturnValue(new Promise(() => {}));
 
@@ -67,6 +67,48 @@ describe('RequestQueue', () => {
 
     expect(r1).toBe('running');
     expect(r2).toBe('running');
+  });
+
+  it('serializes tasks for the same user across convId changes', () => {
+    const queue = new RequestQueue();
+    const execute = vi.fn().mockReturnValue(new Promise(() => {}));
+
+    const r1 = queue.enqueue('user1', 'convA', 'hello', execute);
+    const r2 = queue.enqueue('user1', 'convB', 'hello', execute);
+
+    expect(r1).toBe('running');
+    expect(r2).toBe('queued');
+  });
+
+  it('cancelUser aborts the running task signal and clears pending', async () => {
+    const queue = new RequestQueue();
+    const signals: AbortSignal[] = [];
+    let n = 0;
+    const execute = vi.fn().mockImplementation((_p: string, s: AbortSignal) => {
+      n += 1;
+      if (n === 1) {
+        signals.push(s);
+        return new Promise<void>((_resolve, reject) => {
+          s.addEventListener('abort', () => {
+            reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+          });
+        });
+      }
+      return Promise.resolve();
+    });
+
+    queue.enqueue('user1', 'c1', 'first', execute);
+    queue.enqueue('user1', 'c2', 'second', execute);
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    queue.cancelUser('user1');
+    await new Promise((r) => setTimeout(r, 25));
+
+    expect(signals[0]?.aborted).toBe(true);
+    const r3 = queue.enqueue('user1', 'c3', 'third', execute);
+    expect(r3).toBe('running');
+    await new Promise((r) => setTimeout(r, 15));
+    expect(execute).toHaveBeenCalledWith('third', expect.any(AbortSignal));
   });
 
   it('clear removes queued tasks but not the running one', () => {

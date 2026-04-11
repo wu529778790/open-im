@@ -167,6 +167,7 @@ export class CommandHandler {
     }
 
     const entry = history[index - 1];
+    this.deps.requestQueue.cancelUser(userId);
     const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
     if (ok) {
       await this.replySender().sendTextReply(
@@ -180,6 +181,7 @@ export class CommandHandler {
   }
 
   private async handleNew(chatId: string, userId: string): Promise<boolean> {
+    this.deps.requestQueue.cancelUser(userId);
     const ok = this.deps.sessionManager.newSession(userId);
     await this.replySender().sendTextReply(
       chatId,
@@ -230,6 +232,7 @@ export class CommandHandler {
       return true;
     }
     try {
+      this.deps.requestQueue.cancelUser(userId);
       const resolved = await this.deps.sessionManager.setWorkDir(userId, dir);
       await this.replySender().sendTextReply(
         chatId,
