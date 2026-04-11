@@ -77,3 +77,5 @@ export const MAX_FEISHU_MESSAGE_LENGTH = 4000;
 export const MAX_STREAMING_CONTENT_LENGTH = 25000;
 export const MAX_WEWORK_MESSAGE_LENGTH = 2048;
 export const MAX_DINGTALK_MESSAGE_LENGTH = 2048;
+/** WeChat KF (微信客服) 单条消息最大字符数 */
+export const MAX_WORKBUDDY_MESSAGE_LENGTH = 2000;
