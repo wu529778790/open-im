@@ -333,6 +333,16 @@ export function runAITask(
     taskState = {
       handle: {
         abort: () => {
+          if (!settled) {
+            emitStructuredEvent('AITask', 'ai.task.error', {
+              platform: ctx.platform,
+              taskKey: ctx.taskKey,
+              userKey: hashUserId(ctx.userId),
+              toolId: aiCommand,
+              durationMs: Date.now() - taskState.startedAt,
+              errorSnippet: 'aborted',
+            });
+          }
           activeHandle?.abort();
           cleanup();
           settle();
