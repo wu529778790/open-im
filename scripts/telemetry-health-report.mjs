@@ -35,6 +35,7 @@ function initDay() {
     retryableFailuresMax: 0,
     dropped4xxLinesMax: 0,
     networkFailuresMax: 0,
+    errorTypeCounts: {},
   };
 }
 
@@ -60,6 +61,10 @@ function main() {
       if (obj.event === 'ai.task.start') bucket.starts += 1;
       if (obj.event === 'ai.task.complete') bucket.completes += 1;
       if (obj.event === 'ai.task.error') bucket.errors += 1;
+      if (obj.event === 'ai.task.error' && obj.data && typeof obj.data === 'object') {
+        const t = typeof obj.data.errorType === 'string' ? obj.data.errorType : 'unknown';
+        bucket.errorTypeCounts[t] = (bucket.errorTypeCounts[t] || 0) + 1;
+      }
       if (obj.event === 'telemetry.upload.stats' && obj.data && typeof obj.data === 'object') {
         bucket.uploadStats += 1;
         const d = obj.data;
@@ -113,6 +118,18 @@ function main() {
     infos.push(`这些日期没有 telemetry.upload.stats（通常是老版本数据）: ${noUploadStatsDays.join(', ')}`);
   }
 
+  const totalErrorTypeCounts = {};
+  for (const day of days) {
+    const d = perDay.get(day);
+    for (const [k, v] of Object.entries(d.errorTypeCounts)) {
+      totalErrorTypeCounts[k] = (totalErrorTypeCounts[k] || 0) + v;
+    }
+  }
+  const errorTypeTop = Object.entries(totalErrorTypeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (errorTypeTop.length > 0) {
+    infos.push(`错误类型分布Top: ${errorTypeTop.map(([k, v]) => `${k}:${v}`).join(', ')}`);
+  }
+
   const dayRows = days.map((day) => {
     const d = perDay.get(day);
     const terminal = d.completes + d.errors;
@@ -130,6 +147,7 @@ function main() {
       retryableFailuresMax: d.retryableFailuresMax,
       dropped4xxLinesMax: d.dropped4xxLinesMax,
       networkFailuresMax: d.networkFailuresMax,
+      errorTypeCounts: d.errorTypeCounts,
     };
   });
 
@@ -148,6 +166,7 @@ function main() {
         totalMissing,
         alertCount: alerts.length,
         infoCount: infos.length,
+        errorTypeCounts: totalErrorTypeCounts,
       },
       days: dayRows,
       diagnosis: {

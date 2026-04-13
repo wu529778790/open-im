@@ -65,6 +65,28 @@ function isUsageLimitError(error: string): boolean {
   return /usage limit/i.test(error) || /try again at\s+\d{1,2}:\d{2}\s*(AM|PM)/i.test(error);
 }
 
+function classifyErrorType(error: string): string {
+  const s = error.toLowerCase();
+  if (s.includes('aborted')) return 'aborted';
+  if (isUsageLimitError(error) || s.includes('rate limit') || s.includes('quota')) return 'limit';
+  if (s.includes('invalid api key') || s.includes('unauthorized') || s.includes('401')) return 'auth';
+  if (s.includes('model') && (s.includes('not support') || s.includes('not found') || s.includes('invalid'))) {
+    return 'model';
+  }
+  if (s.includes('process exited') || s.includes('exit code')) return 'process';
+  if (
+    s.includes('timeout') ||
+    s.includes('etimedout') ||
+    s.includes('econnreset') ||
+    s.includes('enotfound') ||
+    s.includes('eai_again') ||
+    s.includes('network')
+  ) {
+    return 'network';
+  }
+  return 'unknown';
+}
+
 function buildCompletionNote(
   result: ParsedResult,
   sessionManager: SessionManager,
@@ -297,6 +319,7 @@ export function runAITask(
             toolId: aiCommand,
             durationMs: Date.now() - taskState.startedAt,
             errorSnippet: sanitize(String(error).slice(0, 400)),
+            errorType: classifyErrorType(String(error)),
           });
           if (isUsageLimitError(error)) {
             // Usage limit errors: keep session for all tools (user can retry later)
@@ -341,6 +364,7 @@ export function runAITask(
               toolId: aiCommand,
               durationMs: Date.now() - taskState.startedAt,
               errorSnippet: 'aborted',
+              errorType: 'aborted',
             });
           }
           activeHandle?.abort();
@@ -367,6 +391,7 @@ export function runAITask(
           toolId: aiCommand,
           durationMs: 0,
           errorSnippet: sanitize(String(err).slice(0, 400)),
+          errorType: classifyErrorType(String(err)),
         });
         platformAdapter
           .sendError(`内部错误：${err instanceof Error ? err.message : String(err)}`)
