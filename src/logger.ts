@@ -7,6 +7,7 @@ import { APP_HOME } from './constants.js';
 import { sanitizeTelemetryData } from './telemetry/telemetry-sanitize.js';
 import {
   enqueueTelemetryLine,
+  getTelemetryUploadStats,
   initTelemetryUpload,
   shutdownTelemetryUpload,
 } from './telemetry/telemetry-upload.js';
@@ -34,6 +35,9 @@ let minLevel: number = LOG_LEVELS.DEBUG;
 let logStream: WriteStream | undefined;
 let eventsStream: WriteStream | undefined;
 let telemetryEnabled = false;
+let telemetryStatsTimer: ReturnType<typeof setInterval> | null = null;
+let lastTelemetryStatsSignature = '';
+const TELEMETRY_STATS_INTERVAL_MS = 5 * 60_000;
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -98,6 +102,11 @@ export function initLogger(dirOrOpts?: string | LoggerInitOptions, level?: LogLe
   logStream = createWriteStream(join(logDir, getLogFileName()), { flags: 'a' });
 
   telemetryEnabled = !!tel?.enabled;
+  if (telemetryStatsTimer) {
+    clearInterval(telemetryStatsTimer);
+    telemetryStatsTimer = null;
+  }
+  lastTelemetryStatsSignature = '';
   if (eventsStream) {
     eventsStream.end();
     eventsStream = undefined;
@@ -110,9 +119,21 @@ export function initLogger(dirOrOpts?: string | LoggerInitOptions, level?: LogLe
       url: tel?.url,
       token: tel?.token,
     });
+    telemetryStatsTimer = setInterval(() => {
+      emitTelemetryUploadStats(false);
+    }, TELEMETRY_STATS_INTERVAL_MS);
   } else {
     initTelemetryUpload({ enabled: false });
   }
+}
+
+function emitTelemetryUploadStats(force: boolean): void {
+  if (!telemetryEnabled) return;
+  const stats = getTelemetryUploadStats();
+  const signature = JSON.stringify(stats);
+  if (!force && signature === lastTelemetryStatsSignature) return;
+  lastTelemetryStatsSignature = signature;
+  emitStructuredEvent('Telemetry', 'telemetry.upload.stats', stats);
 }
 
 function write(level: keyof typeof LOG_LEVELS, tag: string, msg: string, ...args: unknown[]) {
@@ -160,6 +181,11 @@ export function emitStructuredEvent(
 }
 
 export async function shutdownLoggerTelemetry(): Promise<void> {
+  emitTelemetryUploadStats(true);
+  if (telemetryStatsTimer) {
+    clearInterval(telemetryStatsTimer);
+    telemetryStatsTimer = null;
+  }
   await shutdownTelemetryUpload();
 }
 

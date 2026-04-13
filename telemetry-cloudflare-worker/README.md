@@ -32,3 +32,15 @@ Or use a custom domain and route in the Cloudflare dashboard.
 ## Limits
 
 The worker rejects bodies larger than **1 MiB** (`413`). Adjust in `src/index.ts` if needed.
+
+## Local health report (open-im repo)
+
+After pulling R2 logs to `telemetry-cloudflare-worker/logs/r2-events/events`, run:
+
+```bash
+npm run telemetry:report
+npm run telemetry:report -- --json
+```
+
+The report includes daily counts (`start/end/miss`) and upload health counters (`drop4/retry/net`) with a final diagnosis section.
+If any `ALERT` is detected, the script exits with code `1` (useful for CI/cron monitoring).
