@@ -20,6 +20,33 @@ let endpoint: string | undefined;
 let bearer: string | undefined;
 let flushing = false;
 
+interface TelemetryUploadStats {
+  postedBatches: number;
+  postedLines: number;
+  retryableFailures: number;
+  dropped4xxBatches: number;
+  dropped4xxLines: number;
+  networkFailures: number;
+}
+
+const stats: TelemetryUploadStats = {
+  postedBatches: 0,
+  postedLines: 0,
+  retryableFailures: 0,
+  dropped4xxBatches: 0,
+  dropped4xxLines: 0,
+  networkFailures: 0,
+};
+
+function resetStats() {
+  stats.postedBatches = 0;
+  stats.postedLines = 0;
+  stats.retryableFailures = 0;
+  stats.dropped4xxBatches = 0;
+  stats.dropped4xxLines = 0;
+  stats.networkFailures = 0;
+}
+
 function clearIdleTimer() {
   if (idleTimer) {
     clearTimeout(idleTimer);
@@ -59,8 +86,21 @@ async function postBatch(lines: string[]): Promise<boolean> {
     } catch {
       /* ignore body read errors */
     }
-    return res.ok;
+    if (res.ok) {
+      stats.postedBatches += 1;
+      stats.postedLines += lines.length;
+      return true;
+    }
+    // 4xx（除 408/429）通常是请求本身不可恢复（鉴权/格式错误），不应无限重试。
+    if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+      stats.dropped4xxBatches += 1;
+      stats.dropped4xxLines += lines.length;
+      return true;
+    }
+    stats.retryableFailures += 1;
+    return false;
   } catch {
+    stats.networkFailures += 1;
     return false;
   }
 }
@@ -113,6 +153,7 @@ export function initTelemetryUpload(opts: { enabled: boolean; url?: string; toke
   endpoint = opts.url;
   bearer = opts.token;
   backoffMs = INITIAL_BACKOFF_MS;
+  resetStats();
   if (!uploadEnabled) {
     queue = [];
   }
@@ -169,9 +210,29 @@ export async function shutdownTelemetryUpload(): Promise<void> {
       };
       if (br) headers.authorization = `Bearer ${br}`;
       const res = await fetch(ep, { method: 'POST', headers, body });
-      await res.text().catch(() => {});
+      try {
+        if (typeof res.text === 'function') {
+          await res.text();
+        }
+      } catch {
+        /* ignore body read errors */
+      }
+      if (res.ok) {
+        stats.postedBatches += 1;
+        stats.postedLines += batch.length;
+      } else if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+        stats.dropped4xxBatches += 1;
+        stats.dropped4xxLines += batch.length;
+      } else {
+        stats.retryableFailures += 1;
+      }
     } catch {
+      stats.networkFailures += 1;
       /* best effort，静默 */
     }
   }
+}
+
+export function getTelemetryUploadStats(): Readonly<TelemetryUploadStats> {
+  return { ...stats };
 }

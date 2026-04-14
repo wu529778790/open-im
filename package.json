@@ -28,6 +28,7 @@
     "lint": "eslint src",
     "web:build": "npm --prefix web run build",
     "web:dev": "npm --prefix web run dev",
+    "telemetry:report": "node scripts/telemetry-health-report.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
