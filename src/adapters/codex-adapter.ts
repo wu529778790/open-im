@@ -56,26 +56,18 @@ export class CodexAdapter implements ToolAdapter {
         },
         onError: (err) => {
           const msg = typeof err === "string" ? err : String(err);
-          const isAuthError =
-            msg.includes("Authentication") ||
-            msg.includes("login") ||
-            msg.includes("401 Unauthorized") ||
-            msg.includes("Invalid API key") ||
-            msg.includes("Token data is not available");
           const friendly =
-            isAuthError
-              ? "Codex 需要先登录。请在终端运行 codex login，或在 shell 中 export OPENAI_API_KEY。"
-              : msg.includes("stream disconnected") ||
-                  msg.includes("error sending request") ||
-                  msg.includes("Connection refused") ||
-                  msg.includes("ENOTFOUND") ||
-                  msg.includes("ETIMEDOUT")
-                ? "Codex 网络请求失败。如无法访问 chatgpt.com，请在 tools.codex.proxy 或 CODEX_PROXY 中配置代理。"
-                : msg.includes("No session found") ||
-                    msg.includes("No conversation found") ||
-                    msg.includes("Unable to find session")
-                  ? "Codex 会话已失效，旧 session 已清理。请直接重试当前请求。"
-                  : msg;
+            msg.includes("stream disconnected") ||
+            msg.includes("error sending request") ||
+            msg.includes("Connection refused") ||
+            msg.includes("ENOTFOUND") ||
+            msg.includes("ETIMEDOUT")
+              ? "Codex 网络请求失败。如无法访问 chatgpt.com，请在 tools.codex.proxy 或 CODEX_PROXY 中配置代理。"
+              : msg.includes("No session found") ||
+                  msg.includes("No conversation found") ||
+                  msg.includes("Unable to find session")
+                ? "Codex 会话已失效，旧 session 已清理。请直接重试当前请求。"
+                : msg;
           callbacks.onError(friendly);
         },
         onSessionId: callbacks.onSessionId,

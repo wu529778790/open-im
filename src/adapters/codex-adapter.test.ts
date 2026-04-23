@@ -11,7 +11,7 @@ vi.mock("../codex/cli-runner.js", () => ({
 import { CodexAdapter } from "./codex-adapter.js";
 
 describe("CodexAdapter", () => {
-  it("maps invalid API key errors to the login guidance", () => {
+  it("preserves invalid API key errors", () => {
     runCodexMock.mockImplementation((_cliPath, _prompt, _sessionId, _workDir, callbacks) => {
       callbacks.onError('unexpected status 401 Unauthorized: {"error":"Invalid API key"}');
       return { abort: vi.fn() };
@@ -26,11 +26,11 @@ describe("CodexAdapter", () => {
     });
 
     expect(onError).toHaveBeenCalledWith(
-      "Codex 需要先登录。请在终端运行 codex login，或在 shell 中 export OPENAI_API_KEY。",
+      'unexpected status 401 Unauthorized: {"error":"Invalid API key"}',
     );
   });
 
-  it("maps missing token data errors to the login guidance", () => {
+  it("preserves missing token data errors", () => {
     runCodexMock.mockImplementation((_cliPath, _prompt, _sessionId, _workDir, callbacks) => {
       callbacks.onError("Token data is not available.");
       return { abort: vi.fn() };
@@ -44,8 +44,6 @@ describe("CodexAdapter", () => {
       onError,
     });
 
-    expect(onError).toHaveBeenCalledWith(
-      "Codex 需要先登录。请在终端运行 codex login，或在 shell 中 export OPENAI_API_KEY。",
-    );
+    expect(onError).toHaveBeenCalledWith("Token data is not available.");
   });
 });
