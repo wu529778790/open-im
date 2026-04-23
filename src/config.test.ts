@@ -178,6 +178,13 @@ describe('config', () => {
 
   it('accepts newer Claude SDK layout that only ships platform binaries', async () => {
     const { loadConfig } = await import('./config.js');
+    const binaryExt = process.platform === 'win32' ? '.exe' : '';
+    const nativePackageName = process.platform === 'linux'
+      ? `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`
+      : `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+    const nativeBinarySpecifier = `${nativePackageName}/claude${binaryExt}`;
+    const nativeBinaryPath = `/mock/node_modules/${nativePackageName}/claude${binaryExt}`;
+
     mockConfigJson({
       tools: {
         claude: {
@@ -199,8 +206,8 @@ describe('config', () => {
       if (specifier === '@anthropic-ai/claude-agent-sdk') {
         return '/mock/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs';
       }
-      if (specifier === '@anthropic-ai/claude-agent-sdk-darwin-arm64/claude') {
-        return '/mock/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude';
+      if (specifier === nativeBinarySpecifier) {
+        return nativeBinaryPath;
       }
       throw Object.assign(new Error(`Cannot find module '${specifier}'`), {
         code: 'MODULE_NOT_FOUND',
@@ -212,14 +219,14 @@ describe('config', () => {
       if (path.endsWith('/config.json')) return true;
       if (path.endsWith('/.claude/settings.json')) return false;
       if (path.endsWith('/@anthropic-ai/claude-agent-sdk/cli.js')) return false;
-      if (path.endsWith('/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude')) return true;
+      if (path === nativeBinaryPath) return true;
       return false;
     });
 
     loadConfig();
 
     expect(execFileSyncMock).toHaveBeenCalledWith(
-      '/mock/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude',
+      nativeBinaryPath,
       ['--version'],
       expect.objectContaining({
         stdio: 'pipe',
