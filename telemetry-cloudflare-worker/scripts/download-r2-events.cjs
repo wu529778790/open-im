@@ -98,12 +98,13 @@ async function downloadS3Date(client, date) {
       const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: obj.Key }));
       fs.writeFileSync(localPath, await readBody(resp.Body));
       count++;
-      if (count % 50 === 0) process.stdout.write('  ' + date + ': ' + count + ' files...\r');
+      process.stdout.write('  ' + date + ': ' + count + ' / ~' + ((data.Contents || []).filter(o => o.Key && !o.Key.endsWith('/')).length) + '\r');
     }
 
     if (!data.IsTruncated || !data.NextContinuationToken) break;
     continuationToken = data.NextContinuationToken;
   }
+  process.stdout.write('\n');
   return count;
 }
 
@@ -215,13 +216,14 @@ async function downloadAdminApiDate(token, date) {
       fs.mkdirSync(path.dirname(localPath), { recursive: true });
       fs.writeFileSync(localPath, await fetchBuffer(base + '/objects/' + encodeURI(obj.key), token));
       count++;
-      if (count % 50 === 0) process.stdout.write('  ' + date + ': ' + count + ' files...\r');
+      process.stdout.write('  ' + date + ': ' + count + '\r');
     }
 
     const info = data.result_info || {};
     if (!info.is_truncated || !info.cursor) break;
     cursor = info.cursor;
   }
+  process.stdout.write('\n');
   return count;
 }
 
