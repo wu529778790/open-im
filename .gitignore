@@ -8,3 +8,4 @@ dist/
 # Cloudflare Wrangler local state (example worker)
 telemetry-cloudflare-worker/.wrangler/
 telemetry-cloudflare-worker/logs/
+logs/

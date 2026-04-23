@@ -2,7 +2,16 @@
  * WorkBuddy Centrifuge Client - WebSocket connection for WeChat KF messages
  */
 
-import { Centrifuge, Subscription, type ConnectedContext, type DisconnectedContext, type ErrorContext, type ServerPublicationContext, type SubscriptionErrorContext } from 'centrifuge';
+import {
+  Centrifuge,
+  Subscription,
+  SubscriptionState,
+  type ConnectedContext,
+  type DisconnectedContext,
+  type ErrorContext,
+  type ServerPublicationContext,
+  type SubscriptionErrorContext,
+} from 'centrifuge';
 import { WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { createLogger } from '../logger.js';
@@ -72,7 +81,7 @@ export class WorkBuddyCentrifugeClient {
   private callbacks: CentrifugeCallbacks;
   private client: Centrifuge | null = null;
   private sub: Subscription | null = null;
-  private extraSubs: Subscription[] = [];
+  private extraSubs = new Map<string, Subscription>();
   private state: WorkBuddyState = 'disconnected';
   private processedMsgIds = new Set<string>();
   private consecutiveErrors = 0;
@@ -166,10 +175,10 @@ export class WorkBuddyCentrifugeClient {
     this.state = 'disconnected';
     this.processedMsgIds.clear();
 
-    for (const sub of this.extraSubs) {
+    for (const sub of this.extraSubs.values()) {
       sub.unsubscribe();
     }
-    this.extraSubs = [];
+    this.extraSubs.clear();
 
     if (this.sub) {
       this.sub.unsubscribe();
@@ -195,8 +204,27 @@ export class WorkBuddyCentrifugeClient {
       return;
     }
 
+    const existing = this.extraSubs.get(channel);
+    if (existing) {
+      if (existing.state === SubscriptionState.Unsubscribed) {
+        log.info(`${this.logPrefix} Re-subscribing to additional channel: ${channel}`);
+        existing.subscribe();
+      } else {
+        log.debug(`${this.logPrefix} Additional channel already tracked: ${channel} (state=${existing.state})`);
+      }
+      return;
+    }
+
     log.info(`${this.logPrefix} Subscribing to additional channel: ${channel}`);
-    const sub = this.client.newSubscription(channel, { token: subscriptionToken });
+    let sub: Subscription;
+    try {
+      sub = this.client.newSubscription(channel, { token: subscriptionToken });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      log.error(`${this.logPrefix} Failed to create extra subscription (${channel}): ${msg}`);
+      this.callbacks.onError?.(error instanceof Error ? error : new Error(msg));
+      return;
+    }
 
     sub.on('publication', (ctx: ServerPublicationContext) => {
       this.handlePublication(ctx.data);
@@ -210,7 +238,13 @@ export class WorkBuddyCentrifugeClient {
       log.info(`${this.logPrefix} Extra channel subscribed: ${channel}`);
     });
 
-    this.extraSubs.push(sub);
+    sub.on('unsubscribed', () => {
+      if (this.extraSubs.get(channel) === sub) {
+        this.extraSubs.delete(channel);
+      }
+    });
+
+    this.extraSubs.set(channel, sub);
     sub.subscribe();
   }
 

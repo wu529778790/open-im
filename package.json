@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@aws-sdk/client-s3": "^3.1035.0",
     "@larksuiteoapi/node-sdk": "^1.59.0",
     "centrifuge": "^5.5.3",
     "dingtalk-stream": "^2.1.4",
