@@ -6,6 +6,7 @@ const {
   mkdirSyncMock,
   readFileSyncMock,
   readdirSyncMock,
+  requireResolveMock,
   statSyncMock,
   writeFileSyncMock,
   execFileSyncMock,
@@ -16,6 +17,7 @@ const {
   mkdirSyncMock: vi.fn(),
   readFileSyncMock: vi.fn(),
   readdirSyncMock: vi.fn(),
+  requireResolveMock: vi.fn(),
   statSyncMock: vi.fn(),
   writeFileSyncMock: vi.fn(),
   execFileSyncMock: vi.fn(),
@@ -39,6 +41,16 @@ vi.mock('node:fs', async () => {
 vi.mock('node:child_process', () => ({
   execFileSync: execFileSyncMock,
 }));
+
+vi.mock('node:module', async () => {
+  const actual = await vi.importActual<typeof import('node:module')>('node:module');
+  return {
+    ...actual,
+    createRequire: () => ({
+      resolve: requireResolveMock,
+    }),
+  };
+});
 
 vi.mock('./logger.js', () => ({
   createLogger: () => ({
@@ -68,6 +80,14 @@ describe('config', () => {
       throw new Error('missing');
     });
     readdirSyncMock.mockReturnValue([]);
+    requireResolveMock.mockImplementation((specifier: string) => {
+      if (specifier === '@anthropic-ai/claude-agent-sdk') {
+        return '/mock/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs';
+      }
+      throw Object.assign(new Error(`Cannot find module '${specifier}'`), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    });
     statSyncMock.mockReturnValue({ mtimeMs: 1 });
     accessSyncMock.mockImplementation(() => undefined);
     execFileSyncMock.mockImplementation(() => Buffer.from('ok'));
@@ -154,6 +174,57 @@ describe('config', () => {
     });
 
     expect(() => loadConfig()).toThrow(/Native CLI binary for win32-x64 not found/);
+  });
+
+  it('accepts newer Claude SDK layout that only ships platform binaries', async () => {
+    const { loadConfig } = await import('./config.js');
+    mockConfigJson({
+      tools: {
+        claude: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: 'token',
+          },
+        },
+      },
+      platforms: {
+        telegram: {
+          enabled: true,
+          botToken: 'tg-token',
+          aiCommand: 'claude',
+        },
+      },
+    });
+
+    requireResolveMock.mockImplementation((specifier: string) => {
+      if (specifier === '@anthropic-ai/claude-agent-sdk') {
+        return '/mock/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs';
+      }
+      if (specifier === '@anthropic-ai/claude-agent-sdk-darwin-arm64/claude') {
+        return '/mock/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude';
+      }
+      throw Object.assign(new Error(`Cannot find module '${specifier}'`), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    });
+
+    existsSyncMock.mockImplementation((path: unknown) => {
+      if (typeof path !== 'string') return false;
+      if (path.endsWith('/config.json')) return true;
+      if (path.endsWith('/.claude/settings.json')) return false;
+      if (path.endsWith('/@anthropic-ai/claude-agent-sdk/cli.js')) return false;
+      if (path.endsWith('/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude')) return true;
+      return false;
+    });
+
+    loadConfig();
+
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      '/mock/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude',
+      ['--version'],
+      expect.objectContaining({
+        stdio: 'pipe',
+      }),
+    );
   });
 
   it('warns when CodeBuddy has no obvious auth indicators', async () => {

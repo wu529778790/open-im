@@ -301,20 +301,50 @@ export function hasCodeBuddyAuthIndicators(): boolean {
 }
 
 export function getClaudeSdkRuntimeIssue(): string | null {
-  let cliPath: string;
+  let executablePath: string;
+  let executableArgs: string[];
   try {
     const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk');
     const sdkDir = dirname(sdkEntry);
-    cliPath = join(sdkDir, 'cli.js');
-    if (!existsSync(cliPath)) {
-      return `Claude SDK 安装不完整：缺少 ${cliPath}。请重新安装依赖后再启动。`;
+    const legacyCliPath = join(sdkDir, 'cli.js');
+    if (existsSync(legacyCliPath)) {
+      executablePath = process.execPath;
+      executableArgs = [legacyCliPath, '--version'];
+    } else {
+      const binaryExt = process.platform === 'win32' ? '.exe' : '';
+      const packageNames = process.platform === 'linux'
+        ? [
+            `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl`,
+            `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`,
+          ]
+        : [`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`];
+
+      let nativeBinaryPath: string | null = null;
+      for (const packageName of packageNames) {
+        try {
+          const candidate = require.resolve(`${packageName}/claude${binaryExt}`);
+          if (existsSync(candidate)) {
+            nativeBinaryPath = candidate;
+            break;
+          }
+        } catch {
+          // Try the next package name.
+        }
+      }
+
+      if (!nativeBinaryPath) {
+        return `Claude SDK 安装不完整：未找到 ${legacyCliPath}，也未找到适用于 ${process.platform}-${process.arch} 的原生 Claude CLI。请重新安装依赖后再启动。`;
+      }
+
+      executablePath = nativeBinaryPath;
+      executableArgs = ['--version'];
     }
   } catch (error) {
     return `未找到 @anthropic-ai/claude-agent-sdk：${error instanceof Error ? error.message : String(error)}`;
   }
 
   try {
-    execFileSync(process.execPath, [cliPath, '--version'], {
+    execFileSync(executablePath, executableArgs, {
       stdio: 'pipe',
       env: {
         ...process.env,
