@@ -18,12 +18,15 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 
 // Import after mocks are set up
 import { ClaudeSDKAdapter } from './claude-sdk-adapter.js';
+import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
 
 describe('ClaudeSDKAdapter', () => {
   let adapter: ClaudeSDKAdapter;
 
   beforeEach(() => {
     adapter = new ClaudeSDKAdapter();
+    vi.mocked(unstable_v2_createSession).mockReset();
+    vi.mocked(unstable_v2_resumeSession).mockReset();
   });
 
   afterEach(() => {
@@ -59,5 +62,32 @@ describe('ClaudeSDKAdapter', () => {
 
   it('stop() (static destroy) does not throw', () => {
     expect(() => ClaudeSDKAdapter.destroy()).not.toThrow();
+  });
+
+  it('includes stderr context when Claude exits with a generic code 1 error', async () => {
+    vi.mocked(unstable_v2_createSession).mockImplementation((options) => {
+      options.stderr?.('fatal: missing permission\n');
+      return {
+        send: vi.fn(async () => {}),
+        close: vi.fn(),
+        stream: async function* () {
+          throw new Error('Claude Code process exited with code 1');
+        },
+      } as never;
+    });
+
+    const callbacks = {
+      onText: vi.fn(),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+    };
+
+    adapter.run('test prompt', undefined, '/tmp', callbacks);
+
+    await vi.waitFor(() => {
+      expect(callbacks.onError).toHaveBeenCalledWith(
+        expect.stringContaining('stderr: fatal: missing permission'),
+      );
+    });
   });
 });

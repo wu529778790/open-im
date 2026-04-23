@@ -69,6 +69,8 @@ let sessionIdleTtlMs = 30 * 60 * 1000; // 默认 30 分钟未使用则清理
 let sessionIdleCleanupDisabled = false;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 每 5 分钟检查一次
 const MAX_ACTIVE_SESSIONS = 100;
+const MAX_CAPTURED_STDERR_CHARS = 4000;
+const MAX_EXPOSED_STDERR_CHARS = 500;
 
 let sessionSeq = 0;
 
@@ -150,6 +152,34 @@ function isSessionCorruptionError(msg: string): boolean {
   return /session\s*(not found|expired|corrupt)|no\s*conversation\s*found/i.test(msg);
 }
 
+function appendStderrSnippet(previous: string, chunk: string): string {
+  const next = previous + chunk;
+  if (next.length <= MAX_CAPTURED_STDERR_CHARS) return next;
+  return next.slice(-MAX_CAPTURED_STDERR_CHARS);
+}
+
+function getUsefulStderrSnippet(stderr: string): string | undefined {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return undefined;
+  const summary = lines.slice(-3).join(' | ');
+  return summary.length <= MAX_EXPOSED_STDERR_CHARS
+    ? summary
+    : summary.slice(0, MAX_EXPOSED_STDERR_CHARS - 3) + '...';
+}
+
+function enrichClaudeErrorMessage(message: string, stderr: string): string {
+  const snippet = getUsefulStderrSnippet(stderr);
+  if (!snippet) return message;
+  if (message.includes(snippet)) return message;
+  if (/process exited with code \d+/i.test(message) || /无输出/.test(message) || /未知错误/.test(message)) {
+    return `${message} stderr: ${snippet}`;
+  }
+  return message;
+}
+
 /**
  * 获取或创建 SDKSession
  * @param sessionId 已有的 sessionId，如果为 undefined 则创建新会话
@@ -162,7 +192,8 @@ async function getOrCreateSession(
   sessionId: string | undefined,
   workDir: string,
   model: string | undefined,
-  permissionMode: 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan'
+  permissionMode: 'default' | 'bypassPermissions' | 'acceptEdits' | 'plan',
+  onStderr?: (data: string) => void,
 ): Promise<{ session: SDKSession; sessionId: string }> {
   // 刷新 Claude 环境变量（支持 cc switch 后无需重启即可生效）
   refreshClaudeEnvToProcess();
@@ -175,6 +206,7 @@ async function getOrCreateSession(
   const sessionOptions = {
     model: resolvedModel,
     permissionMode,
+    stderr: onStderr,
   };
 
   const baseUrl = process.env.ANTHROPIC_BASE_URL ?? '(default)';
@@ -292,6 +324,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
     let pendingTempId: string | undefined; // 记录临时 ID，用于 abort 时清理
     let runSettled = false;
     let currentStream: AsyncIterator<SDKMessage> | undefined; // 用于 abort 时立即中断 stream
+    let recentStderr = '';
 
     const permissionMode = options?.skipPermissions
       ? ('bypassPermissions' as const)
@@ -316,7 +349,15 @@ export class ClaudeSDKAdapter implements ToolAdapter {
         log.info(`[V2] model param=${String(options?.model ?? '')} baseUrl=${process.env.ANTHROPIC_BASE_URL ?? '(default)'}`);
 
         // 获取或创建会话
-        const { session, sessionId: returnedId } = await getOrCreateSession(sessionId, workDir, options?.model, permissionMode);
+        const { session, sessionId: returnedId } = await getOrCreateSession(
+          sessionId,
+          workDir,
+          options?.model,
+          permissionMode,
+          (data) => {
+            recentStderr = appendStderrSnippet(recentStderr, data);
+          },
+        );
         if (returnedId.startsWith('pending-')) {
           pendingTempId = returnedId;
         }
@@ -435,7 +476,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
                   }
                   callbacks.onSessionInvalid?.();
                 }
-                const errMsg = errs[0] || '未知错误';
+                const errMsg = enrichClaudeErrorMessage(errs[0] || '未知错误', recentStderr);
                 callbacks.onError(errMsg);
                 return;
               }
@@ -483,7 +524,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
               // 流结束但无 result 也无 accumulated：必须触发回调，否则 Promise 永远挂起
               log.warn('Stream ended with no result and no accumulated text, calling onError to prevent stuck state');
               runSettled = true;
-              callbacks.onError('AI 响应异常结束（无输出），请重试');
+              callbacks.onError(enrichClaudeErrorMessage('AI 响应异常结束（无输出），请重试', recentStderr));
             }
           }
         } finally {
@@ -504,7 +545,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
 
         runSettled = true;
         const errorObj = err as Error;
-        const msg = errorObj.message || String(err);
+        const msg = enrichClaudeErrorMessage(errorObj.message || String(err), recentStderr);
 
         log.error(`Claude SDK V2 error: ${msg}`);
         if (errorObj.stack) {

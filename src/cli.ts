@@ -106,13 +106,15 @@ async function cmdStop(): Promise<void> {
 
 async function cmdRestart(): Promise<void> {
   const status = getManagerStatus();
+  let restartedExistingInstance = false;
   if (status.pid) {
     await stopBackgroundService();
     const stopped = await stopManagerProcess();
     console.log("\nopen-im stopped.");
     console.log(`  pid: ${stopped.pid}`);
+    restartedExistingInstance = true;
   } else {
-    console.log("open-im is not running in the background. Starting a new instance.");
+    console.log("\nopen-im is not running in the background.");
   }
 
   if (!(await ensureConfigured("start"))) {
@@ -122,7 +124,11 @@ async function cmdRestart(): Promise<void> {
   await checkAndUpdate();
 
   const child = await startManagerProcess(process.cwd());
-  console.log("\nopen-im restarted in the background.");
+  if (restartedExistingInstance) {
+    console.log("\nopen-im restarted in the background.");
+  } else {
+    console.log("\nopen-im started in the background.");
+  }
   console.log(`  pid: ${child.pid}`);
   logWebDashboardAndApi();
   process.exit(0);

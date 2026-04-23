@@ -44,9 +44,7 @@ export class CodeBuddyAdapter implements ToolAdapter {
         onError: (err) => {
           const msg = typeof err === 'string' ? err : String(err);
           const friendly =
-            msg.includes('Authentication') || msg.includes('/login') || msg.includes('CODEBUDDY_API_KEY')
-              ? 'CodeBuddy 需要先登录。请在终端运行 codebuddy login。'
-              : msg.includes('No conversation found') ||
+            msg.includes('No conversation found') ||
                   msg.includes('Session not found') ||
                   msg.includes('Invalid session') ||
                   msg.includes('Unable to resume')

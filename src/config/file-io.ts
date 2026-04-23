@@ -1,6 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
 import { createLogger } from '../logger.js';
 import { APP_HOME } from '../constants.js';
 import type { AiCommand, FileConfig } from './types.js';
@@ -15,6 +17,11 @@ export const CODEX_AUTH_PATHS = [
   join(homedir(), 'AppData', 'Roaming', 'codex', 'auth.json'),
 ];
 
+const CODEBUDDY_HOME_PATHS = [
+  join(homedir(), '.codebuddy'),
+  join(homedir(), '.codebuddycn'),
+] as const;
+
 const OLD_ROOT_KEYS = [
   'claudeWorkDir',
   'claudeTimeoutMs',
@@ -22,6 +29,7 @@ const OLD_ROOT_KEYS = [
 ] as const;
 
 const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy'];
+const require = createRequire(import.meta.url);
 
 /** Claude 认证相关的环境变量 key 列表 */
 export const CLAUDE_AUTH_ENV_KEYS = [
@@ -249,6 +257,112 @@ export function hasCodexAuth(): boolean {
       return false;
     }
   });
+}
+
+export function hasCodeBuddyAuthIndicators(): boolean {
+  if (process.env.CODEBUDDY_API_KEY || process.env.CODEBUDDY_AUTH_TOKEN) return true;
+
+  return CODEBUDDY_HOME_PATHS.some((base) => {
+    try {
+      if (!existsSync(base)) return false;
+
+      const settingsPath = join(base, 'settings.json');
+      if (existsSync(settingsPath)) {
+        try {
+          const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+          if (settings.apiKeyHelper) return true;
+          const env = settings.env;
+          if (env && typeof env === 'object' && !Array.isArray(env)) {
+            const envRecord = env as Record<string, unknown>;
+            if (envRecord.CODEBUDDY_API_KEY || envRecord.CODEBUDDY_AUTH_TOKEN) return true;
+          }
+        } catch {
+          // Ignore malformed settings and keep checking other indicators.
+        }
+      }
+
+      const localStorageDir = join(base, 'local_storage');
+      if (!existsSync(localStorageDir)) return false;
+
+      return readdirSync(localStorageDir)
+        .filter((name) => name.endsWith('.info'))
+        .some((name) => {
+          try {
+            const content = readFileSync(join(localStorageDir, name), 'utf-8');
+            return /"userId"\s*:|"nickname"\s*:|"enterpriseName"\s*:|"accessToken"\s*:/.test(content);
+          } catch {
+            return false;
+          }
+        });
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function getClaudeSdkRuntimeIssue(): string | null {
+  let executablePath: string;
+  let executableArgs: string[];
+  try {
+    const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk');
+    const sdkDir = dirname(sdkEntry);
+    const legacyCliPath = join(sdkDir, 'cli.js');
+    if (existsSync(legacyCliPath)) {
+      executablePath = process.execPath;
+      executableArgs = [legacyCliPath, '--version'];
+    } else {
+      const binaryExt = process.platform === 'win32' ? '.exe' : '';
+      const packageNames = process.platform === 'linux'
+        ? [
+            `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl`,
+            `@anthropic-ai/claude-agent-sdk-linux-${process.arch}`,
+          ]
+        : [`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`];
+
+      let nativeBinaryPath: string | null = null;
+      for (const packageName of packageNames) {
+        try {
+          const candidate = require.resolve(`${packageName}/claude${binaryExt}`);
+          if (existsSync(candidate)) {
+            nativeBinaryPath = candidate;
+            break;
+          }
+        } catch {
+          // Try the next package name.
+        }
+      }
+
+      if (!nativeBinaryPath) {
+        return `Claude SDK 安装不完整：未找到 ${legacyCliPath}，也未找到适用于 ${process.platform}-${process.arch} 的原生 Claude CLI。请重新安装依赖后再启动。`;
+      }
+
+      executablePath = nativeBinaryPath;
+      executableArgs = ['--version'];
+    }
+  } catch (error) {
+    return `未找到 @anthropic-ai/claude-agent-sdk：${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  try {
+    execFileSync(executablePath, executableArgs, {
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        CLAUDE_CODE_ENTRYPOINT: process.env.CLAUDE_CODE_ENTRYPOINT || 'sdk-ts',
+      },
+      timeout: 5000,
+      windowsHide: process.platform === 'win32',
+    });
+  } catch (error) {
+    const execError = error as Error & { stderr?: Buffer | string };
+    const stderr = Buffer.isBuffer(execError.stderr)
+      ? execError.stderr.toString('utf-8')
+      : execError.stderr;
+    const details = stderr?.trim() || execError.message || String(error);
+    return `Claude SDK 运行时不可用：${details}`;
+  }
+
+  return null;
 }
 
 export function parseCommaSeparated(value: string): string[] {

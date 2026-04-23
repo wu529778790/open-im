@@ -60,6 +60,8 @@ export {
   loadFileConfig,
   saveFileConfig,
   getClaudeConfigHome,
+  getClaudeSdkRuntimeIssue,
+  hasCodeBuddyAuthIndicators,
   loadClaudeSettingsEnv,
   saveClaudeSettingsEnv,
   normalizeAiCommand,
@@ -72,6 +74,8 @@ export {
 } from './config/file-io.js';
 
 import {
+  getClaudeSdkRuntimeIssue,
+  hasCodeBuddyAuthIndicators,
   loadFileConfig,
   normalizeAiCommand,
   hasCodexAuth,
@@ -376,6 +380,11 @@ export function loadConfig(): Config {
       ].join('\n');
       throw new Error(errorMsg);
     }
+
+    const claudeRuntimeIssue = getClaudeSdkRuntimeIssue();
+    if (claudeRuntimeIssue) {
+      throw new Error(claudeRuntimeIssue);
+    }
   }
 
   // 7. 校验 Codex CLI（任一已启用渠道使用 codex 时）
@@ -451,6 +460,13 @@ export function loadConfig(): Config {
         ].join('\n');
         throw new Error(installGuide);
       }
+    }
+
+    if (!hasCodeBuddyAuthIndicators()) {
+      log.warn(
+        'CodeBuddy 模式：未检测到明确的登录态或 API Key。首次使用请先运行 codebuddy login；' +
+        '若使用自定义 Token，请在 CodeBuddy 设置或环境变量中配置。'
+      );
     }
   }
 

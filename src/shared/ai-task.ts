@@ -343,7 +343,9 @@ export function runAITask(
         },
         },
         {
-          model: sessionManager.getModel(ctx.userId, ctx.threadId) ?? config.claudeModel,
+          model: aiCommand === 'claude'
+            ? (sessionManager.getModel(ctx.userId, ctx.threadId) ?? config.claudeModel)
+            : undefined,
           chatId: ctx.chatId,
           // 默认跳过权限确认，保持全自动执行（可通过 config 或环境变量关闭）
           skipPermissions: config.skipPermissions ?? true,
