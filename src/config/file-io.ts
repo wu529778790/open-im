@@ -301,10 +301,11 @@ export function hasCodeBuddyAuthIndicators(): boolean {
 }
 
 export function getClaudeSdkRuntimeIssue(): string | null {
+  let cliPath: string;
   try {
     const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk');
     const sdkDir = dirname(sdkEntry);
-    const cliPath = join(sdkDir, 'cli.js');
+    cliPath = join(sdkDir, 'cli.js');
     if (!existsSync(cliPath)) {
       return `Claude SDK 安装不完整：缺少 ${cliPath}。请重新安装依赖后再启动。`;
     }
@@ -312,14 +313,23 @@ export function getClaudeSdkRuntimeIssue(): string | null {
     return `未找到 @anthropic-ai/claude-agent-sdk：${error instanceof Error ? error.message : String(error)}`;
   }
 
-  const checkCommand = process.platform === 'win32' ? 'where' : 'which';
   try {
-    execFileSync(checkCommand, ['claude'], {
+    execFileSync(process.execPath, [cliPath, '--version'], {
       stdio: 'pipe',
+      env: {
+        ...process.env,
+        CLAUDE_CODE_ENTRYPOINT: process.env.CLAUDE_CODE_ENTRYPOINT || 'sdk-ts',
+      },
+      timeout: 5000,
       windowsHide: process.platform === 'win32',
     });
-  } catch {
-    return '未检测到 Claude Code 原生 CLI（claude）。请先安装 Claude Code，或确认 `claude` 已在 PATH 中。';
+  } catch (error) {
+    const execError = error as Error & { stderr?: Buffer | string };
+    const stderr = Buffer.isBuffer(execError.stderr)
+      ? execError.stderr.toString('utf-8')
+      : execError.stderr;
+    const details = stderr?.trim() || execError.message || String(error);
+    return `Claude SDK 运行时不可用：${details}`;
   }
 
   return null;

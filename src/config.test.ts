@@ -109,6 +109,53 @@ describe('config', () => {
     expect(() => loadConfig()).toThrow(/Claude SDK 安装不完整/);
   });
 
+  it('fails startup early when Claude SDK CLI cannot launch', async () => {
+    const { loadConfig } = await import('./config.js');
+    mockConfigJson({
+      tools: {
+        claude: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: 'token',
+          },
+        },
+      },
+      platforms: {
+        telegram: {
+          enabled: true,
+          botToken: 'tg-token',
+          aiCommand: 'claude',
+        },
+      },
+    });
+
+    existsSyncMock.mockImplementation((path: unknown) => {
+      if (typeof path !== 'string') return false;
+      if (path.endsWith('/config.json')) return true;
+      if (path.endsWith('/.claude/settings.json')) return false;
+      if (path.includes('@anthropic-ai/claude-agent-sdk') && path.endsWith('/cli.js')) return true;
+      return false;
+    });
+    execFileSyncMock.mockImplementation((command: unknown, args: unknown) => {
+      if (
+        command === process.execPath &&
+        Array.isArray(args) &&
+        typeof args[0] === 'string' &&
+        args[0].includes('@anthropic-ai/claude-agent-sdk') &&
+        args[0].endsWith('/cli.js') &&
+        args[1] === '--version'
+      ) {
+        throw Object.assign(new Error('Command failed'), {
+          stderr: Buffer.from(
+            'Native CLI binary for win32-x64 not found. Reinstall @anthropic-ai/claude-agent-sdk without --omit=optional, or set options.pathToClaudeCodeExecutable.'
+          ),
+        });
+      }
+      return Buffer.from('ok');
+    });
+
+    expect(() => loadConfig()).toThrow(/Native CLI binary for win32-x64 not found/);
+  });
+
   it('warns when CodeBuddy has no obvious auth indicators', async () => {
     const { loadConfig } = await import('./config.js');
     mockConfigJson({
