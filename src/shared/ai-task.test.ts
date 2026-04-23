@@ -245,4 +245,82 @@ describe("runAITask", () => {
     expect(sendComplete).not.toHaveBeenCalled();
     expect(streamUpdate).not.toHaveBeenCalled();
   });
+
+  it("does not pass the Claude model to codex", async () => {
+    const sessionManager = {
+      addTurnsForThread: vi.fn(() => 0),
+      addTurns: vi.fn(() => 0),
+      setSessionIdForThread: vi.fn(),
+      setSessionIdForConv: vi.fn(),
+      clearSessionForConv: vi.fn(),
+      clearActiveToolSession: vi.fn(),
+      getModel: vi.fn(() => "MiniMax-M2.7"),
+    };
+
+    const streamUpdate = vi.fn();
+    const sendComplete = vi.fn(async () => {});
+    const sendError = vi.fn(async () => {});
+    const runOptions: unknown[] = [];
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "codex",
+      run(_prompt, _sessionId, _workDir, callbacks, options) {
+        runOptions.push(options);
+        callbacks.onComplete({
+          success: true,
+          result: "done",
+          accumulated: "ok",
+          cost: 0,
+          durationMs: 1,
+          numTurns: 1,
+          toolStats: {},
+        });
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      {
+        config: {
+          platforms: {
+            qq: { enabled: true, aiCommand: "codex", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["qq"],
+          claudeModel: "claude-opus-4-5",
+          codexProxy: "",
+          wechatUserId: "",
+          dingtalkClientId: "",
+          dingtalkClientSecret: "",
+          qqAppId: "",
+          qqSecret: "",
+          weworkCorpId: "",
+          weworkSecret: "",
+          telegramBotToken: "",
+        } as never,
+        sessionManager: sessionManager as never,
+      },
+      {
+        userId: "u1",
+        chatId: "c1",
+        workDir: "/tmp/project",
+        sessionId: undefined,
+        convId: "conv-4",
+        platform: "qq",
+        taskKey: "task-4",
+      },
+      "hello",
+      toolAdapter,
+      {
+        streamUpdate,
+        sendComplete,
+        sendError,
+        throttleMs: 0,
+        onTaskReady: vi.fn(),
+      }
+    );
+
+    expect(runOptions).toHaveLength(1);
+    expect(runOptions[0]).toMatchObject({ model: undefined });
+    expect(sendError).not.toHaveBeenCalled();
+  });
 });
