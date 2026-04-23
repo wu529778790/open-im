@@ -61,6 +61,7 @@ export {
   saveFileConfig,
   getClaudeConfigHome,
   getClaudeSdkRuntimeIssue,
+  hasCodeBuddyAuthIndicators,
   loadClaudeSettingsEnv,
   saveClaudeSettingsEnv,
   normalizeAiCommand,
@@ -74,6 +75,7 @@ export {
 
 import {
   getClaudeSdkRuntimeIssue,
+  hasCodeBuddyAuthIndicators,
   loadFileConfig,
   normalizeAiCommand,
   hasCodexAuth,
@@ -460,6 +462,12 @@ export function loadConfig(): Config {
       }
     }
 
+    if (!hasCodeBuddyAuthIndicators()) {
+      log.warn(
+        'CodeBuddy 模式：未检测到明确的登录态或 API Key。首次使用请先运行 codebuddy login；' +
+        '若使用自定义 Token，请在 CodeBuddy 设置或环境变量中配置。'
+      );
+    }
   }
 
   // 7. 日志与平台配置

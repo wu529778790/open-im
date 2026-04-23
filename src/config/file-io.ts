@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -16,6 +16,11 @@ export const CODEX_AUTH_PATHS = [
   join(homedir(), '.config', 'codex', 'auth.json'),
   join(homedir(), 'AppData', 'Roaming', 'codex', 'auth.json'),
 ];
+
+const CODEBUDDY_HOME_PATHS = [
+  join(homedir(), '.codebuddy'),
+  join(homedir(), '.codebuddycn'),
+] as const;
 
 const OLD_ROOT_KEYS = [
   'claudeWorkDir',
@@ -248,6 +253,47 @@ export function hasCodexAuth(): boolean {
   return CODEX_AUTH_PATHS.some((p) => {
     try {
       return existsSync(p) && readFileSync(p, 'utf-8').trim().length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function hasCodeBuddyAuthIndicators(): boolean {
+  if (process.env.CODEBUDDY_API_KEY || process.env.CODEBUDDY_AUTH_TOKEN) return true;
+
+  return CODEBUDDY_HOME_PATHS.some((base) => {
+    try {
+      if (!existsSync(base)) return false;
+
+      const settingsPath = join(base, 'settings.json');
+      if (existsSync(settingsPath)) {
+        try {
+          const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+          if (settings.apiKeyHelper) return true;
+          const env = settings.env;
+          if (env && typeof env === 'object' && !Array.isArray(env)) {
+            const envRecord = env as Record<string, unknown>;
+            if (envRecord.CODEBUDDY_API_KEY || envRecord.CODEBUDDY_AUTH_TOKEN) return true;
+          }
+        } catch {
+          // Ignore malformed settings and keep checking other indicators.
+        }
+      }
+
+      const localStorageDir = join(base, 'local_storage');
+      if (!existsSync(localStorageDir)) return false;
+
+      return readdirSync(localStorageDir)
+        .filter((name) => name.endsWith('.info'))
+        .some((name) => {
+          try {
+            const content = readFileSync(join(localStorageDir, name), 'utf-8');
+            return /"userId"\s*:|"nickname"\s*:|"enterpriseName"\s*:|"accessToken"\s*:/.test(content);
+          } catch {
+            return false;
+          }
+        });
     } catch {
       return false;
     }

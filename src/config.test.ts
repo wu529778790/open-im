@@ -5,17 +5,21 @@ const {
   existsSyncMock,
   mkdirSyncMock,
   readFileSyncMock,
+  readdirSyncMock,
   statSyncMock,
   writeFileSyncMock,
   execFileSyncMock,
+  loggerWarnMock,
 } = vi.hoisted(() => ({
   accessSyncMock: vi.fn(),
   existsSyncMock: vi.fn(),
   mkdirSyncMock: vi.fn(),
   readFileSyncMock: vi.fn(),
+  readdirSyncMock: vi.fn(),
   statSyncMock: vi.fn(),
   writeFileSyncMock: vi.fn(),
   execFileSyncMock: vi.fn(),
+  loggerWarnMock: vi.fn(),
 }));
 
 vi.mock('node:fs', async () => {
@@ -26,6 +30,7 @@ vi.mock('node:fs', async () => {
     existsSync: existsSyncMock,
     mkdirSync: mkdirSyncMock,
     readFileSync: readFileSyncMock,
+    readdirSync: readdirSyncMock,
     statSync: statSyncMock,
     writeFileSync: writeFileSyncMock,
   };
@@ -38,7 +43,7 @@ vi.mock('node:child_process', () => ({
 vi.mock('./logger.js', () => ({
   createLogger: () => ({
     info: vi.fn(),
-    warn: vi.fn(),
+    warn: loggerWarnMock,
     error: vi.fn(),
     debug: vi.fn(),
     infoEvent: vi.fn(),
@@ -62,6 +67,7 @@ describe('config', () => {
     readFileSyncMock.mockImplementation(() => {
       throw new Error('missing');
     });
+    readdirSyncMock.mockReturnValue([]);
     statSyncMock.mockReturnValue({ mtimeMs: 1 });
     accessSyncMock.mockImplementation(() => undefined);
     execFileSyncMock.mockImplementation(() => Buffer.from('ok'));
@@ -101,5 +107,36 @@ describe('config', () => {
     });
 
     expect(() => loadConfig()).toThrow(/Claude SDK 安装不完整/);
+  });
+
+  it('warns when CodeBuddy has no obvious auth indicators', async () => {
+    const { loadConfig } = await import('./config.js');
+    mockConfigJson({
+      platforms: {
+        qq: {
+          enabled: true,
+          appId: 'app-id',
+          secret: 'secret',
+          aiCommand: 'codebuddy',
+        },
+      },
+      tools: {
+        codebuddy: {
+          cliPath: 'codebuddy',
+        },
+      },
+    });
+
+    existsSyncMock.mockImplementation((path: unknown) => {
+      if (typeof path !== 'string') return false;
+      if (path.endsWith('/config.json')) return true;
+      if (path.endsWith('/.codebuddy')) return false;
+      if (path.endsWith('/.codebuddycn')) return false;
+      return false;
+    });
+
+    loadConfig();
+
+    expect(loggerWarnMock).toHaveBeenCalledWith(expect.stringContaining('CodeBuddy 模式：未检测到明确的登录态或 API Key'));
   });
 });
