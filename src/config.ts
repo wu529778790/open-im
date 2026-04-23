@@ -60,6 +60,7 @@ export {
   loadFileConfig,
   saveFileConfig,
   getClaudeConfigHome,
+  getClaudeSdkRuntimeIssue,
   loadClaudeSettingsEnv,
   saveClaudeSettingsEnv,
   normalizeAiCommand,
@@ -72,6 +73,7 @@ export {
 } from './config/file-io.js';
 
 import {
+  getClaudeSdkRuntimeIssue,
   loadFileConfig,
   normalizeAiCommand,
   hasCodexAuth,
@@ -376,6 +378,11 @@ export function loadConfig(): Config {
       ].join('\n');
       throw new Error(errorMsg);
     }
+
+    const claudeRuntimeIssue = getClaudeSdkRuntimeIssue();
+    if (claudeRuntimeIssue) {
+      throw new Error(claudeRuntimeIssue);
+    }
   }
 
   // 7. 校验 Codex CLI（任一已启用渠道使用 codex 时）
@@ -452,6 +459,7 @@ export function loadConfig(): Config {
         throw new Error(installGuide);
       }
     }
+
   }
 
   // 7. 日志与平台配置

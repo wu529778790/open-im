@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
 import { createLogger } from '../logger.js';
 import { APP_HOME } from '../constants.js';
 import type { AiCommand, FileConfig } from './types.js';
@@ -22,6 +24,7 @@ const OLD_ROOT_KEYS = [
 ] as const;
 
 const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy'];
+const require = createRequire(import.meta.url);
 
 /** Claude 认证相关的环境变量 key 列表 */
 export const CLAUDE_AUTH_ENV_KEYS = [
@@ -249,6 +252,31 @@ export function hasCodexAuth(): boolean {
       return false;
     }
   });
+}
+
+export function getClaudeSdkRuntimeIssue(): string | null {
+  try {
+    const sdkEntry = require.resolve('@anthropic-ai/claude-agent-sdk');
+    const sdkDir = dirname(sdkEntry);
+    const cliPath = join(sdkDir, 'cli.js');
+    if (!existsSync(cliPath)) {
+      return `Claude SDK 安装不完整：缺少 ${cliPath}。请重新安装依赖后再启动。`;
+    }
+  } catch (error) {
+    return `未找到 @anthropic-ai/claude-agent-sdk：${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  const checkCommand = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    execFileSync(checkCommand, ['claude'], {
+      stdio: 'pipe',
+      windowsHide: process.platform === 'win32',
+    });
+  } catch {
+    return '未检测到 Claude Code 原生 CLI（claude）。请先安装 Claude Code，或确认 `claude` 已在 PATH 中。';
+  }
+
+  return null;
 }
 
 export function parseCommaSeparated(value: string): string[] {
