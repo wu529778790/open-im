@@ -56,8 +56,14 @@ export class CodexAdapter implements ToolAdapter {
         },
         onError: (err) => {
           const msg = typeof err === "string" ? err : String(err);
+          const isAuthError =
+            msg.includes("Authentication") ||
+            msg.includes("login") ||
+            msg.includes("401 Unauthorized") ||
+            msg.includes("Invalid API key") ||
+            msg.includes("Token data is not available");
           const friendly =
-            msg.includes("Authentication") || msg.includes("login")
+            isAuthError
               ? "Codex 需要先登录。请在终端运行 codex login，或在 shell 中 export OPENAI_API_KEY。"
               : msg.includes("stream disconnected") ||
                   msg.includes("error sending request") ||
