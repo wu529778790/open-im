@@ -4,6 +4,10 @@
 
 多平台 IM 桥接：把 Telegram、飞书、企业微信、钉钉、QQ、微信（WorkBuddy）接到 Claude Code、Codex、CodeBuddy，在手机或聊天里使用 AI 编程助手。
 
+## 架构
+
+![Open-IM 架构图](./diagram/architecture/open-im-architecture.svg)
+
 ## 功能特性
 
 - **六个 IM 平台** — Telegram、飞书、企业微信、钉钉、QQ、WorkBuddy
