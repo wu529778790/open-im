@@ -4,6 +4,10 @@
 
 Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, DingTalk, QQ, and WeChat (WorkBuddy) to Claude Code, Codex, and CodeBuddy — use your AI coding assistant from any phone or chat window.
 
+## Architecture
+
+![Open-IM Architecture](./diagram/architecture/open-im-architecture.svg)
+
 ## Features
 
 - **Six IM platforms** — Telegram, Feishu, WeCom, DingTalk, QQ, WorkBuddy

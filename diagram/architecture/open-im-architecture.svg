@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 830">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Noto Sans SC', 'PingFang SC', monospace; }
+</style>
+<defs>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+  </pattern>
+  <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+  </marker>
+  <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+  </marker>
+  <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+  </marker>
+  <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+  </marker>
+</defs>
+
+<!-- Background -->
+<rect width="100%" height="100%" fill="#0f172a"/>
+<rect width="100%" height="100%" fill="url(#grid)"/>
+
+<!-- Title -->
+<text x="30" y="32" fill="white" font-size="16" font-weight="700">Open-IM Architecture</text>
+<text x="30" y="48" fill="#94a3b8" font-size="9">Multi-platform IM bridge to AI coding tools</text>
+
+<!-- ══════════ Region: IM Platforms ══════════ -->
+<rect x="30" y="62" width="1000" height="100" rx="12" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+<text x="42" y="78" fill="#fbbf24" font-size="9" font-weight="600">IM Platforms</text>
+
+<!-- Telegram -->
+<rect x="50" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="50" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="115" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">Telegram</text>
+<text x="115" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">Telegraf Bot</text>
+
+<!-- Feishu -->
+<rect x="200" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="200" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="265" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">Feishu</text>
+<text x="265" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">Lark SDK</text>
+
+<!-- WeCom -->
+<rect x="350" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="350" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="415" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">WeCom</text>
+<text x="415" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">AI Bot WebSocket</text>
+
+<!-- DingTalk -->
+<rect x="500" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="500" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="565" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">DingTalk</text>
+<text x="565" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">Stream API</text>
+
+<!-- QQ -->
+<rect x="650" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="650" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="715" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">QQ</text>
+<text x="715" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">Official Bot</text>
+
+<!-- WorkBuddy -->
+<rect x="800" y="88" width="130" height="55" rx="6" fill="#0f172a"/>
+<rect x="800" y="88" width="130" height="55" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="865" y="112" fill="white" font-size="11" font-weight="600" text-anchor="middle">WorkBuddy</text>
+<text x="865" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">Centrifuge WS</text>
+
+<!-- Platform → Bus lines -->
+<line x1="115" y1="143" x2="115" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+<line x1="265" y1="143" x2="265" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+<line x1="415" y1="143" x2="415" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+<line x1="565" y1="143" x2="565" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+<line x1="715" y1="143" x2="715" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+<line x1="865" y1="143" x2="865" y2="178" stroke="#64748b" stroke-width="1" stroke-opacity="0.5"/>
+
+<!-- Message Bus bar -->
+<line x1="60" y1="178" x2="920" y2="178" stroke="#fb923c" stroke-width="3" stroke-opacity="0.6"/>
+<text x="490" y="174" fill="#fb923c" font-size="8" font-weight="500" text-anchor="middle">Message Bus</text>
+
+<!-- Bus → Core lines -->
+<line x1="155" y1="178" x2="155" y2="216" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+<line x1="385" y1="178" x2="385" y2="216" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+<line x1="615" y1="178" x2="615" y2="216" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+<line x1="845" y1="178" x2="845" y2="216" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+
+<!-- ══════════ Region: Core Services ══════════ -->
+<rect x="30" y="198" width="1000" height="100" rx="12" fill="none" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+<text x="42" y="214" fill="#34d399" font-size="9" font-weight="600">Core Services</text>
+
+<!-- Event Handlers -->
+<rect x="50" y="223" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="50" y="223" width="200" height="55" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="150" y="247" fill="white" font-size="11" font-weight="600" text-anchor="middle">Event Handlers</text>
+<text x="150" y="263" fill="#94a3b8" font-size="9" text-anchor="middle">Message / command routing</text>
+
+<!-- Request Queue -->
+<rect x="280" y="223" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="280" y="223" width="200" height="55" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="380" y="247" fill="white" font-size="11" font-weight="600" text-anchor="middle">Request Queue</text>
+<text x="380" y="263" fill="#94a3b8" font-size="9" text-anchor="middle">Concurrent processing</text>
+
+<!-- Access Control -->
+<rect x="510" y="223" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="510" y="223" width="200" height="55" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="610" y="247" fill="white" font-size="11" font-weight="600" text-anchor="middle">Access Control</text>
+<text x="610" y="263" fill="#94a3b8" font-size="9" text-anchor="middle">User ID whitelist</text>
+
+<!-- Message Dedup -->
+<rect x="740" y="223" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="740" y="223" width="200" height="55" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="840" y="247" fill="white" font-size="11" font-weight="600" text-anchor="middle">Message Dedup</text>
+<text x="840" y="263" fill="#94a3b8" font-size="9" text-anchor="middle">Duplicate filtering</text>
+
+<!-- Core → Session/Registry arrows -->
+<path d="M 150 278 L 150 318 L 330 318 L 330 340" fill="none" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)" stroke-opacity="0.5"/>
+<path d="M 380 278 L 380 318 L 330 318" fill="none" stroke="#34d399" stroke-width="1" stroke-opacity="0.4"/>
+<path d="M 610 278 L 610 318 L 650 318 L 650 340" fill="none" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)" stroke-opacity="0.5"/>
+<path d="M 840 278 L 840 318 L 650 318" fill="none" stroke="#34d399" stroke-width="1" stroke-opacity="0.4"/>
+
+<!-- ══════════ Session & Registry ══════════ -->
+<!-- Session Manager -->
+<rect x="210" y="345" width="230" height="60" rx="6" fill="#0f172a"/>
+<rect x="210" y="345" width="230" height="60" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="325" y="370" fill="white" font-size="11" font-weight="600" text-anchor="middle">Session Manager</text>
+<text x="325" y="388" fill="#94a3b8" font-size="9" text-anchor="middle">Per-user state · Conversation isolation</text>
+
+<!-- Adapter Registry -->
+<rect x="530" y="345" width="230" height="60" rx="6" fill="#0f172a"/>
+<rect x="530" y="345" width="230" height="60" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+<text x="645" y="370" fill="white" font-size="11" font-weight="600" text-anchor="middle">Adapter Registry</text>
+<text x="645" y="388" fill="#94a3b8" font-size="9" text-anchor="middle">Initialized from config</text>
+
+<!-- Session/Registry → Adapter Bus lines -->
+<line x1="325" y1="405" x2="325" y2="438" stroke="#34d399" stroke-width="1" stroke-opacity="0.4"/>
+<line x1="645" y1="405" x2="645" y2="438" stroke="#34d399" stroke-width="1" stroke-opacity="0.4"/>
+
+<!-- Adapter Bus bar -->
+<line x1="100" y1="438" x2="900" y2="438" stroke="#fb923c" stroke-width="2" stroke-opacity="0.4"/>
+<text x="490" y="434" fill="#fb923c" font-size="8" font-weight="500" text-anchor="middle">Adapter Bus</text>
+
+<!-- Adapter Bus → AI Adapters -->
+<line x1="175" y1="438" x2="175" y2="466" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+<line x1="460" y1="438" x2="460" y2="466" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+<line x1="740" y1="438" x2="740" y2="466" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)" stroke-opacity="0.5"/>
+
+<!-- ══════════ Region: AI Adapter Layer ══════════ -->
+<rect x="30" y="450" width="1000" height="100" rx="12" fill="none" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+<text x="42" y="466" fill="#a78bfa" font-size="9" font-weight="600">AI Adapter Layer</text>
+
+<!-- Claude SDK Adapter -->
+<rect x="55" y="475" width="230" height="55" rx="6" fill="#0f172a"/>
+<rect x="55" y="475" width="230" height="55" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="170" y="499" fill="white" font-size="11" font-weight="600" text-anchor="middle">Claude SDK Adapter</text>
+<text x="170" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">In-process · Agent SDK</text>
+
+<!-- Codex Adapter -->
+<rect x="345" y="475" width="230" height="55" rx="6" fill="#0f172a"/>
+<rect x="345" y="475" width="230" height="55" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="460" y="499" fill="white" font-size="11" font-weight="600" text-anchor="middle">Codex Adapter</text>
+<text x="460" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">CLI integration</text>
+
+<!-- CodeBuddy Adapter -->
+<rect x="635" y="475" width="230" height="55" rx="6" fill="#0f172a"/>
+<rect x="635" y="475" width="230" height="55" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="750" y="499" fill="white" font-size="11" font-weight="600" text-anchor="middle">CodeBuddy Adapter</text>
+<text x="750" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">CLI integration</text>
+
+<!-- AI Adapters → AI Tools -->
+<line x1="170" y1="530" x2="170" y2="570" stroke="#a78bfa" stroke-width="1" marker-end="url(#arrow-violet)"/>
+<line x1="460" y1="530" x2="460" y2="570" stroke="#a78bfa" stroke-width="1" marker-end="url(#arrow-violet)"/>
+<line x1="750" y1="530" x2="750" y2="570" stroke="#a78bfa" stroke-width="1" marker-end="url(#arrow-violet)"/>
+
+<!-- ══════════ Region: AI Tools ══════════ -->
+<rect x="30" y="555" width="1000" height="100" rx="12" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+<text x="42" y="571" fill="#fbbf24" font-size="9" font-weight="600">AI Tools</text>
+
+<!-- Claude Code -->
+<rect x="70" y="580" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="70" y="580" width="200" height="55" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="170" y="604" fill="white" font-size="11" font-weight="600" text-anchor="middle">Claude Code</text>
+<text x="170" y="620" fill="#94a3b8" font-size="9" text-anchor="middle">Anthropic</text>
+
+<!-- Codex CLI -->
+<rect x="360" y="580" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="360" y="580" width="200" height="55" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="460" y="604" fill="white" font-size="11" font-weight="600" text-anchor="middle">Codex CLI</text>
+<text x="460" y="620" fill="#94a3b8" font-size="9" text-anchor="middle">OpenAI</text>
+
+<!-- CodeBuddy -->
+<rect x="650" y="580" width="200" height="55" rx="6" fill="#0f172a"/>
+<rect x="650" y="580" width="200" height="55" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="750" y="604" fill="white" font-size="11" font-weight="600" text-anchor="middle">CodeBuddy</text>
+<text x="750" y="620" fill="#94a3b8" font-size="9" text-anchor="middle">Tencent</text>
+
+<!-- ══════════ Storage Region ══════════ -->
+<rect x="30" y="695" width="1000" height="90" rx="12" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4"/>
+<text x="42" y="711" fill="#94a3b8" font-size="9" font-weight="600">Storage</text>
+
+<!-- config.json -->
+<rect x="130" y="720" width="190" height="48" rx="6" fill="#0f172a"/>
+<rect x="130" y="720" width="190" height="48" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="225" y="741" fill="white" font-size="11" font-weight="600" text-anchor="middle">config.json</text>
+<text x="225" y="757" fill="#94a3b8" font-size="9" text-anchor="middle">~/.open-im/config.json</text>
+
+<!-- sessions.json -->
+<rect x="390" y="720" width="190" height="48" rx="6" fill="#0f172a"/>
+<rect x="390" y="720" width="190" height="48" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="485" y="741" fill="white" font-size="11" font-weight="600" text-anchor="middle">sessions.json</text>
+<text x="485" y="757" fill="#94a3b8" font-size="9" text-anchor="middle">~/.open-im/data/</text>
+
+<!-- Logs -->
+<rect x="650" y="720" width="190" height="48" rx="6" fill="#0f172a"/>
+<rect x="650" y="720" width="190" height="48" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="745" y="741" fill="white" font-size="11" font-weight="600" text-anchor="middle">Logs</text>
+<text x="745" y="757" fill="#94a3b8" font-size="9" text-anchor="middle">~/.open-im/logs/</text>
+
+<!-- Session Manager → Storage (dashed) -->
+<path d="M 325 405 L 325 420 L 225 420 L 225 690" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.3"/>
+<path d="M 325 420 L 485 420 L 485 690" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.3"/>
+
+<!-- CLI entry annotation -->
+<rect x="50" y="665" width="155" height="22" rx="4" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+<text x="127" y="680" fill="#94a3b8" font-size="8" font-weight="500" text-anchor="middle">CLI: start / stop / dev / init</text>
+
+<!-- ══════════ Legend ══════════ -->
+<g transform="translate(860, 665)">
+  <text x="0" y="0" fill="white" font-size="9" font-weight="600">Legend</text>
+  <rect x="0" y="8" width="12" height="8" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+  <text x="18" y="16" fill="#94a3b8" font-size="8">IM Platforms</text>
+  <rect x="0" y="22" width="12" height="8" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+  <text x="18" y="30" fill="#94a3b8" font-size="8">Core Services</text>
+  <rect x="0" y="36" width="12" height="8" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+  <text x="18" y="44" fill="#94a3b8" font-size="8">Adapters / Storage</text>
+  <rect x="0" y="50" width="12" height="8" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="18" y="58" fill="#94a3b8" font-size="8">AI Tools</text>
+  <line x1="0" y1="68" x2="12" y2="68" stroke="#fb923c" stroke-width="2"/>
+  <text x="18" y="72" fill="#94a3b8" font-size="8">Bus</text>
+</g>
+
+</svg>
