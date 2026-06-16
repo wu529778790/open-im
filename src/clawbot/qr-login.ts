@@ -143,12 +143,12 @@ export async function waitForQRLogin(
         if (!result.bot_token) {
           return { connected: false, message: '登录失败：服务器未返回 bot_token' };
         }
-        log.info(`Login confirmed! botId=${result.ilink_bot_id}`);
+        log.info(`Login confirmed! botId=${result.ilink_bot_id}, baseurl=${result.baseurl ?? '(empty)'}`);
         return {
           connected: true,
           botToken: result.bot_token,
           accountId: result.ilink_bot_id,
-          baseUrl: result.baseurl,
+          baseUrl: result.baseurl || ILINK_BASE_URL,
           userId: result.ilink_user_id,
           message: '登录成功',
         };
