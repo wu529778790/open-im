@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - dev
   workflow_dispatch:
     inputs:
       release_channel:
@@ -53,11 +55,55 @@ jobs:
       - run: npm ci --prefix web
 
       - name: Sync version from pushed tag
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Using version from tag: $VERSION"
+          npm pkg set version="$VERSION"
+
+      - name: Auto bump beta for dev push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        shell: bash
+        run: |
+          npm install --no-save semver
+
+          cat > bump-beta.cjs << 'NODEEOF'
+          const { execSync } = require('child_process');
+          const semver = require('semver');
+
+          function npmView(cmd, fallback) {
+            try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash', stdio: ['ignore', 'pipe', 'pipe'] }).trim() || fallback; }
+            catch { return fallback; }
+          }
+
+          const raw = npmView('npm view @wu529778790/open-im versions --json', '[]');
+          let versions;
+          try { versions = Array.isArray(JSON.parse(raw)) ? JSON.parse(raw).filter(v => typeof v === 'string') : []; }
+          catch { versions = []; }
+
+          const valid = versions.filter(v => semver.valid(v));
+          const stable = valid.filter(v => !semver.prerelease(v)).sort(semver.rcompare);
+          const stableLatest = stable[0] || '0.0.0';
+          const nextBase = semver.inc(stableLatest, 'patch');
+
+          const betas = valid.filter(v => { const p = semver.prerelease(v); return p && p[0] === 'beta'; }).sort(semver.rcompare);
+
+          if (betas.length > 0) {
+            const latestBeta = betas[0];
+            const betaBase = semver.coerce(latestBeta)?.version ?? '0.0.0';
+            if (semver.eq(betaBase, nextBase)) {
+              console.log(semver.inc(latestBeta, 'prerelease', 'beta'));
+            } else {
+              console.log(`${nextBase}-beta.0`);
+            }
+          } else {
+            console.log(`${nextBase}-beta.0`);
+          }
+          NODEEOF
+
+          VERSION="$(node bump-beta.cjs)"
+          echo "Auto beta version: $VERSION"
           npm pkg set version="$VERSION"
 
       - name: Bump version for manual release
