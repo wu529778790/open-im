@@ -416,26 +416,27 @@ async function getOrCreateSession(
       if (!sessionId) {
         const latest = findLatestClaudeSession(workDir);
         if (latest) {
-          // 安全检查：如果 CLI 正在使用该 session（文件 30 秒内有写入），不能接管
-          if (isCliSessionActive(latest.sessionId, latest.filePath)) {
-            log.info(`CLI is actively using session ${latest.sessionId}, skipping auto-resume`);
-          } else {
-            // 验证文件内容一致性
-            if (validateSessionFile(latest.filePath, latest.sessionId)) {
-              try {
-                log.info(`Auto-resuming latest CLI session: ${latest.sessionId}`);
-                session = unstable_v2_resumeSession(latest.sessionId, sessionOptions);
-                activeSessions.set(latest.sessionId, session);
-                sessionWorkDirs.set(latest.sessionId, workDir);
-                sessionLastUsed.set(latest.sessionId, Date.now());
-                log.info(`Successfully auto-resumed CLI session: ${latest.sessionId}`);
-                return { session, sessionId: latest.sessionId };
-              } catch (err) {
-                log.warn(`Failed to auto-resume CLI session ${latest.sessionId}, skipping auto-resume: ${err}`);
-              }
-            } else {
-              log.warn(`Session file validation failed for ${latest.sessionId}, skipping`);
+          // 检测 CLI 是否正在使用该 session（用于日志，不阻止 resume）
+          const cliActive = isCliSessionActive(latest.sessionId, latest.filePath);
+          if (cliActive) {
+            log.info(`CLI is actively using session ${latest.sessionId}, attempting resume anyway (SDK handles concurrency)`);
+          }
+
+          // 验证文件内容一致性
+          if (validateSessionFile(latest.filePath, latest.sessionId)) {
+            try {
+              log.info(`Auto-resuming latest CLI session: ${latest.sessionId}${cliActive ? ' (CLI active)' : ''}`);
+              session = unstable_v2_resumeSession(latest.sessionId, sessionOptions);
+              activeSessions.set(latest.sessionId, session);
+              sessionWorkDirs.set(latest.sessionId, workDir);
+              sessionLastUsed.set(latest.sessionId, Date.now());
+              log.info(`Successfully auto-resumed CLI session: ${latest.sessionId}`);
+              return { session, sessionId: latest.sessionId };
+            } catch (err) {
+              log.warn(`Failed to auto-resume CLI session ${latest.sessionId}, creating new one: ${err}`);
             }
+          } else {
+            log.warn(`Session file validation failed for ${latest.sessionId}, skipping`);
           }
         }
       }
