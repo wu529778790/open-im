@@ -11,7 +11,7 @@
 
 import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, SDKSession } from '@anthropic-ai/claude-agent-sdk';
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -62,19 +62,21 @@ loadUserPluginSettings();
  * ~/.claude/projects/-Users-mac-github-open-im/
  */
 function workDirToProjectPath(workDir: string): string {
-  // Claude Code 使用路径中的 / 替换为 -，去掉开头的 -
+  // Claude Code 将路径中的 / 替换为 -，leading - 保留
   // /Users/mac/github/open-im → -Users-mac-github-open-im
   return workDir.replace(/\//g, '-');
 }
 
 /**
- * 检查 CLI 进程是否正在使用某个 session（通过 /proc 或 ps 检测）
+ * 检查 CLI 进程是否正在使用某个 session（通过 ps 检测）
+ * 注意：仅支持 macOS/Linux，Windows 上会静默返回 false
  */
 function isCliSessionActive(sessionId: string): boolean {
   try {
-    // macOS: 用 ps 搜索包含该 sessionId 的 claude 进程
+    // macOS/Linux: 用 ps 搜索包含该 sessionId 的 claude 进程
+    // -F 固定字符串匹配，避免正则意外；-- 防止 sessionId 被误认为 flag
     const result = execSync(
-      `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep "${sessionId}" || true`,
+      `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep -F -- "${sessionId}" || true`,
       { encoding: 'utf-8', timeout: 3000 }
     );
     return result.trim().length > 0;
@@ -87,6 +89,7 @@ interface ClaudeSessionMeta {
   sessionId: string;
   mtime: number;
   filePath: string;
+  size: number;
 }
 
 /**
@@ -118,7 +121,7 @@ export function findLatestClaudeSession(workDir: string, homeOverride?: string):
         const stat = statSync(filePath);
         // 跳过空文件
         if (stat.size === 0) continue;
-        sessions.push({ sessionId, mtime: stat.mtimeMs, filePath });
+        sessions.push({ sessionId, mtime: stat.mtimeMs, filePath, size: stat.size });
       } catch {
         continue;
       }
@@ -132,7 +135,7 @@ export function findLatestClaudeSession(workDir: string, homeOverride?: string):
     // 按修改时间倒序，最新的在前
     sessions.sort((a, b) => b.mtime - a.mtime);
     const latest = sessions[0];
-    log.info(`Found latest Claude Code session: ${latest.sessionId} (mtime: ${new Date(latest.mtime).toISOString()}, size: ${statSync(latest.filePath).size})`);
+    log.info(`Found latest Claude Code session: ${latest.sessionId} (mtime: ${new Date(latest.mtime).toISOString()}, size: ${latest.size})`);
     return latest;
   } catch (err) {
     log.warn(`Failed to scan Claude Code project dir: ${err}`);
@@ -142,16 +145,25 @@ export function findLatestClaudeSession(workDir: string, homeOverride?: string):
 
 /**
  * 从 JSONL 文件的第一行提取 sessionId，验证文件内容与文件名一致。
+ * 只读取前 4KB，避免大文件全量读入内存。
  */
 function validateSessionFile(filePath: string, expectedSessionId: string): boolean {
+  let fd: number | undefined;
   try {
-    const content = readFileSync(filePath, 'utf-8');
-    const firstLine = content.split('\n')[0];
+    fd = openSync(filePath, 'r');
+    const buf = Buffer.alloc(4096);
+    const bytesRead = readSync(fd, buf, 0, 4096, 0);
+    if (bytesRead === 0) return false;
+    const firstLine = buf.toString('utf-8', 0, bytesRead).split('\n')[0];
     if (!firstLine) return false;
     const firstEntry = JSON.parse(firstLine);
     return firstEntry.sessionId === expectedSessionId;
   } catch {
     return false;
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
   }
 }
 
@@ -393,7 +405,7 @@ async function getOrCreateSession(
                 log.info(`Successfully auto-resumed CLI session: ${latest.sessionId}`);
                 return { session, sessionId: latest.sessionId };
               } catch (err) {
-                log.warn(`Failed to auto-resume CLI session ${latest.sessionId}, creating new one: ${err}`);
+                log.warn(`Failed to auto-resume CLI session ${latest.sessionId}, skipping auto-resume: ${err}`);
               }
             } else {
               log.warn(`Session file validation failed for ${latest.sessionId}, skipping`);
