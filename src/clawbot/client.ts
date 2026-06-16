@@ -158,7 +158,11 @@ async function fetchApi(
 ): Promise<{ ok: boolean; error?: string; result?: unknown }> {
   const url = `${apiUrl}${path}`;
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiToken}` },
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      AuthorizationType: 'ilink_bot_token',
+      'iLink-App-Id': 'bot',
+    },
     signal,
   });
   return res.json() as Promise<{ ok: boolean; error?: string; result?: unknown }>;

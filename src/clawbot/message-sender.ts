@@ -29,6 +29,8 @@ async function postMessage(chatId: string, text: string): Promise<boolean> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiToken}`,
+        AuthorizationType: 'ilink_bot_token',
+        'iLink-App-Id': 'bot',
       },
       body: JSON.stringify({ chat_id: chatId, text }),
     });

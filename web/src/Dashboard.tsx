@@ -154,6 +154,9 @@ export function Dashboard() {
   const [jsonValidation, setJsonValidation] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [testBusy, setTestBusy] = useState<PlatformKey | null>(null);
   const [testMsg, setTestMsg] = useState<Partial<Record<PlatformKey, { text: string; ok: boolean }>>>({});
+  const [qrState, setQrState] = useState<"idle" | "loading" | "scanning" | "success" | "error">("idle");
+  const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [qrMessage, setQrMessage] = useState("");
 
   const refDashboard = useRef<HTMLElement>(null);
   const refPlatforms = useRef<HTMLElement>(null);
@@ -446,6 +449,48 @@ export function Dashboard() {
     }
   };
 
+  const onQrLogin = async () => {
+    setQrState("loading");
+    setQrMessage("");
+    setQrCodeUrl("");
+    try {
+      const startRes = (await request("/api/clawbot/qr-login/start", {
+        method: "POST",
+      })) as { success?: boolean; qrcodeUrl?: string; sessionKey?: string; error?: string };
+      if (!startRes.success || !startRes.qrcodeUrl || !startRes.sessionKey) {
+        setQrState("error");
+        setQrMessage(startRes.error || t("qrLoginFailed"));
+        return;
+      }
+      setQrCodeUrl(startRes.qrcodeUrl);
+      setQrState("scanning");
+
+      const waitRes = (await request("/api/clawbot/qr-login/wait", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionKey: startRes.sessionKey,
+          qrcode: startRes.sessionKey,
+          qrcodeUrl: startRes.qrcodeUrl,
+        }),
+      })) as { success?: boolean; botToken?: string; baseUrl?: string; userId?: string; message?: string; error?: string };
+      if (waitRes.success && waitRes.botToken) {
+        setQrState("success");
+        setQrMessage(t("qrLoginSuccess"));
+        updatePlatform("clawbot", {
+          apiToken: waitRes.botToken,
+          ...(waitRes.baseUrl ? { apiUrl: waitRes.baseUrl } : {}),
+          enabled: true,
+        });
+      } else {
+        setQrState("error");
+        setQrMessage(waitRes.message || waitRes.error || t("qrLoginFailed"));
+      }
+    } catch (e) {
+      setQrState("error");
+      setQrMessage(toErrorMsg(e));
+    }
+  };
+
   const scrollTo = (id: "overview" | "platforms" | "ai" | "files") => {
     setActiveNav(id);
     const map = {
@@ -620,6 +665,10 @@ export function Dashboard() {
                   onTest={() => void onTestPlatform(def.key)}
                   testing={testBusy === def.key}
                   testResult={testMsg[def.key]}
+                  qrState={def.key === "clawbot" ? qrState : undefined}
+                  qrCodeUrl={def.key === "clawbot" ? qrCodeUrl : undefined}
+                  qrMessage={def.key === "clawbot" ? qrMessage : undefined}
+                  onQrLogin={def.key === "clawbot" ? onQrLogin : undefined}
                 />
               ))}
             </div>
@@ -888,6 +937,10 @@ function PlatformCard({
   onTest,
   testing,
   testResult,
+  qrState,
+  qrCodeUrl,
+  qrMessage,
+  onQrLogin,
 }: {
   def: (typeof PLATFORM_DEFINITIONS)[number];
   values: WebConfigPayload["platforms"][typeof def.key];
@@ -898,6 +951,10 @@ function PlatformCard({
   onTest: () => void;
   testing: boolean;
   testResult?: { text: string; ok: boolean };
+  qrState?: "idle" | "loading" | "scanning" | "success" | "error";
+  qrCodeUrl?: string;
+  qrMessage?: string;
+  onQrLogin?: () => void;
 }) {
   const summaryKey = PLATFORM_SUMMARY_KEY[def.key];
   const helpKey = PLATFORM_HELP_KEY[def.key];
@@ -970,6 +1027,35 @@ function PlatformCard({
         </div>
         {testResult?.text ? (
           <div className={`message mt-4 ${testResult.ok ? "message-success" : "message-error"}`}>{testResult.text}</div>
+        ) : null}
+        {onQrLogin ? (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={qrState === "loading" || qrState === "scanning"}
+                onClick={onQrLogin}
+              >
+                {qrState === "loading" ? "..." : qrState === "scanning" ? t("qrLoginScanning") : t("qrLoginBtn")}
+              </button>
+              {qrState === "scanning" ? <span className="form-hint">{t("qrScanHint")}</span> : null}
+            </div>
+            {qrCodeUrl && qrState === "scanning" ? (
+              <div style={{ marginTop: 12, textAlign: "center" }}>
+                <img
+                  src={qrCodeUrl.startsWith("data:") ? qrCodeUrl : `data:image/png;base64,${qrCodeUrl}`}
+                  alt="QR Code"
+                  style={{ width: 200, height: 200, border: "1px solid var(--border)", borderRadius: 8 }}
+                />
+              </div>
+            ) : null}
+            {qrMessage ? (
+              <div className={`message mt-4 ${qrState === "success" ? "message-success" : qrState === "error" ? "message-error" : ""}`}>
+                {qrMessage}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
