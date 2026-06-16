@@ -82,9 +82,10 @@ function workDirToProjectPath(workDir: string): string {
 function isCliSessionActive(sessionId: string, sessionFilePath?: string): boolean {
   try {
     // macOS/Linux: 用 ps 搜索包含该 sessionId 的 claude 进程
+    // 排除 open-im 自己的 SDK 子进程（路径含 claude-agent-sdk），只匹配用户交互式 CLI
     // -F 固定字符串匹配，避免正则意外；-- 防止 sessionId 被误认为 flag
     const result = execSync(
-      `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep -F -- "${sessionId}" || true`,
+      `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep -v "claude-agent-sdk" | grep -F -- "${sessionId}" || true`,
       { encoding: 'utf-8', timeout: 3000 }
     );
     if (result.trim().length === 0) return false;
