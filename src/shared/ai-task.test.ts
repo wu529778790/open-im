@@ -4,12 +4,25 @@ vi.mock("../permission-mode/session-mode.js", () => ({
   getPermissionMode: vi.fn(() => "ask"),
 }));
 
+vi.mock("../logger.js", () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+  emitStructuredEvent: vi.fn(),
+}));
+
 import { classifyErrorType, runAITask } from "./ai-task.js";
 import type { ToolAdapter } from "../adapters/tool-adapter.interface.js";
+import { emitStructuredEvent } from "../logger.js";
+import { hashUserId } from "../telemetry/hash-user.js";
 
 describe("runAITask", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(emitStructuredEvent).mockClear();
   });
 
   it("keeps the codex session on usage limit errors", async () => {
@@ -322,6 +335,87 @@ describe("runAITask", () => {
     expect(runOptions).toHaveLength(1);
     expect(runOptions[0]).toMatchObject({ model: undefined });
     expect(sendError).not.toHaveBeenCalled();
+  });
+
+  it("edits the placeholder to a terminal state and emits aborted telemetry on abort", async () => {
+    const sessionManager = {
+      addTurnsForThread: vi.fn(() => 0),
+      addTurns: vi.fn(() => 0),
+      setSessionIdForThread: vi.fn(),
+      setSessionIdForConv: vi.fn(),
+      clearSessionForConv: vi.fn(),
+      clearActiveToolSession: vi.fn(),
+      newSession: vi.fn(() => true),
+      getModel: vi.fn(() => undefined),
+    };
+
+    const sendError = vi.fn(async () => {});
+
+    // Adapter that starts but never completes on its own — only abort ends it.
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run() {
+        return { abort: vi.fn() };
+      },
+    };
+
+    const controller = new AbortController();
+    const taskPromise = runAITask(
+      {
+        config: {
+          platforms: {
+            telegram: { enabled: true, aiCommand: "claude", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["telegram"],
+          claudeModel: "",
+          codexProxy: "",
+          wechatUserId: "",
+          dingtalkClientId: "",
+          dingtalkClientSecret: "",
+          qqAppId: "",
+          qqSecret: "",
+          weworkCorpId: "",
+          weworkSecret: "",
+          telegramBotToken: "",
+        } as never,
+        sessionManager: sessionManager as never,
+      },
+      {
+        userId: "u1",
+        chatId: "c1",
+        workDir: "/tmp/project",
+        sessionId: undefined,
+        convId: "conv-abort",
+        platform: "telegram",
+        taskKey: "u1:m1",
+        signal: controller.signal,
+      },
+      "hello",
+      toolAdapter,
+      {
+        streamUpdate: vi.fn(),
+        sendComplete: vi.fn(async () => {}),
+        sendError,
+        throttleMs: 0,
+        onTaskReady: vi.fn(),
+      }
+    );
+
+    // Abort once the task has started and wired its signal listener.
+    controller.abort();
+    await taskPromise;
+
+    expect(sendError).toHaveBeenCalledOnce();
+    expect(sendError).toHaveBeenCalledWith("⏹️ 已取消");
+    expect(emitStructuredEvent).toHaveBeenCalledWith(
+      "AITask",
+      "ai.task.error",
+      expect.objectContaining({ errorType: "aborted", taskKey: hashUserId("u1:m1") })
+    );
+    // No emitted payload may carry the raw taskKey
+    for (const call of vi.mocked(emitStructuredEvent).mock.calls) {
+      expect((call[2] as { taskKey?: string }).taskKey).not.toBe("u1:m1");
+    }
   });
 });
 

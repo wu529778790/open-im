@@ -62,6 +62,7 @@ export interface TaskRunState {
   /**
    * 进程退出（shutdown / 崩溃）时，用于为仍在运行的任务补发一条终态遥测事件，
    * 避免 `ai.task.start` 没有对应的 complete/error（遥测里的 `miss`）。
+   * 已哈希（与 ai.task.* emit 处一致），不含原始 userId/msgId。
    */
   taskKey: string;
   platform: string;
@@ -242,7 +243,7 @@ export function runAITask(
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
       emitStructuredEvent('AITask', 'ai.task.start', {
         platform: ctx.platform,
-        taskKey: ctx.taskKey,
+        taskKey: hashUserId(ctx.taskKey),
         userKey: hashUserId(ctx.userId),
         toolId: aiCommand,
       });
@@ -307,7 +308,7 @@ export function runAITask(
           if (settled) return;
           emitStructuredEvent('AITask', 'ai.task.complete', {
             platform: ctx.platform,
-            taskKey: ctx.taskKey,
+            taskKey: hashUserId(ctx.taskKey),
             userKey: hashUserId(ctx.userId),
             toolId: aiCommand,
             durationMs: result.durationMs,
@@ -372,7 +373,7 @@ export function runAITask(
           log.error(`Task error for user ${ctx.userId}: ${error}`);
           emitStructuredEvent('AITask', 'ai.task.error', {
             platform: ctx.platform,
-            taskKey: ctx.taskKey,
+            taskKey: hashUserId(ctx.taskKey),
             userKey: hashUserId(ctx.userId),
             toolId: aiCommand,
             durationMs: Date.now() - taskState.startedAt,
@@ -419,12 +420,17 @@ export function runAITask(
           if (!settled) {
             emitStructuredEvent('AITask', 'ai.task.error', {
               platform: ctx.platform,
-              taskKey: ctx.taskKey,
+              taskKey: hashUserId(ctx.taskKey),
               userKey: hashUserId(ctx.userId),
               toolId: aiCommand,
               durationMs: Date.now() - taskState.startedAt,
               errorSnippet: 'aborted',
               errorType: 'aborted',
+            });
+            // 用户取消（/new、/resume、队列超时、stale 清理）：把「思考中…」占位卡片编辑为终态，
+            // 避免卡片卡在转圈。停按钮路径会先 settle() 再 abort，settled=true 时此处跳过，不会双发。
+            void platformAdapter.sendError('⏹️ 已取消').catch(() => {
+              /* 占位卡片可能已被删除或流过期，编辑失败可忽略 */
             });
           }
           activeHandle?.abort();
@@ -436,7 +442,7 @@ export function runAITask(
       settle,
       startedAt: Date.now(),
       toolId: aiCommand,
-      taskKey: ctx.taskKey,
+      taskKey: hashUserId(ctx.taskKey),
       platform: ctx.platform,
       userKey: hashUserId(ctx.userId),
     };
@@ -449,7 +455,7 @@ export function runAITask(
         log.error(`[AITask] Synchronous error in startRun: ${err}`);
         emitStructuredEvent('AITask', 'ai.task.error', {
           platform: ctx.platform,
-          taskKey: ctx.taskKey,
+          taskKey: hashUserId(ctx.taskKey),
           userKey: hashUserId(ctx.userId),
           toolId: aiCommand,
           durationMs: 0,
