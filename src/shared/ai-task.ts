@@ -59,28 +59,87 @@ export interface TaskRunState {
   startedAt: number;
   /** AI 工具标识，用于动态显示工具名称。 */
   toolId: string;
+  /**
+   * 进程退出（shutdown / 崩溃）时，用于为仍在运行的任务补发一条终态遥测事件，
+   * 避免 `ai.task.start` 没有对应的 complete/error（遥测里的 `miss`）。
+   * 已哈希（与 ai.task.* emit 处一致），不含原始 userId/msgId。
+   */
+  taskKey: string;
+  platform: string;
+  /** 已哈希的 userId，与 ai.task.start/complete/error 中的 userKey 一致。 */
+  userKey: string;
 }
 
 function isUsageLimitError(error: string): boolean {
   return /usage limit/i.test(error) || /try again at\s+\d{1,2}:\d{2}\s*(AM|PM)/i.test(error);
 }
 
-function classifyErrorType(error: string): string {
+/**
+ * 将 AI/CLI 错误文本归类为一个稳定的 errorType 字符串，用于遥测聚合。
+ * 分类基于线上真实错误签名（见 logs/r2-events），新增分支时同步更新测试。
+ */
+export function classifyErrorType(error: string): string {
   const s = error.toLowerCase();
   if (s.includes('aborted')) return 'aborted';
+  // 空输出：流正常结束但无内容（claude-sdk-adapter 的兜底消息）
+  if (s.includes('无输出') || s.includes('响应异常结束') || s.includes('empty output')) {
+    return 'empty_output';
+  }
   if (isUsageLimitError(error) || s.includes('rate limit') || s.includes('quota')) return 'limit';
-  if (s.includes('invalid api key') || s.includes('unauthorized') || s.includes('401')) return 'auth';
+  // 鉴权：凭据无效或需要登录（含中文「登录」/「login」）
+  if (
+    s.includes('invalid api key') ||
+    s.includes('unauthorized') ||
+    s.includes('401') ||
+    s.includes('need to log in') ||
+    s.includes('need to login') ||
+    s.includes('需要登录') ||
+    s.includes('需要先登录') ||
+    s.includes('log in required') ||
+    s.includes('login required')
+  ) {
+    return 'auth';
+  }
   if (s.includes('model') && (s.includes('not support') || s.includes('not found') || s.includes('invalid'))) {
     return 'model';
   }
-  if (s.includes('process exited') || s.includes('exit code')) return 'process';
+  // 安装/配置缺失：二进制或可执行文件缺失、环境变量缺失、token 未配置
+  if (
+    s.includes('native cli binary') ||
+    s.includes('executable not found') ||
+    (s.includes('binary') && s.includes('not found')) ||
+    s.includes('missing environment variable') ||
+    s.includes('token data is not available')
+  ) {
+    return 'setup';
+  }
+  // 会话失效：找不到会话/对话，或会话过期/损坏
+  if (
+    s.includes('no conversation found') ||
+    s.includes('session not found') ||
+    (s.includes('session') && (s.includes('expired') || s.includes('corrupt')))
+  ) {
+    return 'session';
+  }
+  // 进程退出或被信号终止
+  if (
+    s.includes('process exited') ||
+    s.includes('exit code') ||
+    s.includes('exited with code') ||
+    s.includes('terminated by signal') ||
+    s.includes('sigkill')
+  ) {
+    return 'process';
+  }
+  // 网络：超时/连接重置/DNS/网络请求失败（含中文「网络」）
   if (
     s.includes('timeout') ||
     s.includes('etimedout') ||
     s.includes('econnreset') ||
     s.includes('enotfound') ||
     s.includes('eai_again') ||
-    s.includes('network')
+    s.includes('network') ||
+    s.includes('网络')
   ) {
     return 'network';
   }
@@ -184,7 +243,7 @@ export function runAITask(
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
       emitStructuredEvent('AITask', 'ai.task.start', {
         platform: ctx.platform,
-        taskKey: ctx.taskKey,
+        taskKey: hashUserId(ctx.taskKey),
         userKey: hashUserId(ctx.userId),
         toolId: aiCommand,
       });
@@ -249,7 +308,7 @@ export function runAITask(
           if (settled) return;
           emitStructuredEvent('AITask', 'ai.task.complete', {
             platform: ctx.platform,
-            taskKey: ctx.taskKey,
+            taskKey: hashUserId(ctx.taskKey),
             userKey: hashUserId(ctx.userId),
             toolId: aiCommand,
             durationMs: result.durationMs,
@@ -314,7 +373,7 @@ export function runAITask(
           log.error(`Task error for user ${ctx.userId}: ${error}`);
           emitStructuredEvent('AITask', 'ai.task.error', {
             platform: ctx.platform,
-            taskKey: ctx.taskKey,
+            taskKey: hashUserId(ctx.taskKey),
             userKey: hashUserId(ctx.userId),
             toolId: aiCommand,
             durationMs: Date.now() - taskState.startedAt,
@@ -361,12 +420,17 @@ export function runAITask(
           if (!settled) {
             emitStructuredEvent('AITask', 'ai.task.error', {
               platform: ctx.platform,
-              taskKey: ctx.taskKey,
+              taskKey: hashUserId(ctx.taskKey),
               userKey: hashUserId(ctx.userId),
               toolId: aiCommand,
               durationMs: Date.now() - taskState.startedAt,
               errorSnippet: 'aborted',
               errorType: 'aborted',
+            });
+            // 用户取消（/new、/resume、队列超时、stale 清理）：把「思考中…」占位卡片编辑为终态，
+            // 避免卡片卡在转圈。停按钮路径会先 settle() 再 abort，settled=true 时此处跳过，不会双发。
+            void platformAdapter.sendError('⏹️ 已取消').catch(() => {
+              /* 占位卡片可能已被删除或流过期，编辑失败可忽略 */
             });
           }
           activeHandle?.abort();
@@ -378,6 +442,9 @@ export function runAITask(
       settle,
       startedAt: Date.now(),
       toolId: aiCommand,
+      taskKey: hashUserId(ctx.taskKey),
+      platform: ctx.platform,
+      userKey: hashUserId(ctx.userId),
     };
     try {
       startRun();
@@ -388,7 +455,7 @@ export function runAITask(
         log.error(`[AITask] Synchronous error in startRun: ${err}`);
         emitStructuredEvent('AITask', 'ai.task.error', {
           platform: ctx.platform,
-          taskKey: ctx.taskKey,
+          taskKey: hashUserId(ctx.taskKey),
           userKey: hashUserId(ctx.userId),
           toolId: aiCommand,
           durationMs: 0,

@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import type { Config } from "../config.js";
 import { createLogger } from "../logger.js";
+import { jitteredDelay, SLOW_PROBE_MS } from "../shared/reconnect.js";
 import type { QQAttachment, QQMessageEvent } from "./types.js";
 
 const log = createLogger("QQ");
@@ -333,7 +334,12 @@ async function connectWebSocket(config: Config, handler: (event: QQMessageEvent)
           sessionId = null;
           seq = null;
         }
-        const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+        const isFatalClose = code === 4004 || code === 4006 || code === 4007;
+        const baseDelay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+        const delay = isFatalClose ? jitteredDelay(SLOW_PROBE_MS) : jitteredDelay(baseDelay);
+        if (isFatalClose) {
+          log.warn(`QQ 致命关闭码 ${code}（鉴权失败），转慢探测（每 ${Math.round(SLOW_PROBE_MS / 1000)}s 一次）`);
+        }
         reconnectAttempt += 1;
         reconnectTimer = setTimeout(() => {
           if (currentConfig && currentHandler) {

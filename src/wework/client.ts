@@ -11,6 +11,7 @@
 import { WebSocket } from 'ws';
 import { randomBytes } from 'node:crypto';
 import { createLogger } from '../logger.js';
+import { jitteredDelay, SLOW_PROBE_MS, isFatalReconnectError } from '../shared/reconnect.js';
 import type { Config } from '../config.js';
 import {
   WeWorkConnectionState,
@@ -440,6 +441,9 @@ function stopHeartbeat(): void {
  * Schedule reconnection attempt
  * 超过 MAX_RECONNECT_ATTEMPTS 后自动重置计数器继续重试，避免永久断连
  */
+/** 致命（鉴权）错误后转慢探测，避免紧密 hammer 网关 */
+let fatalSlowProbe = false;
+
 function scheduleReconnect(): void {
   if (isStopping || !shouldReconnect) {
     return;
@@ -455,18 +459,26 @@ function scheduleReconnect(): void {
     reconnectAttempts = 0;
   }
 
-  // 逐步增加间隔，5s → 7.5s → 11s → ... 最大 60s
-  const backoff = Math.min(5000 * Math.pow(1.5, Math.floor(reconnectAttempts / 5)), 60000);
-  const interval = Math.round(backoff);
+  // 逐步增加间隔，5s → 7.5s → 11s → ... 最大 60s；致命（鉴权）错误转慢探测
+  const backoff = fatalSlowProbe
+    ? SLOW_PROBE_MS
+    : Math.min(5000 * Math.pow(1.5, Math.floor(reconnectAttempts / 5)), 60000);
+  const interval = jitteredDelay(Math.round(backoff));
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     reconnectAttempts++;
-    log.info(`Reconnecting... Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} (interval: ${interval}ms)`);
+    log.info(`Reconnecting... Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} (interval: ${interval}ms${fatalSlowProbe ? ', slow-probe' : ''})`);
     try {
       await connectWebSocket();
+      fatalSlowProbe = false; // 连上后恢复正常退避
     } catch (err) {
-      log.error('Reconnection failed:', err);
+      if (isFatalReconnectError(err)) {
+        fatalSlowProbe = true;
+        log.warn('WeWork 致命错误（鉴权失败），转慢探测:', err);
+      } else {
+        log.error('Reconnection failed:', err);
+      }
     }
   }, interval);
 }

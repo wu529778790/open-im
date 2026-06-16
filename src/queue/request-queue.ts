@@ -92,15 +92,16 @@ export class RequestQueue {
     } finally {
       this.runningControllers.delete(key);
       const q = this.queues.get(key);
-      if (!q) return;
-      const next = q.tasks.shift();
-      if (next) {
-        setImmediate(() => this.run(key, next.prompt, next.execute).catch((err) => {
-          log.error(`Unhandled error in next task execution for ${key}:`, err);
-        }));
-      } else {
-        q.running = false;
-        this.queues.delete(key);
+      if (!q) { /* queue already cleared */ } else {
+        const next = q.tasks.shift();
+        if (next) {
+          setImmediate(() => this.run(key, next.prompt, next.execute).catch((err) => {
+            log.error(`Unhandled error in next task execution for ${key}:`, err);
+          }));
+        } else {
+          q.running = false;
+          this.queues.delete(key);
+        }
       }
     }
   }

@@ -1,6 +1,7 @@
 import { DWClient, TOPIC_ROBOT, type DWClientDownStream } from 'dingtalk-stream';
 import type { Config } from '../config.js';
 import { createLogger } from '../logger.js';
+import { jitteredDelay } from '../shared/reconnect.js';
 import {
   registerSessionWebhook as registerWebhook,
   clearWebhooks,
@@ -157,7 +158,7 @@ export async function initDingTalk(
       lastErr = err;
       if (is429(err) && attempt < maxTries) {
         log.warn(`DingTalk gateway 429 (attempt ${attempt}/${maxTries}), retrying in ${retryDelayMs / 1000}s...`);
-        await new Promise((r) => setTimeout(r, retryDelayMs));
+        await new Promise((r) => setTimeout(r, jitteredDelay(retryDelayMs)));
         continue;
       }
       throw new Error(formatDingTalkInitError(err));

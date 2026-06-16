@@ -7,8 +7,6 @@ import type { SessionManager } from '../session/session-manager.js';
 import { sendTextReply, sendErrorReply } from './message-sender.js';
 import { startTaskCleanup } from '../shared/task-cleanup.js';
 import { WORKBUDDY_THROTTLE_MS } from '../constants.js';
-import { setActiveChatId } from '../shared/active-chats.js';
-import { setChatUser } from '../shared/chat-user-map.js';
 import { createLogger } from '../logger.js';
 import { createPlatformEventContext } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender } from '../platform/handle-ai-request.js';

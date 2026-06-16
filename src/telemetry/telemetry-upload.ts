@@ -199,7 +199,7 @@ export async function shutdownTelemetryUpload(): Promise<void> {
   uploadEnabled = false;
   endpoint = undefined;
   bearer = undefined;
-  let lines = pending;
+  const lines = pending;
   while (lines.length > 0) {
     const batch = lines.splice(0, BATCH_MAX_LINES);
     try {

@@ -371,9 +371,12 @@ export function parseCommaSeparated(value: string): string[] {
 
 /**
  * 将最新的 Claude 认证环境变量按优先级合并到 process.env。
- * 优先级：shell 环境变量 > ~/.open-im/config.json 的 tools.claude.env >
- * 本机 Claude 配置（~/.claude/settings.json，与 Claude Code 共用）。
- * 多数用户只维护本机 settings；每次创建 Claude SDK 会话前调用，本机文件变更后下次会话即生效。
+ * 优先级：shell 环境变量 > 本机 Claude 配置（~/.claude/settings.json，与 Claude Code 共用）>
+ * ~/.open-im/config.json 的 tools.claude.env。
+ *
+ * 设计意图：用户只需维护 ~/.claude/settings.json（与 Claude Code CLI 共用），
+ * open-im 自动跟随本地 Claude 配置，无需单独配置。config.json 的 tools.claude.env
+ * 仅作为兜底，供没有本地 Claude 安装的场景使用。
  */
 export function refreshClaudeEnvToProcess(): void {
   const file = loadFileConfig();
@@ -385,12 +388,14 @@ export function refreshClaudeEnvToProcess(): void {
       process.env[key] = originalShellEnv[key];
       continue;
     }
-    if (key in claudeToolEnv) {
-      process.env[key] = claudeToolEnv[key];
-      continue;
-    }
+    // 优先读取 ~/.claude/settings.json（与 Claude Code CLI 共用同一配置）
     if (key in claudeSettingsEnv) {
       process.env[key] = claudeSettingsEnv[key];
+      continue;
+    }
+    // 兜底：config.json tools.claude.env（仅在没有本地 Claude 安装时需要）
+    if (key in claudeToolEnv) {
+      process.env[key] = claudeToolEnv[key];
       continue;
     }
     delete process.env[key];

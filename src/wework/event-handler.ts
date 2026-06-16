@@ -297,6 +297,9 @@ export function setupWeWorkHandlers(
       const state = ctx.runningTasks.get(taskKey);
       if (state) {
         log.warn(`[SAFETY_TIMEOUT] Task ${taskKey} exceeded ${WEWORK_TASK_SAFETY_TIMEOUT_MS}ms, aborting`);
+        // 先 settle 再 abort：settled=true 后 abort() 跳过自身的 sendError，由这里的 sendTextReply
+        // 兜底（企微流式消息可能已过期，文本兜底更稳），避免双重终态消息。
+        state.settle();
         state.handle.abort();
         ctx.runningTasks.delete(taskKey);
         sendTextReply(chatId, `AI 处理超时（${Math.round(WEWORK_TASK_SAFETY_TIMEOUT_MS / 1000)}s），已自动取消。请重试。`, senderCtx.reqId).catch(() => {});

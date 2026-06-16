@@ -204,6 +204,9 @@ describe('createPlatformAIRequestHandler', () => {
       settle: vi.fn(),
       startedAt: Date.now(),
       toolId: 'claude',
+      taskKey: 'user-1:msg-001',
+      platform: 'telegram',
+      userKey: 'hashed-user',
     };
 
     vi.mocked(runAITask).mockImplementation(async (_deps, _ctx, _prompt, _adapter, callbacks) => {
