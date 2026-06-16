@@ -51,20 +51,20 @@ export async function initClawbot(
   reconnectAttempt = 0;
   lastUpdateId = 0;
 
-  // Verify connectivity
+  // Verify connectivity — non-fatal, reconnect loop will retry
   try {
     const res = await fetchApi('/ilink/bot/getupdates?timeout=1');
     if (!res.ok) {
       throw new Error(`API check failed: ${res.error ?? 'unknown'}`);
     }
     log.info(`ClawBot API reachable at ${apiUrl}`);
+    updateState('connected');
+    startPolling();
   } catch (err) {
-    log.error('ClawBot API connectivity check failed:', err);
-    throw err;
+    log.warn('ClawBot API not reachable, will retry:', err);
+    updateState('connecting');
+    scheduleReconnect();
   }
-
-  updateState('connected');
-  startPolling();
   log.info('ClawBot client initialized');
 }
 
