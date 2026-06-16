@@ -68,10 +68,18 @@ function workDirToProjectPath(workDir: string): string {
 }
 
 /**
- * 检查 CLI 进程是否正在使用某个 session（通过 ps 检测）
+ * 检查 CLI 进程是否**正在活跃使用**某个 session。
+ *
+ * 仅当同时满足以下两个条件时返回 true：
+ *   1. 存在包含该 sessionId 的 claude 进程（通过 ps 检测）
+ *   2. session 文件在最近 30 秒内被修改过（说明 CLI 正在处理消息）
+ *
+ * 如果 CLI 只是挂在终端等待用户输入，进程仍在但文件长时间未变，
+ * 此时安全允许 open-im 接管 session（无缝切换）。
+ *
  * 注意：仅支持 macOS/Linux，Windows 上会静默返回 false
  */
-function isCliSessionActive(sessionId: string): boolean {
+function isCliSessionActive(sessionId: string, sessionFilePath?: string): boolean {
   try {
     // macOS/Linux: 用 ps 搜索包含该 sessionId 的 claude 进程
     // -F 固定字符串匹配，避免正则意外；-- 防止 sessionId 被误认为 flag
@@ -79,7 +87,24 @@ function isCliSessionActive(sessionId: string): boolean {
       `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep -F -- "${sessionId}" || true`,
       { encoding: 'utf-8', timeout: 3000 }
     );
-    return result.trim().length > 0;
+    if (result.trim().length === 0) return false;
+
+    // 进程存在，但可能只是 idle 在终端等输入。检查文件 mtime：
+    // 如果 session 文件超过 30 秒未修改，说明 CLI 没在活跃处理。
+    if (sessionFilePath) {
+      try {
+        const stat = statSync(sessionFilePath);
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs > 30_000) {
+          log.info(`CLI process found for ${sessionId} but session file idle for ${Math.round(ageMs / 1000)}s, treating as inactive`);
+          return false;
+        }
+      } catch {
+        // stat 失败时保守地认为活跃
+      }
+    }
+
+    return true;
   } catch {
     return false;
   }
@@ -391,7 +416,7 @@ async function getOrCreateSession(
         const latest = findLatestClaudeSession(workDir);
         if (latest) {
           // 安全检查：如果 CLI 正在使用该 session，不能接管
-          if (isCliSessionActive(latest.sessionId)) {
+          if (isCliSessionActive(latest.sessionId, latest.filePath)) {
             log.info(`CLI is actively using session ${latest.sessionId}, skipping auto-resume`);
           } else {
             // 验证文件内容一致性
