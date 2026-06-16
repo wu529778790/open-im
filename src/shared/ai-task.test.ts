@@ -4,7 +4,7 @@ vi.mock("../permission-mode/session-mode.js", () => ({
   getPermissionMode: vi.fn(() => "ask"),
 }));
 
-import { runAITask } from "./ai-task.js";
+import { classifyErrorType, runAITask } from "./ai-task.js";
 import type { ToolAdapter } from "../adapters/tool-adapter.interface.js";
 
 describe("runAITask", () => {
@@ -322,5 +322,109 @@ describe("runAITask", () => {
     expect(runOptions).toHaveLength(1);
     expect(runOptions[0]).toMatchObject({ model: undefined });
     expect(sendError).not.toHaveBeenCalled();
+  });
+});
+
+// classifyErrorType: assertions use real error signatures observed in
+// logs/r2-events telemetry. When the data shows a new error shape, add a
+// failing test here first, then extend classifyErrorType.
+describe("classifyErrorType", () => {
+  // --- branches that already exist — regression guard ---
+  it("classifies usage-limit errors as limit", () => {
+    expect(
+      classifyErrorType(
+        "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro)"
+      )
+    ).toBe("limit");
+  });
+
+  it("classifies invalid-api-key errors as auth", () => {
+    expect(
+      classifyErrorType(
+        'unexpected status 401 Unauthorized: {"error":"Invalid API key"}'
+      )
+    ).toBe("auth");
+  });
+
+  it("classifies unsupported-model errors as model", () => {
+    expect(
+      classifyErrorType(
+        '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The \'MiniMax-M2.7\' model is not supported"}}'
+      )
+    ).toBe("model");
+  });
+
+  it("classifies process-exit errors as process", () => {
+    expect(classifyErrorType("Claude Code process exited with code 1")).toBe(
+      "process"
+    );
+  });
+
+  // --- live gaps observed in telemetry (these must move off "unknown") ---
+
+  it("classifies CodeBuddy login prompt (Chinese) as auth", () => {
+    expect(
+      classifyErrorType("CodeBuddy 需要先登录。请在终端运行 codebuddy login。")
+    ).toBe("auth");
+  });
+
+  it("classifies missing-conversation / session-not-found as session", () => {
+    expect(
+      classifyErrorType(
+        "No conversation found with session ID: bc5c4f88-25fd-41eb-8ad0-e08233a2f006"
+      )
+    ).toBe("session");
+  });
+
+  it("classifies native-CLI-binary-not-found as setup", () => {
+    expect(
+      classifyErrorType(
+        "Native CLI binary for win32-x64 not found. Reinstall @anthropic-ai/claude-agent-sdk"
+      )
+    ).toBe("setup");
+  });
+
+  it("classifies executable-not-found as setup", () => {
+    expect(
+      classifyErrorType(
+        "Claude Code executable not found at /Users/mini31/opt/lib/node_modules/@wu5..."
+      )
+    ).toBe("setup");
+  });
+
+  it("classifies missing environment variable as setup", () => {
+    expect(
+      classifyErrorType("Missing environment variable: `OPENAI_API_KEY`.")
+    ).toBe("setup");
+  });
+
+  it("classifies missing token as setup", () => {
+    expect(classifyErrorType("Token data is not available.")).toBe("setup");
+  });
+
+  it("classifies signal-terminated (SIGKILL) as process", () => {
+    expect(
+      classifyErrorType("Claude Code process terminated by signal SIGKILL")
+    ).toBe("process");
+  });
+
+  it("classifies exit code 143 as process", () => {
+    expect(classifyErrorType("CodeBuddy CLI exited with code 143")).toBe(
+      "process"
+    );
+  });
+
+  it("classifies Codex network failure (Chinese) as network", () => {
+    expect(
+      classifyErrorType(
+        "Codex 网络请求失败。如无法访问 chatgpt.com，请在 tools.codex.proxy 或 CODEX_PROXY 中配置代理。"
+      )
+    ).toBe("network");
+  });
+
+  it("classifies empty-output termination as empty_output", () => {
+    expect(
+      classifyErrorType("AI 响应异常结束（无输出），请重试")
+    ).toBe("empty_output");
   });
 });
