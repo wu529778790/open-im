@@ -2,7 +2,7 @@ import type { LogLevel } from '../logger.js';
 
 export type Platform = 'clawbot' | 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wework' | 'workbuddy';
 
-export type AiCommand = 'claude' | 'codex' | 'codebuddy';
+export type AiCommand = 'claude' | 'codex' | 'codebuddy' | 'opencode';
 
 export interface Config {
   enabledPlatforms: Platform[];
@@ -33,6 +33,7 @@ export interface Config {
 
   codexCliPath: string;
   codebuddyCliPath: string;
+  opencodeCliPath: string;
   /** Claude 访问 API 的代理（如 http://127.0.0.1:7890） */
   claudeProxy?: string;
   /** Codex 访问 chatgpt.com 的代理（如 http://127.0.0.1:7890） */
@@ -206,6 +207,10 @@ export interface FileToolCodeBuddy {
   cliPath?: string;
 }
 
+export interface FileToolOpenCode {
+  cliPath?: string;
+}
+
 export interface FileConfig {
   telegramBotToken?: string;
   feishuAppId?: string;
@@ -229,6 +234,7 @@ export interface FileConfig {
     claude?: FileToolClaude;
     codex?: FileToolCodex;
     codebuddy?: FileToolCodeBuddy;
+    opencode?: FileToolOpenCode;
   };
   logDir?: string;
   logLevel?: LogLevel;

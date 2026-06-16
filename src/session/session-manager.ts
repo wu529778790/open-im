@@ -8,7 +8,7 @@ import { APP_HOME } from '../constants.js';
 const log = createLogger('Session');
 const SESSIONS_FILE = join(APP_HOME, 'data', 'sessions.json');
 
-type ToolId = 'claude' | 'codex' | 'codebuddy';
+type ToolId = 'claude' | 'codex' | 'codebuddy' | 'opencode';
 type ToolSessionIds = Partial<Record<ToolId, string>>;
 
 interface ConvHistoryEntry {

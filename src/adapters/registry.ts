@@ -3,6 +3,7 @@ import type { ToolAdapter } from './tool-adapter.interface.js';
 import { ClaudeSDKAdapter, configureClaudeSdkSessionIdle } from './claude-sdk-adapter.js';
 import { CodexAdapter } from './codex-adapter.js';
 import { CodeBuddyAdapter } from './codebuddy-adapter.js';
+import { OpenCodeAdapter } from './opencode-adapter.js';
 import { createLogger } from '../logger.js';
 import { destroyAllLiveChildren } from '../shared/process-kill.js';
 
@@ -28,6 +29,11 @@ export function initAdapters(config: Config): void {
     if (aiCommand === 'codebuddy') {
       log.info('CodeBuddy CLI adapter enabled');
       adapters.set('codebuddy', new CodeBuddyAdapter(config.codebuddyCliPath));
+    }
+
+    if (aiCommand === 'opencode') {
+      log.info('OpenCode CLI adapter enabled');
+      adapters.set('opencode', new OpenCodeAdapter(config.opencodeCliPath));
     }
   }
 }
