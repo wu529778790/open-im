@@ -1,6 +1,6 @@
 import type { LogLevel } from '../logger.js';
 
-export type Platform = 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wework' | 'workbuddy';
+export type Platform = 'clawbot' | 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wework' | 'workbuddy';
 
 export type AiCommand = 'claude' | 'codex' | 'codebuddy';
 
@@ -29,6 +29,7 @@ export interface Config {
   weworkAllowedUserIds: string[];
   dingtalkAllowedUserIds: string[];
   workbuddyAllowedUserIds: string[];
+  clawbotAllowedUserIds: string[];
 
   codexCliPath: string;
   codebuddyCliPath: string;
@@ -97,6 +98,13 @@ export interface Config {
       baseUrl?: string;
       guid?: string;
       workspacePath?: string;
+    };
+    clawbot?: {
+      enabled: boolean;
+      aiCommand?: AiCommand;
+      allowedUserIds: string[];
+      apiUrl?: string;
+      apiToken?: string;
     };
   };
 }
@@ -167,6 +175,14 @@ export interface FilePlatformWorkBuddy {
   workspacePath?: string;
 }
 
+export interface FilePlatformClawbot {
+  enabled?: boolean;
+  aiCommand?: AiCommand;
+  allowedUserIds?: string[];
+  apiUrl?: string;
+  apiToken?: string;
+}
+
 export interface FileToolClaude {
   cliPath?: string;
   workDir?: string;
@@ -204,6 +220,7 @@ export interface FileConfig {
     wework?: FilePlatformWework;
     dingtalk?: FilePlatformDingtalk;
     workbuddy?: FilePlatformWorkBuddy;
+    clawbot?: FilePlatformClawbot;
   };
 
   /** @deprecated 仅旧配置兼容；运行时以各 platforms.*.aiCommand 为准 */

@@ -79,3 +79,9 @@ export const MAX_WEWORK_MESSAGE_LENGTH = 2048;
 export const MAX_DINGTALK_MESSAGE_LENGTH = 2048;
 /** WeChat KF (微信客服) 单条消息最大字符数 */
 export const MAX_WORKBUDDY_MESSAGE_LENGTH = 2000;
+/** ClawBot 流式更新节流 */
+export const CLAWBOT_THROTTLE_MS = 1000;
+/** ClawBot 单条消息最大字符数 */
+export const MAX_CLAWBOT_MESSAGE_LENGTH = 2000;
+/** ClawBot 长轮询间隔 */
+export const CLAWBOT_POLL_INTERVAL_MS = 3000;

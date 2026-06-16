@@ -25,6 +25,10 @@ import { setupDingTalkHandlers } from "./dingtalk/event-handler.js";
 import { initWorkBuddy, stopWorkBuddy } from "./workbuddy/client.js";
 import { setupWorkBuddyHandlers } from "./workbuddy/event-handler.js";
 import { sendTextReply as sendWorkBuddyTextReply } from "./workbuddy/message-sender.js";
+import { initClawbot, stopClawbot } from "./clawbot/client.js";
+import { setupClawbotHandlers } from "./clawbot/event-handler.js";
+import { sendTextReply as sendClawbotTextReply } from "./clawbot/message-sender.js";
+import { initClawBotSender } from "./clawbot/message-sender.js";
 import { initAdapters, cleanupAdapters } from "./adapters/registry.js";
 import { SessionManager } from "./session/session-manager.js";
 import {
@@ -125,6 +129,19 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     },
     stop: () => stopWorkBuddy(),
     sendNotification: (chatId, msg) => sendWorkBuddyTextReply(null, chatId, msg, randomUUID()),
+  },
+  clawbot: {
+    init: async (config, sessionManager) => {
+      const pc = config.platforms.clawbot;
+      if (pc?.apiUrl && pc?.apiToken) {
+        initClawBotSender(pc.apiUrl, pc.apiToken);
+      }
+      const handle = setupClawbotHandlers(config, sessionManager);
+      await initClawbot(config, handle.handleEvent);
+      return handle;
+    },
+    stop: () => stopClawbot(),
+    sendNotification: (chatId, msg) => sendClawbotTextReply(chatId, msg),
   },
 };
 

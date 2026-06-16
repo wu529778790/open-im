@@ -28,6 +28,7 @@ export type {
   FilePlatformWework,
   FilePlatformDingtalk,
   FilePlatformWorkBuddy,
+  FilePlatformClawbot,
   FileToolClaude,
   FileToolCodex,
   FileToolCodeBuddy,
@@ -50,7 +51,9 @@ function resolveFilePlatformAi(file: FileConfig, platform: Platform): AiCommand 
             ? pf?.wework?.aiCommand
             : platform === 'dingtalk'
               ? pf?.dingtalk?.aiCommand
-              : pf?.workbuddy?.aiCommand;
+              : platform === 'clawbot'
+                ? pf?.clawbot?.aiCommand
+                : pf?.workbuddy?.aiCommand;
   return normalizeAiCommand(raw ?? process.env.AI_COMMAND ?? file.aiCommand, 'claude');
 }
 
@@ -105,6 +108,7 @@ export function needsSetup(): boolean {
   const ww = file.platforms?.wework;
   const dt = file.platforms?.dingtalk;
   const wb = file.platforms?.workbuddy;
+  const cb = file.platforms?.clawbot;
   // Also check legacy platforms.wechat for migration path
   const legacyWc = (file.platforms as Record<string, unknown>)?.wechat as FilePlatformWechat | undefined;
 
@@ -114,9 +118,10 @@ export function needsSetup(): boolean {
   const hasWework = !!(ww?.corpId && ww?.secret);
   const hasDingtalk = !!(dt?.clientId && dt?.clientSecret);
   const hasWorkBuddy = !!(wb?.accessToken && wb?.refreshToken && wb?.userId);
+  const hasClawBot = !!(cb?.apiToken);
   const hasLegacyWechat = !!(legacyWc?.workbuddyAccessToken && legacyWc?.workbuddyRefreshToken);
 
-  return !hasTelegram && !hasFeishu && !hasQQ && !hasWework && !hasDingtalk && !hasWorkBuddy && !hasLegacyWechat;
+  return !hasTelegram && !hasFeishu && !hasQQ && !hasWework && !hasDingtalk && !hasWorkBuddy && !hasClawBot && !hasLegacyWechat;
 }
 
 export function loadConfig(): Config {
@@ -130,6 +135,7 @@ export function loadConfig(): Config {
   const fileQQ = file.platforms?.qq;
   const fileWework = file.platforms?.wework;
   const fileDingtalk = file.platforms?.dingtalk;
+  const fileClawbot = file.platforms?.clawbot;
   // Auto-migrate legacy platforms.wechat WorkBuddy credentials → platforms.workbuddy
   const legacyWechat = (file.platforms as Record<string, unknown>)?.wechat as FilePlatformWechat | undefined;
   const fileWorkBuddy = file.platforms?.workbuddy ?? (
@@ -205,6 +211,14 @@ export function loadConfig(): Config {
     process.env.WORKBUDDY_WORKSPACE_PATH ??
     fileWorkBuddy?.workspacePath;
 
+  // ClawBot credentials
+  const clawbotApiUrl =
+    process.env.CLAWBOT_API_URL ??
+    fileClawbot?.apiUrl;
+  const clawbotApiToken =
+    process.env.CLAWBOT_API_TOKEN ??
+    fileClawbot?.apiToken;
+
   // 2. 计算启用平台
   const enabledPlatforms: Platform[] = [];
 
@@ -214,6 +228,7 @@ export function loadConfig(): Config {
   const weworkEnabledFlag = fileWework?.enabled;
   const dingtalkEnabledFlag = fileDingtalk?.enabled;
   const workbuddyEnabledFlag = fileWorkBuddy?.enabled;
+  const clawbotEnabledFlag = fileClawbot?.enabled;
 
   const telegramEnabled =
     !!telegramBotToken && (telegramEnabledFlag !== false);
@@ -227,6 +242,8 @@ export function loadConfig(): Config {
     !!(dingtalkClientId && dingtalkClientSecret) && (dingtalkEnabledFlag !== false);
   const workbuddyEnabled =
     !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId) && (workbuddyEnabledFlag !== false);
+  const clawbotEnabled =
+    !!clawbotApiToken && (clawbotEnabledFlag !== false);
 
   if (telegramEnabled) enabledPlatforms.push('telegram');
   if (feishuEnabled) enabledPlatforms.push('feishu');
@@ -234,6 +251,7 @@ export function loadConfig(): Config {
   if (weworkEnabled) enabledPlatforms.push('wework');
   if (dingtalkEnabled) enabledPlatforms.push('dingtalk');
   if (workbuddyEnabled) enabledPlatforms.push('workbuddy');
+  if (clawbotEnabled) enabledPlatforms.push('clawbot');
 
   if (enabledPlatforms.length === 0) {
     throw new Error('至少需要配置 Telegram、Feishu、WeChat、WeWork 或 DingTalk 其中一个平台（可以通过环境变量或 config.json）');
@@ -275,6 +293,11 @@ export function loadConfig(): Config {
     process.env.WORKBUDDY_ALLOWED_USER_IDS !== undefined
       ? parseCommaSeparated(process.env.WORKBUDDY_ALLOWED_USER_IDS)
       : fileWorkBuddy?.allowedUserIds ?? allowedUserIds;
+
+  const clawbotAllowedUserIds =
+    process.env.CLAWBOT_ALLOWED_USER_IDS !== undefined
+      ? parseCommaSeparated(process.env.CLAWBOT_ALLOWED_USER_IDS)
+      : fileClawbot?.allowedUserIds ?? allowedUserIds;
 
   // 5. AI / 工作目录 / 安全配置（从 tools 读取）
   const tc = file.tools?.claude ?? {};
@@ -614,6 +637,21 @@ export function loadConfig(): Config {
           guid: workbuddyGuid,
           workspacePath: workbuddyWorkspacePath,
         },
+    clawbot: clawbotEnabled
+      ? {
+          enabled: true,
+          aiCommand: resolveFilePlatformAi(file, 'clawbot'),
+          allowedUserIds: clawbotAllowedUserIds,
+          apiUrl: clawbotApiUrl,
+          apiToken: clawbotApiToken,
+        }
+      : {
+          enabled: false,
+          aiCommand: resolveFilePlatformAi(file, 'clawbot'),
+          allowedUserIds: clawbotAllowedUserIds,
+          apiUrl: clawbotApiUrl,
+          apiToken: clawbotApiToken,
+        },
   };
 
   return {
@@ -636,6 +674,7 @@ export function loadConfig(): Config {
     weworkAllowedUserIds,
     dingtalkAllowedUserIds,
     workbuddyAllowedUserIds,
+    clawbotAllowedUserIds,
     codexCliPath,
     codebuddyCliPath,
     claudeProxy,
@@ -665,6 +704,8 @@ export function getPlatformsWithCredentials(config: Config): Platform[] {
   if (config.dingtalkClientId && config.dingtalkClientSecret) r.push('dingtalk');
   const wb = config.platforms.workbuddy;
   if (wb?.accessToken && wb?.refreshToken) r.push('workbuddy');
+  const cb = config.platforms.clawbot;
+  if (cb?.apiToken) r.push('clawbot');
   return r;
 }
 

@@ -205,6 +205,7 @@ interface WebConfigPayload {
     wework: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; corpId: string; secret: string; allowedUserIds: string };
     dingtalk: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
     workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
+    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; apiUrl: string; apiToken: string; allowedUserIds: string };
   };
   ai: {
     claudeWorkDir: string;
@@ -232,6 +233,7 @@ export function getHealthPlatformSnapshot(
   const fileWework = file.platforms?.wework;
   const fileDingtalk = file.platforms?.dingtalk;
   const fileWorkbuddy = file.platforms?.workbuddy;
+  const fileClawbot = file.platforms?.clawbot;
   const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? fileTelegram?.botToken ?? file.telegramBotToken;
   const feishuAppId = env.FEISHU_APP_ID ?? fileFeishu?.appId ?? file.feishuAppId;
   const feishuAppSecret = env.FEISHU_APP_SECRET ?? fileFeishu?.appSecret ?? file.feishuAppSecret;
@@ -281,6 +283,12 @@ export function getHealthPlatformSnapshot(
       enabled: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId) && fileWorkbuddy?.enabled !== false,
       healthy: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId),
       message: workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId ? "OAuth credentials configured" : "Missing credentials",
+    },
+    clawbot: {
+      configured: !!fileClawbot?.apiToken,
+      enabled: !!fileClawbot?.apiToken && fileClawbot?.enabled !== false,
+      healthy: !!fileClawbot?.apiToken,
+      message: fileClawbot?.apiToken ? "API Token configured" : "Missing API Token",
     },
   };
 }
@@ -400,6 +408,13 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
         baseUrl: file.platforms?.workbuddy?.baseUrl ?? "",
         allowedUserIds: (file.platforms?.workbuddy?.allowedUserIds ?? []).join(", "),
       },
+      clawbot: {
+        enabled: file.platforms?.clawbot?.enabled ?? Boolean(file.platforms?.clawbot?.apiToken),
+        aiCommand: normalizeAiCommand(file.platforms?.clawbot?.aiCommand, "claude"),
+        apiUrl: file.platforms?.clawbot?.apiUrl ?? "http://127.0.0.1:26322",
+        apiToken: maskSecret(file.platforms?.clawbot?.apiToken),
+        allowedUserIds: (file.platforms?.clawbot?.allowedUserIds ?? []).join(", "),
+      },
     },
     ai: {
       claudeWorkDir: file.tools?.claude?.workDir ?? process.cwd(),
@@ -448,6 +463,7 @@ function validatePayload(payload: WebConfigPayload): string[] {
   if (payload.platforms.workbuddy.enabled && !clean(payload.platforms.workbuddy.accessToken)) errors.push("WorkBuddy access token is required.");
   if (payload.platforms.workbuddy.enabled && !clean(payload.platforms.workbuddy.refreshToken)) errors.push("WorkBuddy refresh token is required.");
   if (payload.platforms.workbuddy.enabled && !clean(payload.platforms.workbuddy.userId)) errors.push("WorkBuddy user ID is required.");
+  if (payload.platforms.clawbot.enabled && !clean(payload.platforms.clawbot.apiToken)) errors.push("ClawBot API token is required.");
   if (!clean(payload.ai.claudeWorkDir)) errors.push("Default work directory is required.");
   return errors;
 }
@@ -514,6 +530,12 @@ function validateConfigForPlatform(platform: string, config: Record<string, unkn
       }
       break;
 
+    case "clawbot":
+      if (!c.apiToken || typeof c.apiToken !== "string" || !clean(c.apiToken)) {
+        errors.push("ClawBot API token is required and must be a non-empty string.");
+      }
+      break;
+
     default:
       errors.push(`Unknown platform: ${platform}`);
   }
@@ -546,6 +568,7 @@ function createProbeConfig(values: Partial<Config>): Config {
     weworkAllowedUserIds: [],
     dingtalkAllowedUserIds: [],
     workbuddyAllowedUserIds: [],
+    clawbotAllowedUserIds: [],
     codexCliPath: "codex",
     claudeWorkDir: process.cwd(),
     claudeSessionIdleTtlMinutes: 30,
@@ -688,6 +711,23 @@ async function probeWorkBuddy(config: Record<string, unknown>): Promise<string> 
   return "WorkBuddy credentials are valid.";
 }
 
+async function probeClawBot(config: Record<string, unknown>): Promise<string> {
+  const apiUrl = clean(String(config.apiUrl ?? "http://127.0.0.1:26322"));
+  const apiToken = clean(String(config.apiToken ?? ""));
+  if (!apiToken) throw new Error("ClawBot API token is required.");
+
+  const response = await fetch(`${apiUrl}/ilink/bot/getupdates?timeout=1`, {
+    headers: { Authorization: `Bearer ${apiToken}` },
+    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+  });
+  const body = await readJsonResponse(response);
+  if (!response.ok || body.ok !== true) {
+    throw new Error(String(body.error ?? body.description ?? `HTTP ${response.status}`));
+  }
+
+  return "ClawBot API reachable.";
+}
+
 export async function testPlatformConfig(platform: string, config: Record<string, unknown>): Promise<string> {
   const errors = validateConfigForPlatform(platform, config);
   if (errors.length > 0) {
@@ -707,6 +747,8 @@ export async function testPlatformConfig(platform: string, config: Record<string
       return probeDingTalk(config);
     case "workbuddy":
       return probeWorkBuddy(config);
+    case "clawbot":
+      return probeClawBot(config);
     default:
       throw new Error(`Unknown platform: ${platform}`);
   }
@@ -802,6 +844,14 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
         userId: clean(payload.platforms.workbuddy.userId),
         baseUrl: clean(payload.platforms.workbuddy.baseUrl),
         allowedUserIds: splitCsv(payload.platforms.workbuddy.allowedUserIds),
+      },
+      clawbot: {
+        ...existing.platforms?.clawbot,
+        enabled: payload.platforms.clawbot.enabled,
+        aiCommand: persistedPlatformAi(payload.platforms.clawbot.aiCommand),
+        apiUrl: clean(payload.platforms.clawbot.apiUrl) ?? "http://127.0.0.1:26322",
+        apiToken: resolveSecret(payload.platforms.clawbot.apiToken, existing.platforms?.clawbot?.apiToken),
+        allowedUserIds: splitCsv(payload.platforms.clawbot.allowedUserIds),
       },
     },
   };
@@ -1177,6 +1227,30 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           json(response, 200, { message, success: true }, request);
         } catch (error) {
           json(response, 400, { error: toErrorMessage(error), success: false }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/clawbot/qr-login/start") {
+        try {
+          const { startQRLogin } = await import("./clawbot/qr-login.js");
+          const session = await startQRLogin();
+          json(response, 200, { success: true, qrcodeUrl: session.qrcodeUrl, sessionKey: session.sessionKey }, request);
+        } catch (error) {
+          json(response, 500, { success: false, error: toErrorMessage(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/clawbot/qr-login/wait") {
+        try {
+          const body = await readJson<{ sessionKey: string; qrcode: string; qrcodeUrl: string }>(request);
+          const { waitForQRLogin } = await import("./clawbot/qr-login.js");
+          const session = { sessionKey: body.sessionKey, qrcode: body.qrcode, qrcodeUrl: body.qrcodeUrl, startedAt: Date.now() };
+          const result = await waitForQRLogin(session);
+          json(response, 200, { success: result.connected, botToken: result.botToken, userId: result.userId, message: result.message }, request);
+        } catch (error) {
+          json(response, 500, { success: false, error: toErrorMessage(error) }, request);
         }
         return;
       }

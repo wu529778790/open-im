@@ -25,6 +25,7 @@ interface Data {
   wechat?: string;
   wework?: string;
   workbuddy?: string;
+  clawbot?: string;
 }
 
 let data: Data = {};
@@ -70,11 +71,11 @@ export function loadActiveChats(): void {
   }
 }
 
-export function getActiveChatId(platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wechat' | 'wework' | 'workbuddy'): string | undefined {
+export function getActiveChatId(platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wechat' | 'wework' | 'workbuddy' | 'clawbot'): string | undefined {
   return data[platform];
 }
 
-export function setActiveChatId(platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wechat' | 'wework' | 'workbuddy', chatId: string): void {
+export function setActiveChatId(platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wechat' | 'wework' | 'workbuddy' | 'clawbot', chatId: string): void {
   if (data[platform] === chatId) return;
   data[platform] = chatId;
   scheduleSave();

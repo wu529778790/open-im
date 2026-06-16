@@ -16,6 +16,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   wework: "企业微信",
   dingtalk: "钉钉",
   workbuddy: "WorkBuddy",
+  clawbot: "ClawBot",
 };
 
 export const CHANNEL_CAPABILITIES: Record<Platform, ChannelCapabilities> = {
@@ -40,6 +41,10 @@ export const CHANNEL_CAPABILITIES: Record<Platform, ChannelCapabilities> = {
     outbound: { streamEdit: "native", streamPush: "fallback", image: "fallback", card: "native", typing: "native" },
   },
   workbuddy: {
+    inbound: { text: "native", image: "none", file: "none", voice: "none", video: "none" },
+    outbound: { streamEdit: "none", streamPush: "none", image: "none", card: "none", typing: "none" },
+  },
+  clawbot: {
     inbound: { text: "native", image: "none", file: "none", voice: "none", video: "none" },
     outbound: { streamEdit: "none", streamPush: "none", image: "none", card: "none", typing: "none" },
   },

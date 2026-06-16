@@ -29,6 +29,7 @@ interface ExistingConfig {
     };
     wework?: { enabled?: boolean; aiCommand?: string; corpId?: string; secret?: string; allowedUserIds?: string[] };
     dingtalk?: { enabled?: boolean; aiCommand?: string; clientId?: string; clientSecret?: string; allowedUserIds?: string[]; cardTemplateId?: string };
+    clawbot?: { enabled?: boolean; aiCommand?: string; apiUrl?: string; apiToken?: string; allowedUserIds?: string[] };
   };
   aiCommand?: string;
   tools?: {
@@ -57,6 +58,7 @@ function getConfiguredPlatforms(existing: ExistingConfig | null): string[] {
     { k: "wework", label: "企业微信" },
     { k: "dingtalk", label: "钉钉" },
     { k: "workbuddy", label: "WorkBuddy (微信)" },
+    { k: "clawbot", label: "ClawBot (微信 iLink)" },
   ];
   return names
     .filter(({ k }) => {
@@ -68,6 +70,7 @@ function getConfiguredPlatforms(existing: ExistingConfig | null): string[] {
       if (k === "workbuddy") return !!(p.accessToken && p.refreshToken);
       if (k === "wework") return !!(p.corpId && p.secret);
       if (k === "dingtalk") return !!(p.clientId && p.clientSecret);
+      if (k === "clawbot") return !!p.apiToken;
       return false;
     })
     .map(({ label }) => label);
@@ -147,13 +150,20 @@ function printManualInstructions(configPath: string): void {
       "workbuddyRefreshToken": "",
       "userId": "",
       "allowedUserIds": ["允许访问的微信用户 ID（可选）"]
+    },
+    "clawbot": {
+      "enabled": false,
+      "aiCommand": "claude",
+      "apiUrl": "http://127.0.0.1:26322",
+      "apiToken": "你的 ClawBot Bearer Token（可选）",
+      "allowedUserIds": ["允许访问的微信用户 ID（可选）"]
     }
   }
 }`);
   console.log("");
-  console.log("提示：至少需要配置 Telegram、Feishu、QQ、WeChat、WeWork 或 DingTalk 其中一个平台");
+  console.log("提示：至少需要配置 Telegram、Feishu、QQ、WeChat、WeWork、DingTalk 或 ClawBot 其中一个平台");
   console.log(
-    "或设置环境变量: TELEGRAM_BOT_TOKEN=xxx、FEISHU_APP_ID=xxx、QQ_BOT_APPID=xxx、WECHAT_WORKBUDDY_ACCESS_TOKEN=xxx、WEWORK_CORP_ID=xxx 或 DINGTALK_CLIENT_ID=xxx 后再运行",
+    "或设置环境变量: TELEGRAM_BOT_TOKEN=xxx、FEISHU_APP_ID=xxx、QQ_BOT_APPID=xxx、WECHAT_WORKBUDDY_ACCESS_TOKEN=xxx、WEWORK_CORP_ID=xxx、DINGTALK_CLIENT_ID=xxx 或 CLAWBOT_API_TOKEN=xxx 后再运行",
   );
   console.log("");
 }
@@ -368,6 +378,12 @@ export async function runInteractiveSetup(): Promise<boolean> {
             (hasWc ? " ✓已配置" : ""),
           value: "workbuddy",
         },
+        {
+          title:
+            "ClawBot 微信 iLink (需要 API Token)" +
+            (!!existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""),
+          value: "clawbot",
+        },
         { title: "配置多个平台", value: "multi" },
       ],
       initial: 0,
@@ -396,6 +412,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
           { title: "企业微信 (WeWork)" + (hasWw ? " ✓已配置" : ""), value: "wework", selected: hasWw },
           { title: "钉钉 (DingTalk)" + (hasDt ? " ✓已配置" : ""), value: "dingtalk", selected: hasDt },
           { title: "WorkBuddy 微信客服 (WeChat KF)" + (hasWc ? " ✓已配置" : ""), value: "workbuddy", selected: hasWc },
+          { title: "ClawBot 微信 iLink" + (!!existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""), value: "clawbot" },
         ],
       },
       { onCancel },
@@ -642,6 +659,89 @@ export async function runInteractiveSetup(): Promise<boolean> {
     }
   }
 
+  if (selectedPlatforms.includes("clawbot")) {
+    const hasCbToken = !!existing?.platforms?.clawbot?.apiToken;
+
+    const cbModeResp = await prompts(
+      {
+        type: "select",
+        name: "mode",
+        message: "ClawBot 微信 iLink",
+        choices: [
+          { title: "扫码登录（自动获取 Token）", value: "qr" },
+          { title: "使用已有 Token" + (hasCbToken ? " ✓" : ""), value: "token", disabled: !hasCbToken },
+        ],
+        initial: 0,
+      },
+      { onCancel },
+    );
+
+    let cbApiToken = "";
+    let cbApiUrl = existing?.platforms?.clawbot?.apiUrl ?? "http://127.0.0.1:26322";
+
+    if (cbModeResp.mode === "qr") {
+      console.log("\n正在获取二维码...\n");
+      try {
+        const { startQRLogin, waitForQRLogin } = await import("./clawbot/qr-login.js");
+        const session = await startQRLogin();
+
+        console.log("请用微信扫描以下链接中的二维码：");
+        console.log(session.qrcodeUrl);
+        console.log("\n等待扫码...（最长 5 分钟）\n");
+
+        const result = await waitForQRLogin(session, (status) => {
+          if (status === "scaned") process.stdout.write("已扫码，验证中...\n");
+        });
+
+        if (result.connected && result.botToken) {
+          cbApiToken = result.botToken;
+          console.log("\n✅ 登录成功！");
+          if (result.userId) {
+            console.log(`   用户 ID: ${result.userId}`);
+            console.log("   提示：可将此 ID 添加到白名单");
+          }
+        } else {
+          console.log(`\n❌ 登录失败: ${result.message}`);
+          if (platform === "clawbot") return false;
+        }
+      } catch (err) {
+        console.error(`\n❌ 二维码获取失败: ${err instanceof Error ? err.message : String(err)}`);
+        if (platform === "clawbot") return false;
+      }
+    } else {
+      const cbResp = await prompts(
+        [
+          {
+            type: "text",
+            name: "apiUrl",
+            message: "ClawBot iLink API 地址（默认 http://127.0.0.1:26322）",
+            initial: cbApiUrl,
+          },
+          {
+            type: "text",
+            name: "apiToken",
+            message: "ClawBot Bearer Token",
+            initial: existing?.platforms?.clawbot?.apiToken ?? "",
+            validate: (v: string) => (v.trim() ? true : "Token 不能为空"),
+          },
+        ],
+        { onCancel },
+      );
+      cbApiUrl = cbResp.apiUrl?.trim() || cbApiUrl;
+      cbApiToken = cbResp.apiToken?.trim() || "";
+    }
+
+    if (cbApiToken) {
+      (config.platforms as Record<string, unknown>).clawbot = {
+        enabled: true,
+        apiUrl: cbApiUrl,
+        apiToken: cbApiToken,
+      };
+    } else if (platform === "clawbot") {
+      return false;
+    }
+  }
+
   if (selectedPlatforms.includes("wework")) {
     const weworkResp = await prompts(
       [
@@ -774,6 +874,15 @@ export async function runInteractiveSetup(): Promise<boolean> {
       initial: dtIds,
     });
   }
+  if (selectedPlatforms.includes("clawbot")) {
+    const cbIds = existing?.platforms?.clawbot?.allowedUserIds?.join(", ") ?? "";
+    commonPrompts.push({
+      type: "text",
+      name: "clawbotAllowedUserIds",
+      message: "ClawBot 白名单用户 ID（可选，逗号分隔，留空=所有人可访问）",
+      initial: cbIds,
+    });
+  }
   commonPrompts.push(
     {
       type: "text",
@@ -904,6 +1013,9 @@ export async function runInteractiveSetup(): Promise<boolean> {
   const dingtalkIds = selectedPlatforms.includes("dingtalk")
     ? parseIds(commonResp.dingtalkAllowedUserIds)
     : parseIds(existing?.platforms?.dingtalk?.allowedUserIds?.join(", "));
+  const clawbotIds = selectedPlatforms.includes("clawbot")
+    ? parseIds(commonResp.clawbotAllowedUserIds)
+    : parseIds(existing?.platforms?.clawbot?.allowedUserIds?.join(", "));
 
   // 增量合并：以已有配置为底，只覆盖本次选中的平台（不写入根级旧字段 telegramBotToken 等）
   const base = existing
@@ -1096,6 +1208,26 @@ export async function runInteractiveSetup(): Promise<boolean> {
     outPlatforms.dingtalk = { enabled: false, aiCommand: "claude", allowedUserIds: dingtalkIds };
   }
 
+  if (selectedPlatforms.includes("clawbot")) {
+    const cbConfig = (config.platforms as Record<string, unknown>)?.clawbot as Record<string, unknown> | undefined;
+    const baseCb = base?.platforms?.clawbot as Record<string, unknown> | undefined;
+    outPlatforms.clawbot = {
+      enabled: true,
+      aiCommand: defaultPlatformAi(baseCb?.aiCommand),
+      apiUrl: String(cbConfig?.apiUrl ?? baseCb?.apiUrl ?? "http://127.0.0.1:26322"),
+      apiToken: String(cbConfig?.apiToken ?? baseCb?.apiToken ?? ""),
+      allowedUserIds: clawbotIds,
+    };
+  } else if (basePlatforms?.clawbot) {
+    outPlatforms.clawbot = {
+      ...basePlatforms.clawbot,
+      aiCommand: defaultPlatformAi(basePlatforms.clawbot.aiCommand),
+      allowedUserIds: clawbotIds.length > 0 ? clawbotIds : basePlatforms.clawbot.allowedUserIds ?? [],
+    };
+  } else {
+    outPlatforms.clawbot = { enabled: false, aiCommand: "claude", allowedUserIds: clawbotIds };
+  }
+
   const dir = dirname(configPath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
@@ -1115,9 +1247,10 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   wework: "企业微信",
   dingtalk: "钉钉",
   workbuddy: "WorkBuddy 微信客服",
+  clawbot: "ClawBot 微信 iLink",
 };
 
-const ALL_PLATFORMS: Platform[] = ["telegram", "feishu", "qq", "wework", "dingtalk", "workbuddy"];
+const ALL_PLATFORMS: Platform[] = ["telegram", "feishu", "qq", "wework", "dingtalk", "workbuddy", "clawbot"];
 
 /**
  * 启动时让用户选择要启用的平台（无论单通道还是多通道）
