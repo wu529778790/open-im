@@ -74,6 +74,7 @@ describe('ClaudeSDKAdapter', () => {
         send: vi.fn(async () => {}),
         close: vi.fn(),
         stream: async function* () {
+          yield null;
           throw new Error('Claude Code process exited with code 1');
         },
       } as never;

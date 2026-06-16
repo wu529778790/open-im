@@ -209,7 +209,7 @@ export function setupDingTalkHandlers(
     sessionManager,
     sender: { sendTextReply, sendDirectorySelection },
   });
-  const { accessControl, requestQueue, runningTasks, commandHandler } = ctx;
+  const { accessControl, requestQueue, runningTasks } = ctx;
 
   // DingTalk-specific sender callbacks for the factory
   const dingtalkSender: PlatformSender = {
