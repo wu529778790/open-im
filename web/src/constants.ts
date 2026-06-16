@@ -16,6 +16,7 @@ export const PLATFORM_KEYS: PlatformKey[] = [
   "wework",
   "dingtalk",
   "workbuddy",
+  "clawbot",
 ];
 
 export const PLATFORM_DEFINITIONS = [
@@ -66,5 +67,13 @@ export const PLATFORM_DEFINITIONS = [
     testFields: ["accessToken", "refreshToken", "userId"] as const,
     requiredFields: ["accessToken", "refreshToken", "userId"] as const,
     sensitiveFields: ["accessToken", "refreshToken"] as const,
+  },
+  {
+    key: "clawbot" as const,
+    label: "ClawBot",
+    fields: ["aiCommand", "apiUrl", "apiToken", "allowedUserIds"] as const,
+    testFields: ["apiUrl", "apiToken"] as const,
+    requiredFields: ["apiToken"] as const,
+    sensitiveFields: ["apiToken"] as const,
   },
 ];

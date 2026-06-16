@@ -44,6 +44,12 @@ export const PLATFORM_FIELD_LABEL: Record<
     baseUrl: "workbuddyBaseUrl",
     allowedUserIds: "allowedUserIds",
   },
+  clawbot: {
+    aiCommand: "platformAiTool",
+    apiUrl: "clawbotApiUrl",
+    apiToken: "clawbotApiToken",
+    allowedUserIds: "allowedUserIds",
+  },
 };
 
 export const PLATFORM_SUMMARY_KEY: Record<PlatformKey, string> = {
@@ -53,6 +59,7 @@ export const PLATFORM_SUMMARY_KEY: Record<PlatformKey, string> = {
   wework: "weworkSummary",
   dingtalk: "dingtalkSummary",
   workbuddy: "workbuddySummary",
+  clawbot: "clawbotSummary",
 };
 
 export const PLATFORM_HELP_KEY: Record<PlatformKey, string> = {
@@ -62,6 +69,7 @@ export const PLATFORM_HELP_KEY: Record<PlatformKey, string> = {
   wework: "weworkHelp",
   dingtalk: "dingtalkHelp",
   workbuddy: "workbuddyHelp",
+  clawbot: "clawbotHelp",
 };
 
 export const INLINE_TIP_KEY: Partial<Record<`${PlatformKey}-${string}`, string>> = {
@@ -73,4 +81,5 @@ export const INLINE_TIP_KEY: Partial<Record<`${PlatformKey}-${string}`, string>>
   "wework-corpId": "tipWeworkCorp",
   "dingtalk-clientId": "tipDingtalkClient",
   "workbuddy-accessToken": "tipWorkbuddyToken",
+  "clawbot-apiToken": "tipClawbotApiToken",
 };

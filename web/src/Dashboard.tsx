@@ -81,6 +81,13 @@ function emptyPayload(): WebConfigPayload {
         baseUrl: "",
         allowedUserIds: "",
       },
+      clawbot: {
+        enabled: false,
+        aiCommand: "claude",
+        apiUrl: "http://127.0.0.1:26322",
+        apiToken: "",
+        allowedUserIds: "",
+      },
     },
     ai: {
       claudeWorkDir: "",
@@ -109,6 +116,7 @@ function coercePayload(raw: WebConfigPayload): WebConfigPayload {
       wework: mergePlatform("wework"),
       dingtalk: mergePlatform("dingtalk"),
       workbuddy: mergePlatform("workbuddy"),
+      clawbot: mergePlatform("clawbot"),
     },
     ai: {
       ...base.ai,

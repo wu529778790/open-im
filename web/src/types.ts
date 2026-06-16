@@ -1,6 +1,6 @@
 export type AiCommand = "" | "claude" | "codex" | "codebuddy";
 
-export type PlatformKey = "telegram" | "feishu" | "qq" | "wework" | "dingtalk" | "workbuddy";
+export type PlatformKey = "telegram" | "feishu" | "qq" | "wework" | "dingtalk" | "workbuddy" | "clawbot";
 
 export interface WebConfigPayload {
   platforms: {
@@ -47,6 +47,13 @@ export interface WebConfigPayload {
       refreshToken: string;
       userId: string;
       baseUrl: string;
+      allowedUserIds: string;
+    };
+    clawbot: {
+      enabled: boolean;
+      aiCommand: AiCommand;
+      apiUrl: string;
+      apiToken: string;
       allowedUserIds: string;
     };
   };
