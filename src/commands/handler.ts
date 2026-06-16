@@ -4,6 +4,7 @@ import type { RequestQueue } from '../queue/request-queue.js';
 import { escapePathForMarkdown } from '../shared/utils.js';
 import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
+import { markSkipAutoResume } from '../adapters/claude-sdk-adapter.js';
 
 const log = createLogger('Commands');
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -182,6 +183,8 @@ export class CommandHandler {
 
   private async handleNew(chatId: string, userId: string): Promise<boolean> {
     this.deps.requestQueue.cancelUser(userId);
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    markSkipAutoResume(workDir);
     const ok = this.deps.sessionManager.newSession(userId);
     await this.replySender().sendTextReply(
       chatId,

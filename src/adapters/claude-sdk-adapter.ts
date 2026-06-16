@@ -110,6 +110,15 @@ function isCliSessionActive(sessionId: string, sessionFilePath?: string): boolea
   }
 }
 
+/**
+ * 标记某个 workDir 下的用户显式执行了 /new，下次创建会话时跳过 auto-resume。
+ * 由命令处理器在 /new 时调用。
+ */
+export function markSkipAutoResume(workDir: string): void {
+  skipAutoResumeFor.add(workDir);
+  log.info(`Marked skip auto-resume for workDir: ${workDir}`);
+}
+
 interface ClaudeSessionMeta {
   sessionId: string;
   mtime: number;
@@ -195,6 +204,10 @@ function validateSessionFile(filePath: string, expectedSessionId: string): boole
 // 存储所有活跃的 SDKSession 对象，key 为 sessionId
 // 使用 Map 而不是 Set，因为我们需要通过 sessionId 获取 session
 const activeSessions = new Map<string, SDKSession>();
+
+// 用户显式执行 /new 后标记跳过 auto-resume，避免立即接回旧 CLI session
+// key 格式: `${workDir}\0${sessionIdPrefix}`（用 workDir 区分不同项目目录）
+const skipAutoResumeFor = new Set<string>();
 
 // 记录每个 session 创建/恢复时的 workDir，防止跨 workDir 复用已固定 cwd 的子进程
 const sessionWorkDirs = new Map<string, string>();
@@ -413,6 +426,11 @@ async function getOrCreateSession(
       // 没有指定 sessionId 时，尝试自动恢复 Claude Code CLI 的最新 session
       // 实现手机/电脑无缝切换：同目录下默认共享同一个对话
       if (!sessionId) {
+        // 用户显式 /new 后跳过 auto-resume，创建真正的新会话
+        if (skipAutoResumeFor.has(workDir)) {
+          skipAutoResumeFor.delete(workDir);
+          log.info(`Skipping auto-resume for workDir ${workDir} (user explicit /new)`);
+        } else {
         const latest = findLatestClaudeSession(workDir);
         if (latest) {
           // 安全检查：如果 CLI 正在使用该 session，不能接管
@@ -436,6 +454,7 @@ async function getOrCreateSession(
               log.warn(`Session file validation failed for ${latest.sessionId}, skipping`);
             }
           }
+        }
         }
       }
 
