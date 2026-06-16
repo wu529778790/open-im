@@ -66,6 +66,27 @@ npx @wu529778790/open-im start
 
 会话状态保存在 **`~/.open-im/data/sessions.json`**（按用户，与 IM 聊天记录无关）。
 
+## 会话接力
+
+open-im 和 Claude Code CLI 共享同一份 session 存储。在同一个目录下，手机和电脑可以无缝切换。
+
+**手机接电脑：** open-im 自动恢复同目录下最新的 CLI session，无需配置。
+
+**电脑接手机：** 使用 `claude --continue`（或 `claude -c`）接上 open-im 端的对话。
+
+```bash
+# 电脑端
+cd /my-project && claude        # 正常工作，退出时 Ctrl+C
+
+# 手机端（IM 消息）
+"帮我修复登录 bug"              # open-im 自动接续同一个 session
+
+# 回到电脑端
+claude -c                       # 接上手机端的对话
+```
+
+> **注意：** 同一时刻只能有一端活跃。从手机发消息前先退出 CLI，反之亦然。
+
 ## 配置说明
 
 ### 按平台指定 AI

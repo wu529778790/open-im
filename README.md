@@ -66,6 +66,27 @@ After `start`, the CLI prints the dashboard URL (default **`http://127.0.0.1:392
 
 Session state is stored in **`~/.open-im/data/sessions.json`** (per user, not IM chat logs).
 
+## Session continuity
+
+open-im and Claude Code CLI share the same session storage. When you work in the same directory, you can seamlessly switch between phone and computer.
+
+**Phone → Computer:** open-im automatically resumes the latest CLI session in the same directory — no configuration needed.
+
+**Computer → Phone:** use `claude --continue` (or `claude -c`) to pick up the conversation that was continued on open-im.
+
+```
+# On computer
+cd /my-project && claude        # work as usual, then Ctrl+C
+
+# On phone (via IM)
+"help me fix the login bug"     # open-im auto-resumes the same session
+
+# Back on computer
+claude -c                       # continues the phone conversation
+```
+
+> **Note:** only one side can be active at a time. Exit the CLI before sending messages from the phone, and vice versa.
+
 ## Configuration
 
 ### Per-platform AI

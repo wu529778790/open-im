@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync, mkdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,7 +20,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 }));
 
 // Import after mocks are set up
-import { ClaudeSDKAdapter } from './claude-sdk-adapter.js';
+import { ClaudeSDKAdapter, findLatestClaudeSession } from './claude-sdk-adapter.js';
 import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
 
 describe('ClaudeSDKAdapter', () => {
@@ -146,5 +146,98 @@ describe('ClaudeSDKAdapter', () => {
       try { rmSync(dirA, { recursive: true, force: true }); } catch { /* ignore */ }
       try { rmSync(dirB, { recursive: true, force: true }); } catch { /* ignore */ }
     }
+  });
+
+  describe('findLatestClaudeSession (unit)', () => {
+    let tempHome: string;
+    let projectDir: string;
+
+    beforeEach(() => {
+      tempHome = mkdtempSync(join(tmpdir(), 'open-im-test-home-'));
+      projectDir = join(tempHome, '.claude', 'projects', '-test-project');
+      mkdirSync(projectDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      try { rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
+    });
+
+    function createSessionFile(sessionId: string, options?: { mtime?: number; content?: string }) {
+      const filePath = join(projectDir, `${sessionId}.jsonl`);
+      const content = options?.content ?? JSON.stringify({
+        type: 'mode',
+        mode: 'normal',
+        sessionId,
+      }) + '\n';
+      writeFileSync(filePath, content);
+      if (options?.mtime) {
+        const ts = options.mtime / 1000;
+        utimesSync(filePath, ts, ts);
+      }
+      return filePath;
+    }
+
+    it('returns the latest session by modification time', () => {
+      const sessionA = '11111111-1111-1111-1111-111111111111';
+      const sessionB = '22222222-2222-2222-2222-222222222222';
+
+      createSessionFile(sessionA, { mtime: 1000 });
+      createSessionFile(sessionB, { mtime: 2000 });
+
+      const result = findLatestClaudeSession('/test/project', tempHome);
+
+      expect(result).toBeDefined();
+      expect(result!.sessionId).toBe(sessionB);
+    });
+
+    it('returns undefined when no sessions exist', () => {
+      const result = findLatestClaudeSession('/test/empty', tempHome);
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when project dir does not exist', () => {
+      const result = findLatestClaudeSession('/nonexistent/path', tempHome);
+      expect(result).toBeUndefined();
+    });
+
+    it('ignores non-UUID files and subdirectories', () => {
+      const sessionId = '33333333-3333-3333-3333-333333333333';
+      createSessionFile(sessionId, { mtime: 1000 });
+
+      // 创建非 UUID 文件
+      writeFileSync(join(projectDir, 'not-a-session.jsonl'), '{}');
+      // 创建子目录
+      mkdirSync(join(projectDir, 'subagents'), { recursive: true });
+
+      const result = findLatestClaudeSession('/test/project', tempHome);
+
+      expect(result).toBeDefined();
+      expect(result!.sessionId).toBe(sessionId);
+    });
+
+    it('ignores empty session files', () => {
+      const sessionA = '44444444-4444-4444-4444-444444444444';
+      const sessionB = '55555555-5555-5555-5555-555555555555';
+
+      // A 为空文件
+      writeFileSync(join(projectDir, `${sessionA}.jsonl`), '');
+      // B 有内容且更新
+      createSessionFile(sessionB, { mtime: 2000 });
+
+      const result = findLatestClaudeSession('/test/project', tempHome);
+
+      expect(result).toBeDefined();
+      expect(result!.sessionId).toBe(sessionB);
+    });
+
+    it('handles a single session file', () => {
+      const sessionId = '66666666-6666-6666-6666-666666666666';
+      createSessionFile(sessionId);
+
+      const result = findLatestClaudeSession('/test/project', tempHome);
+
+      expect(result).toBeDefined();
+      expect(result!.sessionId).toBe(sessionId);
+    });
   });
 });

@@ -11,7 +11,8 @@
 
 import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, SDKSession } from '@anthropic-ai/claude-agent-sdk';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { execSync } from 'child_process';
 import { homedir } from 'os';
 import { join } from 'path';
 import { createLogger } from '../logger.js';
@@ -53,6 +54,106 @@ function loadUserPluginSettings(): UserPluginSettings | null {
 
 // Pre-load user plugin settings to cache Claude Code user preferences
 loadUserPluginSettings();
+
+// ── 扫描 Claude Code CLI 的最新 session，支持手机/电脑无缝切换 ──
+
+/**
+ * 将 workDir（如 /Users/mac/github/open-im）转换为 Claude Code 的项目路径编码
+ * ~/.claude/projects/-Users-mac-github-open-im/
+ */
+function workDirToProjectPath(workDir: string): string {
+  // Claude Code 使用路径中的 / 替换为 -，去掉开头的 -
+  // /Users/mac/github/open-im → -Users-mac-github-open-im
+  return workDir.replace(/\//g, '-');
+}
+
+/**
+ * 检查 CLI 进程是否正在使用某个 session（通过 /proc 或 ps 检测）
+ */
+function isCliSessionActive(sessionId: string): boolean {
+  try {
+    // macOS: 用 ps 搜索包含该 sessionId 的 claude 进程
+    const result = execSync(
+      `ps -axo pid,command 2>/dev/null | grep -v grep | grep "claude" | grep "${sessionId}" || true`,
+      { encoding: 'utf-8', timeout: 3000 }
+    );
+    return result.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+interface ClaudeSessionMeta {
+  sessionId: string;
+  mtime: number;
+  filePath: string;
+}
+
+/**
+ * 扫描 ~/.claude/projects/<encoded-path>/ 找到最新的 CLI session。
+ * 只返回 JSONL 文件（排除子目录如 subagents/），按修改时间倒序。
+ * @param homeOverride 测试用：覆盖 homedir() 的返回值
+ */
+export function findLatestClaudeSession(workDir: string, homeOverride?: string): ClaudeSessionMeta | undefined {
+  const projectDir = join(homeOverride ?? homedir(), '.claude', 'projects', workDirToProjectPath(workDir));
+  if (!existsSync(projectDir)) {
+    log.info(`No Claude Code project dir found: ${projectDir}`);
+    return undefined;
+  }
+
+  try {
+    const entries = readdirSync(projectDir, { withFileTypes: true });
+    const sessions: ClaudeSessionMeta[] = [];
+
+    for (const entry of entries) {
+      // 只处理 .jsonl 文件，跳过子目录（如 subagents/）和 memory 目录
+      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+
+      const sessionId = entry.name.replace('.jsonl', '');
+      // 校验 UUID 格式
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sessionId)) continue;
+
+      const filePath = join(projectDir, entry.name);
+      try {
+        const stat = statSync(filePath);
+        // 跳过空文件
+        if (stat.size === 0) continue;
+        sessions.push({ sessionId, mtime: stat.mtimeMs, filePath });
+      } catch {
+        continue;
+      }
+    }
+
+    if (sessions.length === 0) {
+      log.info(`No session files found in ${projectDir}`);
+      return undefined;
+    }
+
+    // 按修改时间倒序，最新的在前
+    sessions.sort((a, b) => b.mtime - a.mtime);
+    const latest = sessions[0];
+    log.info(`Found latest Claude Code session: ${latest.sessionId} (mtime: ${new Date(latest.mtime).toISOString()}, size: ${statSync(latest.filePath).size})`);
+    return latest;
+  } catch (err) {
+    log.warn(`Failed to scan Claude Code project dir: ${err}`);
+    return undefined;
+  }
+}
+
+/**
+ * 从 JSONL 文件的第一行提取 sessionId，验证文件内容与文件名一致。
+ */
+function validateSessionFile(filePath: string, expectedSessionId: string): boolean {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const firstLine = content.split('\n')[0];
+    if (!firstLine) return false;
+    const firstEntry = JSON.parse(firstLine);
+    return firstEntry.sessionId === expectedSessionId;
+  } catch {
+    return false;
+  }
+}
 
 // 存储所有活跃的 SDKSession 对象，key 为 sessionId
 // 使用 Map 而不是 Set，因为我们需要通过 sessionId 获取 session
@@ -269,6 +370,35 @@ async function getOrCreateSession(
         } catch (err) {
           log.warn(`Failed to resume session ${sessionId}, creating new one: ${err}`);
           // 恢复失败，创建新会话
+        }
+      }
+
+      // 没有指定 sessionId 时，尝试自动恢复 Claude Code CLI 的最新 session
+      // 实现手机/电脑无缝切换：同目录下默认共享同一个对话
+      if (!sessionId) {
+        const latest = findLatestClaudeSession(workDir);
+        if (latest) {
+          // 安全检查：如果 CLI 正在使用该 session，不能接管
+          if (isCliSessionActive(latest.sessionId)) {
+            log.info(`CLI is actively using session ${latest.sessionId}, skipping auto-resume`);
+          } else {
+            // 验证文件内容一致性
+            if (validateSessionFile(latest.filePath, latest.sessionId)) {
+              try {
+                log.info(`Auto-resuming latest CLI session: ${latest.sessionId}`);
+                session = unstable_v2_resumeSession(latest.sessionId, sessionOptions);
+                activeSessions.set(latest.sessionId, session);
+                sessionWorkDirs.set(latest.sessionId, workDir);
+                sessionLastUsed.set(latest.sessionId, Date.now());
+                log.info(`Successfully auto-resumed CLI session: ${latest.sessionId}`);
+                return { session, sessionId: latest.sessionId };
+              } catch (err) {
+                log.warn(`Failed to auto-resume CLI session ${latest.sessionId}, creating new one: ${err}`);
+              }
+            } else {
+              log.warn(`Session file validation failed for ${latest.sessionId}, skipping`);
+            }
+          }
         }
       }
 
