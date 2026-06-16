@@ -165,7 +165,17 @@ async function fetchApi(
     },
     signal,
   });
-  return res.json() as Promise<{ ok: boolean; error?: string; result?: unknown }>;
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text) as { ok: boolean; error?: string; result?: unknown };
+    if (!json.ok) {
+      log.warn(`ClawBot API ${path.split('?')[0]} response: ${text.substring(0, 500)}`);
+    }
+    return json;
+  } catch {
+    log.warn(`ClawBot API non-JSON response (${res.status}): ${text.substring(0, 300)}`);
+    return { ok: false, error: `HTTP ${res.status}: non-JSON response` };
+  }
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

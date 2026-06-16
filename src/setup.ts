@@ -695,6 +695,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
 
         if (result.connected && result.botToken) {
           cbApiToken = result.botToken;
+          if (result.baseUrl) cbApiUrl = result.baseUrl;
           console.log("\n✅ 登录成功！");
           if (result.userId) {
             console.log(`   用户 ID: ${result.userId}`);
