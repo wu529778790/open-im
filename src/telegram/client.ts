@@ -1,6 +1,7 @@
 import { Telegraf } from "telegraf";
 import type { Config } from "../config.js";
 import { createLogger } from "../logger.js";
+import { isFatalReconnectError, jitteredDelay } from "../shared/reconnect.js";
 
 const log = createLogger("Telegram");
 
@@ -39,8 +40,13 @@ export async function initTelegram(
       } catch {
         /* ignore */
       }
+      // 致命错误（token 无效等）：不再重试，避免烧满 10 次
+      if (isFatalReconnectError(err)) {
+        log.error("Telegram 致命错误，停止重连（请检查 bot token）:", err);
+        return;
+      }
       const maxAttempts = 10;
-      const delayMs = Math.min(5000 * attempt, 60000);
+      const delayMs = jitteredDelay(Math.min(5000 * attempt, 60000));
       if (attempt < maxAttempts) {
         log.info(`Telegram reconnect in ${Math.round(delayMs / 1000)}s (attempt ${attempt}/${maxAttempts})`);
         await new Promise((r) => setTimeout(r, delayMs));

@@ -44,6 +44,10 @@ export interface CentrifugeClientConfig {
   userId: string;
   httpBaseUrl?: string;
   httpAccessToken?: string;
+  /** 返回当前有效的 access token（已刷新）。无则用 httpAccessToken 兜底。 */
+  getAccessToken?: () => string;
+  /** 单飞刷新 token；HTTP 401 时调用，刷新后 getAccessToken 返回新 token。 */
+  refreshToken?: () => Promise<void>;
   workspaceSessionId?: string;
   /**
    * Called before sending a WeChat KF reply to update the channel's channelId
@@ -72,7 +76,6 @@ export interface CentrifugeCallbacks {
 interface PendingReply {
   url: string;
   payload: Record<string, unknown>;
-  accessToken: string;
   addedAt: number;
 }
 
@@ -337,13 +340,15 @@ export class WorkBuddyCentrifugeClient {
       const INITIAL_BACKOFF_MS = 2000;
       let sent = false;
       let backoffMs = INITIAL_BACKOFF_MS;
+      let refreshedOn401 = false;
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const token = this.config.getAccessToken?.() ?? this.config.httpAccessToken ?? '';
         try {
           const res = await fetch(url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.config.httpAccessToken}`,
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify(httpPayload),
             signal: AbortSignal.timeout(30_000),
@@ -360,6 +365,18 @@ export class WorkBuddyCentrifugeClient {
             } else {
               log.error(`${this.logPrefix} HTTP COPILOT_RESPONSE rate limited after ${MAX_RETRIES} attempts, giving up`);
               break;
+            }
+          }
+
+          // 401: access token 过期 → 单飞刷新后重试一次
+          if (res.status === 401 && !refreshedOn401 && this.config.refreshToken) {
+            refreshedOn401 = true;
+            try {
+              await this.config.refreshToken();
+              log.info(`${this.logPrefix} Token refreshed on 401, retrying COPILOT_RESPONSE`);
+              continue;
+            } catch (refreshErr) {
+              log.error(`${this.logPrefix} Token refresh failed on 401:`, refreshErr);
             }
           }
 
@@ -381,7 +398,7 @@ export class WorkBuddyCentrifugeClient {
         }
       }
       if (!sent) {
-        this.enqueuePendingReply(url, httpPayload, this.config.httpAccessToken);
+        this.enqueuePendingReply(url, httpPayload);
       }
 
       // Release the heartbeat lock so the periodic registration can resume
@@ -503,7 +520,7 @@ export class WorkBuddyCentrifugeClient {
   /**
    * Enqueue a failed reply for later delivery
    */
-  private enqueuePendingReply(url: string, payload: Record<string, unknown>, accessToken: string): void {
+  private enqueuePendingReply(url: string, payload: Record<string, unknown>): void {
     // Evict expired entries
     const now = Date.now();
     this.pendingReplies = this.pendingReplies.filter((r) => now - r.addedAt < PENDING_REPLY_TTL_MS);
@@ -513,7 +530,7 @@ export class WorkBuddyCentrifugeClient {
       log.warn(`${this.logPrefix} Pending replies full, evicting oldest (msgId=${evicted?.payload.msgId})`);
     }
 
-    this.pendingReplies.push({ url, payload, accessToken, addedAt: now });
+    this.pendingReplies.push({ url, payload, addedAt: now });
     log.warn(`${this.logPrefix} Queued pending reply (queue=${this.pendingReplies.length}, msgId=${payload.msgId})`);
   }
 
@@ -534,24 +551,40 @@ export class WorkBuddyCentrifugeClient {
     }
 
     for (const reply of toSend) {
-      try {
-        const res = await fetch(reply.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${reply.accessToken}`,
-          },
-          body: JSON.stringify(reply.payload),
-          signal: AbortSignal.timeout(30_000),
-        });
-        const body = await res.text().catch(() => '');
-        if (res.ok) {
-          log.info(`${this.logPrefix} Flushed pending reply ok: msgId=${reply.payload.msgId}`);
-        } else {
-          log.error(`${this.logPrefix} Flushed pending reply failed: ${res.status} ${body.substring(0, 200)}`);
+      // 用当前（可能已刷新的）token；401 时单飞刷新后重试一次
+      let refreshedOn401 = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const token = this.config.getAccessToken?.() ?? this.config.httpAccessToken ?? '';
+        try {
+          const res = await fetch(reply.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(reply.payload),
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (res.status === 401 && !refreshedOn401 && this.config.refreshToken) {
+            refreshedOn401 = true;
+            try {
+              await this.config.refreshToken();
+              continue;
+            } catch {
+              /* 刷新失败，落到下面正常判定 */
+            }
+          }
+          const body = await res.text().catch(() => '');
+          if (res.ok) {
+            log.info(`${this.logPrefix} Flushed pending reply ok: msgId=${reply.payload.msgId}`);
+          } else {
+            log.error(`${this.logPrefix} Flushed pending reply failed: ${res.status} ${body.substring(0, 200)}`);
+          }
+          break;
+        } catch (err) {
+          log.error(`${this.logPrefix} Flushed pending reply error: msgId=${reply.payload.msgId}`, err);
+          break;
         }
-      } catch (err) {
-        log.error(`${this.logPrefix} Flushed pending reply error: msgId=${reply.payload.msgId}`, err);
       }
     }
 

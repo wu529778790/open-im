@@ -10,6 +10,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { hostname, homedir } from 'node:os';
 import { createLogger } from '../logger.js';
+import { jitteredDelay, SLOW_PROBE_MS, isFatalReconnectError } from '../shared/reconnect.js';
 import type { Config } from '../config.js';
 import { WorkBuddyOAuth } from './oauth.js';
 import { WorkBuddyCentrifugeClient } from './centrifuge-client.js';
@@ -29,8 +30,11 @@ let stateChangeHandler: ((state: WorkBuddyState) => void) | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
+let fatalSlowProbe = false;
 let stopped = false;
 let platformConfig: NonNullable<NonNullable<Config['platforms']>['workbuddy']> | null = null;
+/** 单飞刷新 token 的在途 Promise，避免并发 401 重复刷新 */
+let refreshInFlight: Promise<void> | null = null;
 
 export function getChannelState(): WorkBuddyState {
   return channelState;
@@ -94,6 +98,10 @@ async function connect(): Promise<void> {
     });
   } catch (err) {
     log.error('Host workspace registration failed:', err);
+    if (isFatalReconnectError(err)) {
+      fatalSlowProbe = true;
+      log.warn('WorkBuddy 致命错误（鉴权失败），转慢探测（token 可能已过期）:', err);
+    }
     scheduleReconnect();
     return;
   }
@@ -144,6 +152,8 @@ async function connect(): Promise<void> {
       userId: pc.userId ?? '',
       httpBaseUrl: baseUrl,
       httpAccessToken: pc.accessToken ?? '',
+      getAccessToken: () => oauthClient?.accessToken ?? pc.accessToken ?? '',
+      refreshToken: refreshWorkBuddyToken,
       workspaceSessionId,
       registerChannelFn,
       releaseChannelLockFn,
@@ -153,6 +163,7 @@ async function connect(): Promise<void> {
         log.info('WorkBuddy Centrifuge connected');
         log.info(`WeChat KF sessionId: ${workspaceSessionId}`);
         reconnectAttempt = 0;
+        fatalSlowProbe = false;
         updateState('connected');
 
         // Step 2: Register Claw workspace to get WeChat KF routing channel + sessionId
@@ -247,9 +258,10 @@ async function connect(): Promise<void> {
 function scheduleReconnect(): void {
   if (stopped) return;
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+  const baseDelay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+  const delay = fatalSlowProbe ? jitteredDelay(SLOW_PROBE_MS) : jitteredDelay(baseDelay);
   reconnectAttempt++;
-  log.info(`Reconnecting in ${delay}ms (attempt ${reconnectAttempt})...`);
+  log.info(`Reconnecting in ${delay}ms (attempt ${reconnectAttempt})${fatalSlowProbe ? ' [slow-probe]' : ''}...`);
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     if (stopped) return;
@@ -274,6 +286,28 @@ export function getCentrifugeClient(): WorkBuddyCentrifugeClient | null {
 
 export function getOAuth(): WorkBuddyOAuth | null {
   return oauthClient;
+}
+
+/**
+ * 单飞刷新 WorkBuddy access token：并发 401 只触发一次刷新，复用同一 Promise。
+ * 刷新成功后 oauthClient.accessToken 原地更新，所有 HTTP 调用（含心跳）自动用新 token。
+ */
+async function refreshWorkBuddyToken(): Promise<void> {
+  if (!oauthClient) return;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      log.info('Refreshing WorkBuddy access token...');
+      await oauthClient!.refreshTokenAuth();
+      log.info('WorkBuddy access token refreshed');
+    } catch (err) {
+      log.error('WorkBuddy token refresh failed:', err);
+      throw err;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 export function stopWorkBuddy(): void {
