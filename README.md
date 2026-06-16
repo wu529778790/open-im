@@ -2,7 +2,7 @@
 
 **English** · [中文](./README.zh-CN.md)
 
-Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, DingTalk, QQ, and WeChat (WorkBuddy) to Claude Code, Codex, and CodeBuddy — use your AI coding assistant from any phone or chat window.
+Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, DingTalk, QQ, WeChat (WorkBuddy), and WeChat (ClawBot) to Claude Code, Codex, and CodeBuddy — use your AI coding assistant from any phone or chat window.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, Ding
 
 ## Features
 
-- **Six IM platforms** — Telegram, Feishu, WeCom, DingTalk, QQ, WorkBuddy
+- **Seven IM platforms** — Telegram, Feishu, WeCom, DingTalk, QQ, WorkBuddy, ClawBot
 - **Three AI backends** — Claude (Agent SDK), Codex, CodeBuddy (per-platform override supported)
 - **Streaming, media, sessions** — live output where supported; `/new` for a fresh AI session
 - **Web UI** — dashboard bundled in the package; default **`http://127.0.0.1:39282`**
@@ -162,6 +162,34 @@ Use **`config.json`** (platforms, `tools.*`, etc.) or environment variables; the
 | DingTalk | Open Platform — bot **Stream Mode**; optional **`cardTemplateId`** for AI assistant cards |
 | WeCom | [Admin](https://work.weixin.qq.com/) |
 | WeChat | **`open-im init`** → WorkBuddy OAuth |
+| ClawBot (WeChat) | QR code login via iLink API; see [ClawBot setup](#clawbot-setup) |
+
+### ClawBot setup
+
+ClawBot connects to WeChat via the official iLink Bot API (same protocol as `@tencent-weixin/openclaw-weixin`). It supports text, voice, image, file, and video messages.
+
+**Setup:**
+
+1. Enable in config:
+   ```json
+   {
+     "platforms": {
+       "clawbot": { "enabled": true }
+     }
+   }
+   ```
+2. Open the Web dashboard → **ClawBot** section → **Scan QR code** with WeChat.
+3. After scanning, `bot_token` and `apiUrl` are saved automatically.
+
+**Config fields:**
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `apiUrl` | `https://ilinkai.weixin.qq.com` | iLink API base URL |
+| `apiToken` | — | Bot token (auto-set after QR login) |
+| `aiCommand` | `claude` | AI backend override |
+
+**Protocol:** POST + JSON body + Bearer token auth. Long-polling via `ilink/bot/getupdates` with `get_updates_buf` cursor.
 
 ## Troubleshooting
 
@@ -175,6 +203,7 @@ Use **`config.json`** (platforms, `tools.*`, etc.) or environment variables; the
 | Codex disconnect | **`CODEX_PROXY`** or **`tools.codex.proxy`** |
 | CodeBuddy login | **`codebuddy login`** |
 | WorkBuddy | Re-run **`open-im init`** (tokens expire) |
+| ClawBot | QR re-login via Web UI; `apiUrl` defaults to `https://ilinkai.weixin.qq.com` |
 
 ## License
 

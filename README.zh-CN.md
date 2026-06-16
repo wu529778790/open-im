@@ -2,7 +2,7 @@
 
 [English](./README.md) · **中文**
 
-多平台 IM 桥接：把 Telegram、飞书、企业微信、钉钉、QQ、微信（WorkBuddy）接到 Claude Code、Codex、CodeBuddy，在手机或聊天里使用 AI 编程助手。
+多平台 IM 桥接：把 Telegram、飞书、企业微信、钉钉、QQ、微信（WorkBuddy）、微信（ClawBot）接到 Claude Code、Codex、CodeBuddy，在手机或聊天里使用 AI 编程助手。
 
 ## 架构
 
@@ -10,7 +10,7 @@
 
 ## 功能特性
 
-- **六个 IM 平台** — Telegram、飞书、企业微信、钉钉、QQ、WorkBuddy
+- **七个 IM 平台** — Telegram、飞书、企业微信、钉钉、QQ、WorkBuddy、ClawBot
 - **三种 AI 后端** — Claude（Agent SDK）、Codex、CodeBuddy（可按平台覆盖）
 - **流式、多媒体、会话** — 视平台能力；`/new` 开启新 AI 会话
 - **Web 控制台** — 随包内置，默认 **`http://127.0.0.1:39282`**
@@ -162,6 +162,34 @@ codebuddy login
 | 钉钉 | 开放平台创建应用，机器人开 **Stream Mode**；可选 **`cardTemplateId`** 走 AI 助理卡片 |
 | 企业微信 | [管理后台](https://work.weixin.qq.com/) |
 | 微信 | **`open-im init`** → WorkBuddy OAuth |
+| ClawBot（微信） | 扫码登录 iLink API，参见 [ClawBot 配置](#clawbot-配置) |
+
+### ClawBot 配置
+
+ClawBot 通过官方 iLink Bot API 连接微信（与 `@tencent-weixin/openclaw-weixin` 协议相同）。支持文本、语音、图片、文件和视频消息。
+
+**使用方法：**
+
+1. 在配置中启用：
+   ```json
+   {
+     "platforms": {
+       "clawbot": { "enabled": true }
+     }
+   }
+   ```
+2. 打开 Web 控制台 → **ClawBot** 区域 → **扫码登录**（用微信扫码）。
+3. 扫码成功后 `bot_token` 和 `apiUrl` 自动保存。
+
+**配置字段：**
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `apiUrl` | `https://ilinkai.weixin.qq.com` | iLink API 地址 |
+| `apiToken` | — | Bot Token（扫码后自动写入） |
+| `aiCommand` | `claude` | AI 后端覆盖 |
+
+**协议：** POST + JSON body + Bearer token 鉴权，通过 `ilink/bot/getupdates` 长轮询 + `get_updates_buf` 游标拉取消息。
 
 ## 故障排除
 
@@ -175,6 +203,7 @@ codebuddy login
 | Codex 断流 | **`CODEX_PROXY`** 或 **`tools.codex.proxy`** |
 | CodeBuddy 登录 | **`codebuddy login`** |
 | WorkBuddy / 微信 | 重跑 **`open-im init`**（Token 会过期） |
+| ClawBot | Web 控制台重新扫码；`apiUrl` 默认 `https://ilinkai.weixin.qq.com` |
 
 ## License
 
