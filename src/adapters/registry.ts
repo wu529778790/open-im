@@ -4,6 +4,7 @@ import { ClaudeSDKAdapter, configureClaudeSdkSessionIdle } from './claude-sdk-ad
 import { CodexAdapter } from './codex-adapter.js';
 import { CodeBuddyAdapter } from './codebuddy-adapter.js';
 import { createLogger } from '../logger.js';
+import { destroyAllLiveChildren } from '../shared/process-kill.js';
 
 const log = createLogger('Registry');
 const adapters = new Map<string, ToolAdapter>();
@@ -37,5 +38,7 @@ export function getAdapter(aiCommand: string): ToolAdapter | undefined {
 
 export function cleanupAdapters(): void {
   ClaudeSDKAdapter.destroy();
+  // 强制终止仍在运行的 CLI 子进程（Codex/CodeBuddy），避免僵尸 / 孤儿
+  destroyAllLiveChildren();
   adapters.clear();
 }

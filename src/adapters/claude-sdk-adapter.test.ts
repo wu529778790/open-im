@@ -1,4 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Mock the logger before importing the adapter under test
 vi.mock('../logger.js', () => ({
@@ -89,5 +92,58 @@ describe('ClaudeSDKAdapter', () => {
         expect.stringContaining('stderr: fatal: missing permission'),
       );
     });
+  });
+
+  it('serializes workDir so concurrent runs each spawn in their own cwd', async () => {
+    const originalCwd = process.cwd();
+    const dirA = mkdtempSync(join(tmpdir(), 'cli-cwd-a-'));
+    const dirB = mkdtempSync(join(tmpdir(), 'cli-cwd-b-'));
+    // process.cwd() 展开符号链接（macOS 上 /tmp → /private/tmp），用 realpath 比对
+    const realA = realpathSync(dirA);
+    const realB = realpathSync(dirB);
+    const seenCwds: string[] = [];
+
+    try {
+      vi.mocked(unstable_v2_createSession).mockImplementation(() => {
+        return {
+          send: async () => {
+            // 让两个并发 run 在 send() 期间重叠（无锁时会互相踩 cwd）
+            await new Promise((r) => setTimeout(r, 10));
+            seenCwds.push(process.cwd());
+          },
+          close: vi.fn(),
+          stream: async function* () {
+            yield {
+              type: 'result',
+              subtype: 'success',
+              result: 'ok',
+              total_cost_usd: 0,
+              duration_ms: 1,
+              num_turns: 1,
+              errors: [],
+            } as never;
+          },
+        } as never;
+      });
+
+      const mk = () => ({ onText: vi.fn(), onComplete: vi.fn(), onError: vi.fn() });
+      const cbsA = mk();
+      const cbsB = mk();
+      adapter.run('p', undefined, dirA, cbsA);
+      adapter.run('p', undefined, dirB, cbsB);
+
+      await vi.waitFor(() => {
+        expect(cbsA.onComplete).toHaveBeenCalled();
+        expect(cbsB.onComplete).toHaveBeenCalled();
+      });
+
+      // 每个 send() 必须观测到自己的 workDir（修复前 send() 在锁外、cwd 不受控）
+      expect(seenCwds).toContain(realA);
+      expect(seenCwds).toContain(realB);
+    } finally {
+      process.chdir(originalCwd);
+      try { rmSync(dirA, { recursive: true, force: true }); } catch { /* ignore */ }
+      try { rmSync(dirB, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   });
 });

@@ -32,6 +32,7 @@ import {
   getActiveChatId,
   flushActiveChats,
 } from "./shared/active-chats.js";
+import { destroyAllLiveChildren } from "./shared/process-kill.js";
 import {
   initLogger,
   createLogger,
@@ -374,6 +375,16 @@ export async function main() {
 
   process.on("SIGINT", () => shutdown().catch(() => process.exit(1)));
   process.on("SIGTERM", () => shutdown().catch(() => process.exit(1)));
+
+  // 兜底：进程退出（含异常路径，如未捕获异常 / SIGKILL）时强制清理 CLI 子进程，
+  // 避免僵尸 / 孤儿。正常 shutdown 已在 cleanupAdapters() 里清理过。
+  process.on("exit", () => {
+    try {
+      destroyAllLiveChildren();
+    } catch {
+      /* 退出期间 best effort */
+    }
+  });
 
   // Global error handlers to prevent unhandled crashes
   process.on("unhandledRejection", (reason) => {

@@ -58,6 +58,9 @@ loadUserPluginSettings();
 // 使用 Map 而不是 Set，因为我们需要通过 sessionId 获取 session
 const activeSessions = new Map<string, SDKSession>();
 
+// 记录每个 session 创建/恢复时的 workDir，防止跨 workDir 复用已固定 cwd 的子进程
+const sessionWorkDirs = new Map<string, string>();
+
 // 存储正在进行的流式迭代器，用于中断
 const activeStreams = new Set<AsyncIterator<SDKMessage>>();
 
@@ -99,6 +102,7 @@ const cleanupInterval = setInterval(() => {
         activeSessions.delete(id);
       }
       sessionLastUsed.delete(id);
+      sessionWorkDirs.delete(id);
       log.info(`Cleaned up idle session (unused ${Math.round((now - lastUsed) / 60000)}min): ${id}`);
     }
   }
@@ -106,27 +110,45 @@ const cleanupInterval = setInterval(() => {
 cleanupInterval.unref(); // 不阻止进程退出
 
 /**
- * Serializes process.chdir() calls across concurrent users.
+ * 串行化进程级 process.chdir() —— 同一时刻仅一个 chdir 生效。
  *
- * process.chdir() is a process-wide global side effect — only one chdir can
- * be active at a time. The SDK's createSession/resumeSession do not accept a
- * `cwd` parameter, so we must chdir before calling them. This mutex ensures
- * concurrent requests don't race on the working directory.
+ * SDK V2 的 createSession/resumeSession 不接受 cwd 参数；且 send()/stream()
+ * 会以「调用时的 process.cwd()」派生 Claude Code 子进程。必须用互斥锁串行化
+ * 「整个 turn 的 cwd 切换」，否则并发多用户会让工具跑错目录。
  *
- * **TODO:** Remove this mutex entirely once @anthropic-ai/claude-agent-sdk
- * supports a `cwd` option in createSession/resumeSession. Track upstream:
+ * **TODO:** SDK 支持 cwd 选项后移除此锁。upstream:
  * https://github.com/anthropics/claude-agent-sdk/issues
  */
 let chdirMutex: Promise<void> = Promise.resolve();
-function withChdirMutex<T>(fn: () => T): Promise<T> {
+function withChdirMutex<T>(fn: () => T | Promise<T>): Promise<T> {
   const previous = chdirMutex;
-  let resolve!: () => void;
-  chdirMutex = new Promise<void>((r) => { resolve = r; });
-  return previous.then(() => {
+  let release!: () => void;
+  chdirMutex = new Promise<void>((r) => { release = r; });
+  return previous.then(async () => {
     try {
-      return fn();
+      return await fn();
     } finally {
-      resolve();
+      release();
+    }
+  });
+}
+
+/**
+ * 在持有全局 chdir 互斥锁期间，把进程 cwd 切到 workDir 执行 fn，结束后恢复。
+ * 用于包裹 session.send()+stream()，确保子进程在正确 workDir 派生。
+ */
+function runWithWorkDir<T>(workDir: string, fn: () => Promise<T>): Promise<T> {
+  return withChdirMutex(async () => {
+    const originalCwd = process.cwd();
+    if (workDir && workDir !== originalCwd) {
+      process.chdir(workDir);
+    }
+    try {
+      return await fn();
+    } finally {
+      if (workDir && workDir !== originalCwd) {
+        process.chdir(originalCwd);
+      }
     }
   });
 }
@@ -225,19 +247,22 @@ async function getOrCreateSession(
       }
 
       if (sessionId) {
-        // 优先复用内存中已有的 SDKSession，避免每次都启动新进程
+        // 优先复用内存中已有的 SDKSession，避免每次都启动新进程。
+        // 仅当 workDir 与创建时一致才复用：否则子进程 cwd 已固定在旧目录，
+        // 需走 resume 重新派生（在当前 workDir 启动新子进程）。
         const existing = activeSessions.get(sessionId);
-        if (existing) {
+        if (existing && sessionWorkDirs.get(sessionId) === workDir) {
           log.info(`Reusing existing in-memory session: ${sessionId}`);
           sessionLastUsed.set(sessionId, Date.now());
           return { session: existing, sessionId };
         }
 
-        // 内存中没有，尝试通过 resume 恢复（会启动新 CLI 进程）
+        // 内存中没有（或 workDir 变了），尝试通过 resume 恢复（会启动新 CLI 进程）
         try {
           log.info(`Attempting to resume session: ${sessionId}`);
           session = unstable_v2_resumeSession(sessionId, sessionOptions);
           activeSessions.set(sessionId, session);
+          sessionWorkDirs.set(sessionId, workDir);
           sessionLastUsed.set(sessionId, Date.now());
           log.info(`Successfully resumed session: ${sessionId}`);
           return { session, sessionId };
@@ -253,6 +278,7 @@ async function getOrCreateSession(
       // 暂时返回 undefined，稍后在 init 消息中获取
       const tempId = `pending-${++sessionSeq}`;
       activeSessions.set(tempId, session);
+      sessionWorkDirs.set(tempId, workDir);
       sessionLastUsed.set(tempId, Date.now());
       log.info(`Created new session (tempId: ${tempId})`);
       return { session, sessionId: tempId, wasReused: false };
@@ -293,6 +319,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
     }
     activeSessions.clear();
     sessionLastUsed.clear();
+    sessionWorkDirs.clear();
   }
 
   /**
@@ -305,6 +332,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
       try { session.close(); } catch { /* ignore */ }
       activeSessions.delete(sessionId);
       sessionLastUsed.delete(sessionId);
+      sessionWorkDirs.delete(sessionId);
       log.info(`Explicitly removed session: ${sessionId}`);
     }
   }
@@ -364,13 +392,16 @@ export class ClaudeSDKAdapter implements ToolAdapter {
         runningSessions.add(returnedId);
         trackedRunningId = returnedId;
 
-        // 发送用户消息
-        await session.send(prompt);
-
-        // 获取响应流
-        const stream = session.stream();
-        currentStream = stream;
-        activeStreams.add(stream);
+        // 在持有 chdir 锁期间完成 send() + stream() 获取：SDK V2 会以当前
+        // process.cwd() 派生 Claude Code 子进程，必须保证此刻 cwd 为 workDir。
+        // 锁串行化后，并发多用户的子进程不会在错误的目录派生。
+        const stream = await runWithWorkDir(workDir, async () => {
+          await session.send(prompt);
+          const s = session.stream();
+          currentStream = s;
+          activeStreams.add(s);
+          return s;
+        });
 
         let accumulated = '';
         let accumulatedThinking = '';
@@ -402,12 +433,19 @@ export class ClaudeSDKAdapter implements ToolAdapter {
                 // 更新 sessionId 映射
                 // 清理 pending 临时 ID（actualSessionId 尚未赋值时用 pendingTempId）
                 const idToClean = actualSessionId ?? pendingTempId;
+                const inheritedWorkDir = idToClean ? sessionWorkDirs.get(idToClean) : undefined;
                 if (idToClean?.startsWith('pending-')) {
                   activeSessions.delete(idToClean);
                 }
                 activeSessions.set(newSessionId, session);
+                if (inheritedWorkDir !== undefined) {
+                  sessionWorkDirs.set(newSessionId, inheritedWorkDir);
+                }
                 sessionLastUsed.set(newSessionId, Date.now());
-                if (idToClean) sessionLastUsed.delete(idToClean);
+                if (idToClean) {
+                  sessionLastUsed.delete(idToClean);
+                  sessionWorkDirs.delete(idToClean);
+                }
                 // 更新 runningSessions：移除旧 ID，添加新 ID
                 if (idToClean) runningSessions.delete(idToClean);
                 runningSessions.add(newSessionId);

@@ -3,6 +3,7 @@ import { accessSync, constants } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { createLogger } from '../logger.js';
 import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
+import { killProcessTree, trackChild } from '../shared/process-kill.js';
 
 const log = createLogger('CodeBuddyCli');
 
@@ -265,10 +266,15 @@ export function runCodeBuddy(
 
   const child = spawn(spawnCmd, spawnArgs, {
     cwd: workDir,
+    // Unix 上放入独立进程组，使 abort/关停能用 process.kill(-pid) 杀掉整棵子树（含 MCP/shell 孙进程）
+    detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     env,
     windowsHide: process.platform === 'win32',
   });
+  trackChild(child);
+
+  let cliTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   let accumulated = '';
   let accumulatedThinking = '';
@@ -393,6 +399,10 @@ export function runCodeBuddy(
   });
 
   child.on('close', (code) => {
+    if (cliTimeoutHandle) {
+      clearTimeout(cliTimeoutHandle);
+      cliTimeoutHandle = null;
+    }
     if (completed) return;
 
     if (stdoutState.buffer.trim()) {
@@ -426,15 +436,35 @@ export function runCodeBuddy(
   });
 
   child.on('error', (err) => {
+    if (cliTimeoutHandle) {
+      clearTimeout(cliTimeoutHandle);
+      cliTimeoutHandle = null;
+    }
     if (completed) return;
     completed = true;
     callbacks.onError(`Failed to start CodeBuddy CLI: ${err.message}`);
   });
 
+  // 墙钟超时：防止 CLI 挂死永久占用用户队列槽
+  const cliTimeoutMs = Number(process.env.OPEN_IM_CLI_TIMEOUT_MS) || 30 * 60 * 1000;
+  cliTimeoutHandle = setTimeout(() => {
+    if (completed) return;
+    log.warn(`CodeBuddy CLI 超过 ${cliTimeoutMs}ms，强制终止 (pid=${child.pid})`);
+    completed = true;
+    killProcessTree(child);
+    callbacks.onError(`CodeBuddy CLI 运行超时（${Math.round(cliTimeoutMs / 1000)}s），已终止。请重试。`);
+  }, cliTimeoutMs);
+  cliTimeoutHandle.unref();
+
   return {
     abort: () => {
+      if (completed) return;
       completed = true;
-      if (!child.killed) child.kill('SIGTERM');
+      if (cliTimeoutHandle) {
+        clearTimeout(cliTimeoutHandle);
+        cliTimeoutHandle = null;
+      }
+      killProcessTree(child);
     },
   };
 }

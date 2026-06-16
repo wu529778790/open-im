@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createLogger } from '../logger.js';
 import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
+import { killProcessTree, trackChild } from '../shared/process-kill.js';
 
 const log = createLogger('CodexCli');
 const windowsCodexLaunchCache = new Map<string, { command: string; args: string[] } | null>();
@@ -264,10 +265,13 @@ export function runCodex(
 
   const child = spawn(spawnCmd, spawnArgs, {
     cwd: workDir,
+    // Unix 上放入独立进程组，使 abort/关停能用 process.kill(-pid) 杀掉整棵子树（含 MCP/shell 孙进程）
+    detached: process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
     env,
     windowsHide: process.platform === 'win32',
   });
+  trackChild(child);
 
   child.stdin?.write(prompt);
   child.stdin?.end();
@@ -405,8 +409,13 @@ export function runCodex(
   let exitCode: number | null = null;
   let rlClosed = false;
   let childClosed = false;
+  let cliTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   const finalize = () => {
+    if (cliTimeoutHandle) {
+      clearTimeout(cliTimeoutHandle);
+      cliTimeoutHandle = null;
+    }
     if (!rlClosed || !childClosed) return;
     if (completed) return;
 
@@ -470,11 +479,28 @@ export function runCodex(
     finalize();
   });
 
+  // 墙钟超时：防止 CLI 挂死（网络卡住、工具死循环等）永久占用用户队列槽
+  const cliTimeoutMs = Number(process.env.OPEN_IM_CLI_TIMEOUT_MS) || 30 * 60 * 1000;
+  cliTimeoutHandle = setTimeout(() => {
+    if (completed) return;
+    log.warn(`Codex CLI 超过 ${cliTimeoutMs}ms，强制终止 (pid=${child.pid})`);
+    completed = true;
+    rl.close();
+    killProcessTree(child);
+    callbacks.onError(`Codex CLI 运行超时（${Math.round(cliTimeoutMs / 1000)}s），已终止。请重试。`);
+  }, cliTimeoutMs);
+  cliTimeoutHandle.unref();
+
   return {
     abort: () => {
+      if (completed) return;
       completed = true;
+      if (cliTimeoutHandle) {
+        clearTimeout(cliTimeoutHandle);
+        cliTimeoutHandle = null;
+      }
       rl.close();
-      if (!child.killed) child.kill('SIGTERM');
+      killProcessTree(child);
     },
   };
 }
