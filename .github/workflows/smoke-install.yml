@@ -1,0 +1,52 @@
+name: Smoke Install
+
+on:
+  schedule:
+    # 每天 UTC 03:41（北京时间 11:41）触发，实际执行加随机延迟
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  install-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Random delay (0~3600s)
+        run: sleep $(( $(date +%s) % 3601 ))
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install @wu529778790/open-im@latest
+        run: |
+          mkdir -p /tmp/smoke-test && cd /tmp/smoke-test
+          npm install @wu529778790/open-im@latest
+
+      - name: Verify binary
+        working-directory: /tmp/smoke-test
+        run: npx open-im --version
+
+      - name: Verify package is importable
+        working-directory: /tmp/smoke-test
+        run: node -e "const pkg = require('@wu529778790/open-im/package.json'); console.log('OK:', pkg.name, pkg.version)"
+
+  install-beta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Random delay (0~3600s)
+        run: sleep $(( $(date +%s) % 3601 ))
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install @wu529778790/open-im@beta
+        run: |
+          mkdir -p /tmp/smoke-beta && cd /tmp/smoke-beta
+          npm install @wu529778790/open-im@beta
+
+      - name: Verify beta binary
+        working-directory: /tmp/smoke-beta
+        run: npx open-im --version
