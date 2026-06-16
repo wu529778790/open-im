@@ -6,7 +6,7 @@
  */
 
 import type { TaskRunState } from './ai-task.js';
-import { createLogger } from '../logger.js';
+import { createLogger, emitStructuredEvent } from '../logger.js';
 
 const log = createLogger('TaskCleanup');
 
@@ -33,4 +33,37 @@ export function startTaskCleanup(runningTasks: Map<string, TaskRunState>): () =>
   timer.unref();
 
   return () => clearInterval(timer);
+}
+
+/**
+ * 在进程退出（优雅关闭 / 崩溃）路径上，为仍在运行的任务补发一条终态遥测事件。
+ *
+ * `runningTasks` 中存在的任务代表「已发出 ai.task.start 但尚未走到 complete/error」
+ * 的在途请求。正常流程会在 handle-ai-request 的 extraCleanup 里删除已结算任务，
+ * 因此进入这里时剩下的就是真正被进程退出打断的任务。
+ *
+ * 与用户主动 `/new`、队列超时触发的 `aborted` 区分，统一用 `interrupted` 标记。
+ * 补发后立即调用 state.settle() 置 settled=true：优雅关闭路径随后仍会调用
+ * handle.abort()（释放底层资源），但因已 settled，abort 不会再补发一条 aborted，
+ * 避免对同一任务重复计数。
+ *
+ * 该函数必须同步执行，且应在遥测刷盘（shutdownLoggerTelemetry）之前调用，
+ * 以保证补发的事件能进入上传队列。
+ */
+export function emitInterruptedTerminals(runningTasks: Map<string, TaskRunState>): void {
+  if (runningTasks.size === 0) return;
+  const now = Date.now();
+  for (const state of runningTasks.values()) {
+    emitStructuredEvent('AITask', 'ai.task.error', {
+      platform: state.platform,
+      taskKey: state.taskKey,
+      userKey: state.userKey,
+      toolId: state.toolId,
+      durationMs: now - state.startedAt,
+      errorSnippet: 'interrupted',
+      errorType: 'interrupted',
+    });
+    // 标记已结算，使随后 shutdown 的 abort() 跳过重复的 aborted 事件
+    state.settle();
+  }
 }

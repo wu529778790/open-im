@@ -43,6 +43,7 @@ import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
 import { createRequire } from "node:module";
 import { escapePathForMarkdown } from "./shared/utils.js";
 import { applyOpenImGitCoauthorToProcessEnv } from "./shared/git-coauthor.js";
+import { emitInterruptedTerminals } from "./shared/task-cleanup.js";
 
 const require = createRequire(import.meta.url);
 const { version: APP_VERSION } = require("../package.json") as {
@@ -324,6 +325,16 @@ export async function main() {
     const m = Math.floor(uptimeSec / 60);
     const shutdownMsg = buildShutdownMessage(m);
 
+    // 在任何异步等待之前，先为仍在运行的任务补发终态遥测事件。
+    // 这样即使后续 await（通知发送、platform.stop）期间进程被第二次信号杀死，
+    // ai.task.start 也有对应的 interrupted 终态，避免遥测里的 miss。
+    for (const platform of successfulPlatforms) {
+      const handle = activeHandles.get(platform);
+      if (handle?.runningTasks && handle.runningTasks.size > 0) {
+        emitInterruptedTerminals(handle.runningTasks);
+      }
+    }
+
     // Send notification only to successfully initialized platforms
     for (const platform of successfulPlatforms) {
       await sendLifecycleNotification(platform, shutdownMsg).catch((err) => {
@@ -377,6 +388,17 @@ export async function main() {
       return;
     }
     log.error("Uncaught exception (process will exit):", err);
+    // 进程即将因未捕获异常退出：补发在途任务的终态，避免 miss
+    for (const platform of successfulPlatforms) {
+      const handle = activeHandles.get(platform);
+      if (handle?.runningTasks && handle.runningTasks.size > 0) {
+        try {
+          emitInterruptedTerminals(handle.runningTasks);
+        } catch {
+          /* best effort：不能因遥测失败再次抛出 */
+        }
+      }
+    }
     void shutdownLoggerTelemetry()
       .then(() => closeLogger())
       .finally(() => process.exit(1));

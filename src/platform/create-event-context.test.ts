@@ -108,6 +108,9 @@ describe('createPlatformEventContext', () => {
       settle: vi.fn(),
       startedAt: Date.now(),
       toolId: 'claude',
+      taskKey: 'user1:msg1',
+      platform: 'telegram',
+      userKey: 'hashed-user',
     };
     ctx.runningTasks.set('user1:msg1', fakeState);
     expect(getRunningTasksSize()).toBe(1);
