@@ -2,6 +2,7 @@
  * ClawBot Message Sender - Send messages via iLink API
  */
 
+import { randomUUID } from 'node:crypto';
 import { createLogger } from '../logger.js';
 import { splitLongContent, toReplyPlainText } from '../shared/utils.js';
 import { MAX_CLAWBOT_MESSAGE_LENGTH } from '../constants.js';
@@ -24,19 +25,22 @@ async function postMessage(chatId: string, text: string): Promise<boolean> {
   }
 
   try {
-    const res = await fetch(`${apiUrl}/ilink/bot/sendmessage`, {
+    const url = `${apiUrl}/ilink/bot/sendmessage?bot_token=${encodeURIComponent(apiToken)}`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiToken}`,
-        AuthorizationType: 'ilink_bot_token',
+        'AuthorizationType': 'ilink_bot_token',
         'iLink-App-Id': 'bot',
+        'iLink-App-ClientVersion': '131588',
+        'X-WECHAT-UIN': randomUUID(),
       },
       body: JSON.stringify({ chat_id: chatId, text }),
     });
-    const data = await res.json() as { ok: boolean; error?: string };
-    if (!data.ok) {
-      log.error(`ClawBot sendmessage failed: ${data.error ?? 'unknown'}`);
+    const data = await res.json() as Record<string, unknown>;
+    const ok = data.ok === true || data.ret === 0 || data.ret === '0';
+    if (!ok) {
+      log.error(`ClawBot sendmessage failed: ${JSON.stringify(data).substring(0, 300)}`);
       return false;
     }
     return true;

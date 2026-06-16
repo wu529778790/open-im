@@ -5,6 +5,7 @@
  * and dispatches them to the event handler.
  */
 
+import { randomUUID } from 'node:crypto';
 import { createLogger } from '../logger.js';
 import { jitteredDelay, SLOW_PROBE_MS } from '../shared/reconnect.js';
 import type { Config } from '../config.js';
@@ -157,17 +158,32 @@ async function fetchApi(
   signal?: AbortSignal,
 ): Promise<{ ok: boolean; error?: string; result?: unknown }> {
   const url = `${apiUrl}${path}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      AuthorizationType: 'ilink_bot_token',
-      'iLink-App-Id': 'bot',
-    },
-    signal,
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'AuthorizationType': 'ilink_bot_token',
+    'iLink-App-Id': 'bot',
+    'iLink-App-ClientVersion': '131588',
+    'X-WECHAT-UIN': randomUUID(),
+  };
+  // Add bot_token to URL for authenticated endpoints
+  const sep = path.includes('?') ? '&' : '?';
+  const authedUrl = apiToken ? `${url}${sep}bot_token=${encodeURIComponent(apiToken)}` : url;
+
+  const res = await fetch(authedUrl, { headers, signal });
   const text = await res.text();
   try {
-    const json = JSON.parse(text) as { ok: boolean; error?: string; result?: unknown };
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    // iLink API uses {"ret": 0} for success, {"ret": -1} for error
+    if ('ret' in raw) {
+      const ok = raw.ret === 0 || raw.ret === '0';
+      const result = raw.result ?? raw.data ?? raw;
+      if (!ok) {
+        log.warn(`ClawBot API ${path.split('?')[0]} response: ${text.substring(0, 500)}`);
+      }
+      return { ok, error: ok ? undefined : String(raw.retmsg ?? raw.errmsg ?? raw.msg ?? `ret=${raw.ret}`), result };
+    }
+    // Fallback: {"ok": true/false} format
+    const json = raw as { ok: boolean; error?: string; result?: unknown };
     if (!json.ok) {
       log.warn(`ClawBot API ${path.split('?')[0]} response: ${text.substring(0, 500)}`);
     }

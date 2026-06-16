@@ -716,12 +716,20 @@ async function probeClawBot(config: Record<string, unknown>): Promise<string> {
   const apiToken = clean(String(config.apiToken ?? ""));
   if (!apiToken) throw new Error("ClawBot API token is required.");
 
-  const response = await fetch(`${apiUrl}/ilink/bot/getupdates?timeout=1`, {
-    headers: { Authorization: `Bearer ${apiToken}` },
+  const { randomUUID } = await import('node:crypto');
+  const response = await fetch(`${apiUrl}/ilink/bot/getupdates?timeout=1&bot_token=${encodeURIComponent(apiToken)}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'AuthorizationType': 'ilink_bot_token',
+      'iLink-App-Id': 'bot',
+      'iLink-App-ClientVersion': '131588',
+      'X-WECHAT-UIN': randomUUID(),
+    },
     signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
   });
   const body = await readJsonResponse(response);
-  if (!response.ok || body.ok !== true) {
+  const ok = body.ok === true || body.ret === 0 || body.ret === '0';
+  if (!response.ok || !ok) {
     throw new Error(String(body.error ?? body.description ?? `HTTP ${response.status}`));
   }
 
