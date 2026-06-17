@@ -6,6 +6,25 @@ import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('Commands');
+
+function formatRelativeTime(ts: number): string {
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return '刚刚';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}小时前`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return '昨天';
+  if (day < 30) return `${day}天前`;
+  return new Date(ts).toLocaleDateString('zh-CN');
+}
+
+function truncatePreview(msg?: string, maxLen = 30): string {
+  if (!msg) return '新会话';
+  const firstLine = msg.split('\n')[0].trim();
+  return firstLine.length > maxLen ? firstLine.slice(0, maxLen) + '...' : firstLine;
+}
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { readdirSync } from 'node:fs';
@@ -121,7 +140,7 @@ export class CommandHandler {
       '/help - 显示帮助',
       '/new - 开始新会话（AI 上下文重置）',
       '/sessions - 查看历史会话',
-      '/resume <序号> - 恢复历史会话',
+      '/resume [序号] - 恢复历史会话（无参数恢复最近一条）',
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
@@ -141,26 +160,51 @@ export class CommandHandler {
 
     const lines = ['📋 会话列表:', ''];
     history.forEach((entry, i) => {
-      lines.push(`${i + 1}. ${entry.convId} · ${entry.totalTurns}轮`);
+      const preview = truncatePreview(entry.firstMessage);
+      const time = entry.createdAt ? ` · ${formatRelativeTime(entry.createdAt)}` : '';
+      lines.push(`${i + 1}. ${preview} · ${entry.totalTurns}轮${time}`);
     });
     if (active) {
       const num = history.length + 1;
-      lines.push(`▸ ${num}. ${active.convId} · ${active.totalTurns}轮（当前）`);
+      const preview = truncatePreview(active.firstMessage);
+      lines.push(`▸ ${num}. ${preview} · ${active.totalTurns}轮（当前）`);
     }
 
-    lines.push('', '使用 /resume <序号> 恢复历史会话');
+    lines.push('', '使用 /resume <序号> 恢复，或 /resume 恢复最近一条');
     await this.replySender().sendTextReply(chatId, lines.join('\n'));
     return true;
   }
 
   private async handleResume(chatId: string, userId: string, arg: string, _platform: Platform): Promise<boolean> {
-    const index = parseInt(arg, 10);
-    if (isNaN(index) || index < 1) {
-      await this.replySender().sendTextReply(chatId, '用法: /resume <序号>\n\n使用 /sessions 查看会话列表。');
+    const history = this.deps.sessionManager.listConvHistory(userId);
+
+    // /resume (no arg) — resume the most recent session
+    if (!arg) {
+      if (history.length === 0) {
+        await this.replySender().sendTextReply(chatId, '没有可恢复的历史会话。');
+        return true;
+      }
+      const entry = history[history.length - 1];
+      this.deps.requestQueue.cancelUser(userId);
+      const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
+      if (ok) {
+        const preview = truncatePreview(entry.firstMessage);
+        await this.replySender().sendTextReply(
+          chatId,
+          `✅ 已恢复最近会话: ${preview}（${entry.totalTurns}轮）\n继续发消息即可。`
+        );
+      } else {
+        await this.replySender().sendTextReply(chatId, '❌ 恢复会话失败，请重试。');
+      }
       return true;
     }
 
-    const history = this.deps.sessionManager.listConvHistory(userId);
+    const index = parseInt(arg, 10);
+    if (isNaN(index) || index < 1) {
+      await this.replySender().sendTextReply(chatId, '用法: /resume [序号]\n\n不带序号则恢复最近一条会话。');
+      return true;
+    }
+
     if (index > history.length) {
       await this.replySender().sendTextReply(chatId, `序号 ${index} 无效，共 ${history.length} 个历史会话。`);
       return true;
@@ -170,9 +214,10 @@ export class CommandHandler {
     this.deps.requestQueue.cancelUser(userId);
     const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
     if (ok) {
+      const preview = truncatePreview(entry.firstMessage);
       await this.replySender().sendTextReply(
         chatId,
-        `✅ 已恢复会话 ${index} (${entry.convId})，共 ${entry.totalTurns}轮对话。\n继续发消息即可。`
+        `✅ 已恢复会话: ${preview}（${entry.totalTurns}轮）\n继续发消息即可。`
       );
     } else {
       await this.replySender().sendTextReply(chatId, '❌ 恢复会话失败，请重试。');

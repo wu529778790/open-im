@@ -16,6 +16,7 @@ interface ConvHistoryEntry {
   totalTurns: number;
   createdAt: number;
   workDir?: string;
+  firstMessage?: string;
 }
 
 interface UserSession {
@@ -23,6 +24,7 @@ interface UserSession {
   workDir: string;
   activeConvId?: string;
   totalTurns?: number;
+  firstMessage?: string;
   claudeModel?: string;
   threads?: Record<string, { sessionIds?: ToolSessionIds; totalTurns?: number; claudeModel?: string }>;
   convHistory?: ConvHistoryEntry[];
@@ -156,6 +158,7 @@ export class SessionManager {
           totalTurns: s.totalTurns ?? 0,
           createdAt: Date.now(),
           workDir: currentDir,
+          firstMessage: s.firstMessage,
         });
         if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
       }
@@ -180,6 +183,7 @@ export class SessionManager {
       } else {
         s.sessionIds = {};
         s.activeConvId = randomBytes(4).toString('hex');
+        s.firstMessage = undefined;
       }
 
       s.workDir = realPath;
@@ -209,6 +213,7 @@ export class SessionManager {
           totalTurns: s.totalTurns ?? 0,
           createdAt: Date.now(),
           workDir: s.workDir,
+          firstMessage: s.firstMessage,
         });
         // Keep last 10 entries
         if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
@@ -216,6 +221,7 @@ export class SessionManager {
       s.sessionIds = {};
       s.activeConvId = randomBytes(4).toString('hex');
       s.totalTurns = 0;
+      s.firstMessage = undefined;
       this.flushSync();
       log.info(
         `New session for user ${userId}: oldConvId=${oldConvId}, oldSessionIds=${JSON.stringify(oldSessionIds)}, newConvId=${s.activeConvId}, sessionIds={}`
@@ -246,10 +252,10 @@ export class SessionManager {
     return s.convHistory ?? [];
   }
 
-  getActiveConvInfo(userId: string): { convId: string; totalTurns: number } | undefined {
+  getActiveConvInfo(userId: string): { convId: string; totalTurns: number; firstMessage?: string } | undefined {
     const s = this.sessions.get(userId);
     if (!s?.activeConvId) return undefined;
-    return { convId: s.activeConvId, totalTurns: s.totalTurns ?? 0 };
+    return { convId: s.activeConvId, totalTurns: s.totalTurns ?? 0, firstMessage: s.firstMessage };
   }
 
   resumeConv(userId: string, convId: string): boolean {
@@ -269,6 +275,7 @@ export class SessionManager {
         totalTurns: s.totalTurns ?? 0,
         createdAt: Date.now(),
         workDir: s.workDir,
+        firstMessage: s.firstMessage,
       });
     }
 
@@ -278,6 +285,7 @@ export class SessionManager {
     // Restore target as active
     s.activeConvId = entry.convId;
     s.totalTurns = entry.totalTurns;
+    s.firstMessage = entry.firstMessage;
     s.sessionIds = {};
     // Restore sessionIds from convSessionMap
     for (const toolId of ['claude', 'codex', 'codebuddy'] as const) {
@@ -310,6 +318,14 @@ export class SessionManager {
     t.totalTurns = (t.totalTurns ?? 0) + turns;
     this.save();
     return t.totalTurns;
+  }
+
+  /** Save the first message preview for the current conversation (only on first turn). */
+  setConvPreview(userId: string, preview: string): void {
+    const s = this.sessions.get(userId);
+    if (!s || (s.totalTurns ?? 0) > 0) return;
+    s.firstMessage = preview;
+    this.save();
   }
 
   getModel(userId: string, threadId?: string): string | undefined {
