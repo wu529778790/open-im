@@ -2,65 +2,44 @@
 
 **English** · [中文](./README.zh-CN.md)
 
-Multi-platform IM bridge for AI CLI tools. Connect Telegram, Feishu, WeCom, DingTalk, QQ, WeChat (WorkBuddy), and WeChat (ClawBot) to Claude Code, Codex, and CodeBuddy — use your AI coding assistant from any phone or chat window.
+> Your AI coding assistant, in every chat app.
+
+open-im bridges Claude Code, Codex, and CodeBuddy to Telegram, Feishu, WeCom, DingTalk, QQ, WeChat (WorkBuddy), and WeChat (ClawBot). Send a message from your phone, get code written on your server.
 
 ## Architecture
 
 ![Open-IM Architecture](./diagram/architecture/open-im-architecture.svg)
 
+## Why
+
+- **Work from anywhere** — trigger Claude Code from your phone while commuting, waiting in line, or on the couch
+- **Seamless handoff** — open-im shares sessions with the Claude Code CLI; pick up on your computer exactly where you left off on your phone
+- **Full power, simple interface** — stream responses, manage sessions, switch models — all through chat commands
+- **One bridge, many platforms** — same bot works on Telegram, Feishu, DingTalk, WeChat, and more
+
 ## Features
 
-- **Seven IM platforms** — Telegram, Feishu, WeCom, DingTalk, QQ, WorkBuddy, ClawBot
-- **Three AI backends** — Claude (Agent SDK), Codex, CodeBuddy (per-platform override supported)
-- **Streaming, media, sessions** — live output where supported; `/new` for a fresh AI session
-- **Web UI** — dashboard bundled in the package; default **`http://127.0.0.1:39282`**
-
-## Requirements
-
-- Node.js ≥ 20
-- At least one IM platform configured + credentials for your AI tool
-
-## Quick start
-
-```bash
-npx @wu529778790/open-im start
-```
-
-Or: `npm install -g @wu529778790/open-im` then `open-im start`.
-
-Config: **`~/.open-im/config.json`**
-
-## CLI
+### Chat commands
 
 | Command | Description |
 | --- | --- |
-| `open-im init` | Interactive setup (does not start the bridge) |
-| `open-im start` | Run the bridge in the background |
-| `open-im stop` | Stop the background bridge |
-| `open-im restart` | Stop then start |
-| `open-im dashboard` | Web config server only (no bridge) |
+| `/help` | Show all commands |
+| `/new` | Start a fresh AI session |
+| `/sessions` | Browse session history with previews |
+| `/resume [N]` | Resume a session (no arg = most recent) |
+| `/history [N]` | View conversation messages in a session |
+| `/delete <N>` | Delete a session |
+| `/rename <title>` | Rename the current session |
+| `/fork [N]` | Fork a session (create a branch) |
+| `/models` | List available AI models |
+| `/context` | Show context window usage |
+| `/status` | Show AI tool, account, and session info |
+| `/cd <path>` / `/pwd` | Switch work directory (auto-resumes that dir's session) |
+| `/allow` / `/y`, `/deny` / `/n` | Respond to permission prompts |
 
-After `start`, the CLI prints the dashboard URL (default **`http://127.0.0.1:39282`**).
-
-## Chat commands
-
-| Command | Description |
-| --- | --- |
-| `/help` | Help |
-| `/new` | New AI session |
-| `/sessions` | Session history with preview |
-| `/resume [N]` | Resume session (no arg = most recent) |
-| `/status` | AI + session info |
-| `/cd` / `/pwd` | Switch work dir (auto-resumes that dir's session) |
-| `/allow` / `/y`, `/deny` / `/n` | Permission prompts |
-
-## Session continuity
+### Session continuity
 
 open-im and Claude Code CLI share the same session storage. In the same directory, you can seamlessly switch between phone and computer.
-
-**Phone → Computer:** open-im auto-resumes the latest CLI session — no configuration needed.
-
-**Computer → Phone:** use `claude --continue` (or `claude -c`) to pick up the phone conversation.
 
 ```
 # On computer
@@ -75,16 +54,43 @@ claude -c                       # continues the phone conversation
 
 > Only one side can be active at a time. Exit the CLI before sending messages from the phone, and vice versa.
 
-## Git co-authors
+### Platform support
 
-`Co-authored-by` is appended by default on AI-driven commits. **Disable:** set **`OPEN_IM_GIT_COAUTHOR=0`** in the environment and restart the bridge.
+Seven IM platforms, three AI backends, per-platform override:
 
-## Minimal config
+| Platform | Streaming | Media | Notes |
+| --- | --- | --- | --- |
+| Telegram | Yes | Images | Full bot support |
+| Feishu | Yes | Images | Streaming card |
+| WeCom | Yes | Images | Streaming card |
+| DingTalk | Partial | Images | Fallback to text |
+| QQ | Yes | Images | |
+| WorkBuddy | Yes | Images | WeChat-based |
+| ClawBot | Yes | Images | WeChat-based |
+
+Set `platforms.<name>.aiCommand` (`claude` / `codex` / `codebuddy`) per channel. Default: `claude`.
+
+### Web dashboard
+
+`open-im start` serves a built-in SPA and API at **`http://127.0.0.1:39282`** (configurable via `OPEN_IM_WEB_PORT`). For LAN access: `export OPEN_IM_WEB_HOST=0.0.0.0`.
+
+## Quick start
+
+```bash
+npx @wu529778790/open-im init    # interactive setup
+npx @wu529778790/open-im start   # run the bridge
+```
+
+Or install globally: `npm install -g @wu529778790/open-im` then `open-im start`.
+
+Config file: **`~/.open-im/config.json`**
+
+### Minimal config
 
 ```json
 {
   "tools": {
-    "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
+    "claude": { "workDir": "/path/to/project", "skipPermissions": true }
   },
   "platforms": {
     "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
@@ -92,11 +98,11 @@ claude -c                       # continues the phone conversation
 }
 ```
 
-Add other platforms under **`platforms`** as needed. Run **`open-im init`** for a full template.
+Run `open-im init` for a full template with all platforms.
 
 ### Claude (Agent SDK)
 
-No local `claude` binary required. Third-party / compatible API:
+No local `claude` binary required. Supports third-party / compatible APIs:
 
 ```json
 {
@@ -112,25 +118,36 @@ No local `claude` binary required. Third-party / compatible API:
 }
 ```
 
-### Per-platform AI
+### CLI reference
 
-Set **`platforms.<name>.aiCommand`** (`claude` / `codex` / `codebuddy`) per channel. Default: `claude`.
-
-### Web dashboard
-
-`open-im start` serves the built-in SPA and **`/api/*`** on **`OPEN_IM_WEB_PORT`** (default **39282**). For LAN access: `export OPEN_IM_WEB_HOST=0.0.0.0`.
+| Command | Description |
+| --- | --- |
+| `open-im init` | Interactive setup (does not start the bridge) |
+| `open-im start` | Run the bridge in the background |
+| `open-im stop` | Stop the background bridge |
+| `open-im restart` | Stop then start |
+| `open-im dashboard` | Web config server only (no bridge) |
 
 ### Environment variables
 
-Typical keys: **`ANTHROPIC_*`** (shell or **`tools.claude.env`**), **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
+**`ANTHROPIC_*`** (shell or `tools.claude.env`), **`TELEGRAM_BOT_TOKEN`**, **`OPEN_IM_WEB_PORT`**, **`OPEN_IM_WEB_HOST`**, plus platform-specific `*_APP_ID`, `*_SECRET`, `WORKBUDDY_*`, etc.
+
+### Git co-authors
+
+`Co-authored-by` is appended by default on AI-driven commits. Disable: set **`OPEN_IM_GIT_COAUTHOR=0`** in the environment and restart the bridge.
 
 ### Privacy
 
-**Anonymous** usage information may be collected to improve reliability (no chat or prompt content). To disable: **`OPEN_IM_TELEMETRY=false`** or **`"telemetry": { "enabled": false }`** in **`config.json`**.
+**Anonymous** usage information may be collected to improve reliability (no chat or prompt content). To disable: **`OPEN_IM_TELEMETRY=false`** or `"telemetry": { "enabled": false }` in `config.json`.
 
 ## Platform setup & troubleshooting
 
 See **[docs/platforms.md](./docs/platforms.md)** for detailed per-platform configuration, credential setup, and troubleshooting.
+
+## Requirements
+
+- Node.js >= 20
+- At least one IM platform configured + credentials for your AI tool
 
 ## License
 

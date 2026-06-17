@@ -1,7 +1,7 @@
 {
   "name": "@wu529778790/open-im",
   "version": "1.8.1-beta.6",
-  "description": "Multi-platform IM bridge for AI CLI tools (Claude, Codex, CodeBuddy)",
+  "description": "Your AI coding assistant, in every chat app. Multi-platform IM bridge for Claude Code, Codex, and CodeBuddy.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
