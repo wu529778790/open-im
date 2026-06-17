@@ -29,8 +29,9 @@ function truncateSummary(session: SDKSessionInfo, maxLen = 30): string {
 }
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import type { ThreadContext } from '../shared/types.js';
 
 export type { ThreadContext };
@@ -110,6 +111,7 @@ export class CommandHandler {
       }
 
       if (t === '/help') return this.handleHelp(chatId);
+      if (t === '/plugins') return this.handlePlugins(chatId);
       if (t === '/new') return this.handleNew(chatId, userId);
       if (t === '/sessions' || t === '/resume') return this.handleSessions(chatId, userId, platform);
       if (t.startsWith('/resume ')) return this.handleResume(chatId, userId, t.slice(8).trim(), platform);
@@ -154,12 +156,43 @@ export class CommandHandler {
       '/rename <标题> - 重命名当前会话',
       '/fork [序号] - 分支会话（创建副本）',
       '/models - 查看可用模型',
+      '/plugins - 查看已安装插件',
       '/context - 查看上下文窗口占用',
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
     ].join('\n');
     await this.replySender().sendTextReply(chatId, help);
+    return true;
+  }
+
+  private async handlePlugins(chatId: string): Promise<boolean> {
+    try {
+      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      if (!existsSync(settingsPath)) {
+        await this.replySender().sendTextReply(chatId, '📦 未找到 ~/.claude/settings.json\n💡 先在 Claude Code 终端运行一次会自动创建');
+        return true;
+      }
+      const raw = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+      const plugins = (raw.enabledPlugins ?? {}) as Record<string, boolean>;
+      const entries = Object.entries(plugins);
+
+      if (entries.length === 0) {
+        await this.replySender().sendTextReply(chatId, '📦 暂无已安装插件\n💡 在 Claude Code 终端用 /install 安装插件');
+        return true;
+      }
+
+      const lines = ['📦 已安装插件:', ''];
+      for (const [name, enabled] of entries) {
+        lines.push(enabled ? `  ✅ ${name}` : `  ❌ ${name}`);
+      }
+      lines.push('');
+      lines.push('💡 在 ~/.claude/settings.json 管理，或在 Claude Code 终端用 /install');
+      await this.replySender().sendTextReply(chatId, lines.join('\n'));
+    } catch (e) {
+      log.warn('Failed to read plugins:', e);
+      await this.replySender().sendTextReply(chatId, '❌ 读取插件列表失败');
+    }
     return true;
   }
 

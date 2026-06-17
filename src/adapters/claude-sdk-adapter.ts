@@ -418,6 +418,10 @@ export class ClaudeSDKAdapter implements ToolAdapter {
             cwd: workDir,
             model: resolvedModel,
             permissionMode,
+            // 启用完整工具集，与 cc 终端一致
+            tools: { type: 'preset', preset: 'claude_code' },
+            // 启用所有技能（superpowers, playwright 等），与 cc 终端一致
+            skills: 'all',
             ...(resumeId ? { resume: resumeId } : {}),
             ...(options?.fallbackModel ? { fallbackModel: options.fallbackModel } : {}),
             ...(options?.disallowedTools?.length ? { disallowedTools: options.disallowedTools } : {}),
