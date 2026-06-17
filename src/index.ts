@@ -46,7 +46,7 @@ import {
 } from "./logger.js";
 import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
 import { createRequire } from "node:module";
-import { escapePathForMarkdown } from "./shared/utils.js";
+import { escapePathForMarkdown, getAIToolDisplayName } from "./shared/utils.js";
 import { applyOpenImGitCoauthorToProcessEnv } from "./shared/git-coauthor.js";
 import { emitInterruptedTerminals } from "./shared/task-cleanup.js";
 
@@ -163,6 +163,16 @@ async function sendLifecycleNotification(platform: Platform, message: string) {
   log.info(`[${platform}] Lifecycle notification sent successfully`);
 }
 
+const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
+  telegram: 'Telegram',
+  feishu: '飞书',
+  wework: '企业微信',
+  dingtalk: '钉钉',
+  qq: 'QQ',
+  workbuddy: '微信',
+  clawbot: '微信 (ClawBot)',
+};
+
 function buildStartupMessage(
   platform: string,
   appVersion: string,
@@ -180,28 +190,25 @@ function buildStartupMessage(
     }
   }
 
-  const lines = [
-    `**服务已启动**`,
-    "",
-    `- 版本: \`open-im v${appVersion}\``,
-    `- 当前渠道: \`${platform}\``,
-    `- 当前渠道 CLI: \`${aiCommand}\``,
-  ];
+  const platformName = PLATFORM_DISPLAY_NAMES[platform] ?? platform;
+  const toolName = getAIToolDisplayName(aiCommand);
+  const dir = sessionDir ? escapePathForMarkdown(sessionDir) : '发送 `/pwd` 查看';
 
-  if (sessionDir) {
-    lines.push(`- 会话目录: ${escapePathForMarkdown(sessionDir)}`);
-  } else {
-    lines.push(`- 会话目录: 发送 \`/pwd\` 查看`);
-  }
-  return lines.join("\n");
+  return [
+    `✅ open-im v${appVersion} 已就绪`,
+    "",
+    `📱 平台: ${platformName}`,
+    `🤖 AI: ${toolName}`,
+    `📁 目录: ${dir}`,
+  ].join("\n");
 }
 
 function buildShutdownMessage(uptimeMinutes: number): string {
+  const uptime = uptimeMinutes < 1 ? '< 1' : String(uptimeMinutes);
   return [
-    `**服务正在关闭**`,
+    `🛑 open-im 正在关闭`,
     "",
-    `- 服务: \`open-im\``,
-    `- 运行时长: \`${uptimeMinutes} 分钟\``,
+    `⏱️ 运行时长: ${uptime} 分钟`,
   ].join("\n");
 }
 
