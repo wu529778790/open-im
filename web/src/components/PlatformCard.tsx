@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, WebConfigPayload } from "../types.js";
 
@@ -31,6 +31,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
   const sk = PLATFORM_SUMMARY_KEY[def.key as keyof typeof PLATFORM_SUMMARY_KEY];
   const hk = PLATFORM_HELP_KEY[def.key as keyof typeof PLATFORM_HELP_KEY];
   const enabled = (values as { enabled?: boolean }).enabled ?? false;
+  const [expanded, setExpanded] = useState(enabled);
 
   const field = (f: string): ReactNode => {
     const labels = PLATFORM_FIELD_LABEL[def.key as keyof typeof PLATFORM_FIELD_LABEL];
@@ -61,18 +62,19 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
   };
 
   return (
-    <div className={`platform-card ${disabledVisual ? "disabled" : ""} ${enabled ? "enabled" : ""}`}>
-      <div className="platform-card-head">
+    <div className={`platform-card ${disabledVisual ? "disabled" : ""} ${enabled ? "enabled" : ""} ${expanded ? "expanded" : ""}`}>
+      <div className="platform-card-head" style={{ cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
         <span className="platform-card-name">
           <span className="dot" />
           {def.label}
+          <span className="platform-card-chevron">{expanded ? "▾" : "▸"}</span>
         </span>
-        <label className="toggle">
+        <label className="toggle" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
           <span className="toggle-track" />
         </label>
       </div>
-      <div className="platform-card-body">
+      {expanded && (<div className="platform-card-body">
         {sk && <p className="platform-card-hint">{t(sk)}</p>}
         {def.fields.map(field)}
         {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: html(hk) }} />}
@@ -98,7 +100,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             {qrMessage && <div className={`msg mt-4 ${qrState === "success" ? "msg-ok" : "msg-err"}`}>{qrMessage}</div>}
           </div>
         )}
-      </div>
+      </div>)}
     </div>
   );
 }

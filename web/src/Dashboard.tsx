@@ -72,6 +72,8 @@ export function Dashboard() {
         const d = (await R("/api/config")) as ConfigApiResponse;
         if (!ok) return;
         const c = coerce(d.payload); setPl(c); setMeta({ configPath: d.meta.configPath });
+        // First-run detection: if no platform enabled, auto-show wizard
+        if (!PLATFORM_KEYS.some(k => c.platforms[k].enabled)) setNav("wizard");
         const [cl, cx, fj] = await Promise.all([
           R("/api/claude/settings") as Promise<{ contents?: string }>,
           R("/api/codex/settings") as Promise<{ contents?: string }>,

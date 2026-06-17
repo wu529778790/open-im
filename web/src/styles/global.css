@@ -363,6 +363,12 @@ body {
   align-items: center;
   gap: 8px;
 }
+.platform-card-chevron {
+  font-size: 12px;
+  color: var(--c-text-3);
+  margin-left: 4px;
+  transition: transform var(--fast);
+}
 .platform-card-name .dot {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -863,6 +869,32 @@ body {
   0%,100% { opacity: 1; }
   50%     { opacity: .4; }
 }
+
+/* radio group */
+.wizard-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wizard-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid var(--c-border);
+  border-radius: var(--r-m);
+  cursor: pointer;
+  transition: all var(--fast);
+}
+.wizard-radio:hover { border-color: var(--c-accent-bdr); }
+.wizard-radio.on { border-color: var(--c-accent); background: var(--c-accent-bg); }
+.wizard-radio input[type="radio"] {
+  margin-top: 2px;
+  accent-color: var(--c-accent);
+}
+.wizard-radio-body { display: flex; flex-direction: column; gap: 2px; }
+.wizard-radio-label { font-size: 13px; font-weight: 600; color: var(--c-text); }
+.wizard-radio-desc { font-size: 12px; color: var(--c-text-3); }
 
 /* nav */
 .wizard-nav {
