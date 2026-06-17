@@ -31,6 +31,7 @@ let channelState: ClawBotState = 'disconnected';
 let messageHandler: ((chatId: string, msgId: string, content: string) => Promise<void>) | null = null;
 let stateChangeHandler: ((state: ClawBotState) => void) | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectAttempt = 0;
 let fatal = false;
 let stopped = false;
@@ -38,6 +39,13 @@ let apiUrl = 'https://ilinkai.weixin.qq.com';
 let apiToken = '';
 /** Opaque cursor for getupdates pagination (replaces numeric offset) */
 let getUpdatesBuf = '';
+/** Timestamp of last successful poll response (for watchdog) */
+let lastResponseAt = 0;
+/** Per-request timeout for long-polling (ms) */
+const POLL_REQUEST_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+/** Watchdog interval: force reconnect if no response for this long (ms) */
+const WATCHDOG_INTERVAL_MS = 60_000; // check every 60s
+const WATCHDOG_STALE_MS = 5 * 60 * 1000; // 5 minutes without response = stale
 
 export function getChannelState(): ClawBotState {
   return channelState;
@@ -78,14 +86,23 @@ function startPolling(): void {
   pollController = new AbortController();
   const signal = pollController.signal;
 
+  // Start watchdog to detect stale connections (e.g. Mac sleep / network drop)
+  startWatchdog();
+
   (async () => {
     log.info('ClawBot long-polling started');
     while (!stopped && !signal.aborted) {
       try {
+        // Combine the poll controller signal with a per-request timeout
+        const timeoutSignal = AbortSignal.timeout(POLL_REQUEST_TIMEOUT_MS);
+        const combinedSignal = AbortSignal.any([signal, timeoutSignal]);
         const res = await postApi('/ilink/bot/getupdates', {
           get_updates_buf: getUpdatesBuf,
           base_info: BASE_INFO,
-        }, signal);
+        }, combinedSignal);
+
+        // Record successful response time for watchdog
+        lastResponseAt = Date.now();
 
         if (signal.aborted) break;
 
@@ -192,6 +209,30 @@ function updateState(state: ClawBotState): void {
 }
 
 /**
+ * Watchdog: periodically check if the poll loop is alive.
+ * After Mac sleep or network drop, the fetch may hang without throwing.
+ * If no successful response for WATCHDOG_STALE_MS, force a reconnect.
+ */
+function startWatchdog(): void {
+  stopWatchdog();
+  lastResponseAt = Date.now();
+  watchdogTimer = setInterval(() => {
+    if (stopped) return;
+    const elapsed = Date.now() - lastResponseAt;
+    if (elapsed > WATCHDOG_STALE_MS) {
+      log.warn(`ClawBot watchdog: no response for ${Math.round(elapsed / 1000)}s, forcing reconnect`);
+      if (pollController) { pollController.abort(); pollController = null; }
+      updateState('error');
+      scheduleReconnect();
+    }
+  }, WATCHDOG_INTERVAL_MS);
+}
+
+function stopWatchdog(): void {
+  if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+}
+
+/**
  * Extract text content from an iLink message's item_list.
  * Returns the first text item found, or a placeholder for media types.
  */
@@ -294,6 +335,7 @@ export function stopClawbot(): void {
   stopped = true;
   if (pollController) { pollController.abort(); pollController = null; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  stopWatchdog();
   messageHandler = null;
   // Don't clear context_token here — it's persisted for startup notifications
   updateState('disconnected');
