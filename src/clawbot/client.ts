@@ -65,31 +65,10 @@ export async function initClawbot(
   fatal = false;
   getUpdatesBuf = '';
 
-  // Verify connectivity — non-fatal, reconnect loop will retry
-  try {
-    const res = await postApi('/ilink/bot/getupdates', {
-      get_updates_buf: '',
-      base_info: BASE_INFO,
-    });
-    if (!res.ok) {
-      throw new Error(`API check failed: ${res.error ?? 'unknown'}`);
-    }
-    log.info(`ClawBot API reachable at ${apiUrl}`);
-    fatal = false;
-    reconnectAttempt = 0;
-    if (res.updatesBuf) getUpdatesBuf = res.updatesBuf;
-    updateState('connected');
-    startPolling();
-  } catch (err) {
-    if (isFatalReconnectError(err)) {
-      fatal = true;
-      log.warn('ClawBot API auth/session error, will slow-probe:', err);
-    } else {
-      log.warn('ClawBot API not reachable, will retry:', err);
-    }
-    updateState('connecting');
-    scheduleReconnect();
-  }
+  // Start polling directly — no blocking connectivity check.
+  // The polling loop handles errors and reconnection internally.
+  updateState('connected');
+  startPolling();
   log.info('ClawBot client initialized');
 }
 
