@@ -14,29 +14,45 @@ vi.mock('../logger.js', () => ({
 }));
 
 // Mock the Claude Agent SDK
+const mockQuery = vi.fn();
 const mockListSessions = vi.fn();
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-  unstable_v2_createSession: vi.fn(),
-  unstable_v2_resumeSession: vi.fn(),
+  query: (...args: unknown[]) => mockQuery(...args),
   listSessions: (...args: unknown[]) => mockListSessions(...args),
 }));
 
 // Import after mocks are set up
 import { ClaudeSDKAdapter, findLatestClaudeSession } from './claude-sdk-adapter.js';
-import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
+
+function createMockQuery(messages: unknown[]) {
+  return {
+    [Symbol.asyncIterator]() {
+      let index = 0;
+      return {
+        async next() {
+          if (index < messages.length) {
+            return { value: messages[index++], done: false };
+          }
+          return { value: undefined, done: true };
+        },
+      };
+    },
+    interrupt: vi.fn(),
+    setPermissionMode: vi.fn(),
+    setModel: vi.fn(),
+  };
+}
 
 describe('ClaudeSDKAdapter', () => {
   let adapter: ClaudeSDKAdapter;
 
   beforeEach(() => {
     adapter = new ClaudeSDKAdapter();
-    vi.mocked(unstable_v2_createSession).mockReset();
-    vi.mocked(unstable_v2_resumeSession).mockReset();
+    mockQuery.mockReset();
     mockListSessions.mockReset();
   });
 
   afterEach(() => {
-    // Clean up any active sessions/timers created during tests
     ClaudeSDKAdapter.destroy();
   });
 
@@ -57,12 +73,14 @@ describe('ClaudeSDKAdapter', () => {
       onError: vi.fn(),
     };
 
+    mockListSessions.mockResolvedValue([]);
+    mockQuery.mockReturnValue(createMockQuery([]));
+
     const handle = adapter.run('test prompt', undefined, '/tmp', callbacks);
 
     expect(handle).toBeDefined();
     expect(typeof handle.abort).toBe('function');
 
-    // Abort to clean up the background promise
     handle.abort();
   });
 
@@ -70,18 +88,46 @@ describe('ClaudeSDKAdapter', () => {
     expect(() => ClaudeSDKAdapter.destroy()).not.toThrow();
   });
 
-  it('includes stderr context when Claude exits with a generic code 1 error', async () => {
-    vi.mocked(unstable_v2_createSession).mockImplementation((options) => {
-      options.stderr?.('fatal: missing permission\n');
-      return {
-        send: vi.fn(async () => {}),
-        close: vi.fn(),
-        stream: async function* () {
-          yield { type: 'unknown' } as never;
-          throw new Error('Claude Code process exited with code 1');
-        },
-      } as never;
+  it('streams text and completes successfully', async () => {
+    mockListSessions.mockResolvedValue([]);
+    mockQuery.mockReturnValue(createMockQuery([
+      { type: 'system', subtype: 'init', session_id: 'sess-1', tools: [], plugins: [], skills: [] },
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } } },
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: ' world' } } },
+      { type: 'result', subtype: 'success', result: 'Hello world', total_cost_usd: 0.01, duration_ms: 500, num_turns: 1, errors: [], session_id: 'sess-1' },
+    ]));
+
+    const callbacks = {
+      onText: vi.fn(),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+      onSessionId: vi.fn(),
+    };
+
+    adapter.run('test prompt', undefined, '/tmp', callbacks);
+
+    await vi.waitFor(() => {
+      expect(callbacks.onComplete).toHaveBeenCalled();
     });
+
+    expect(callbacks.onSessionId).toHaveBeenCalledWith('sess-1');
+    expect(callbacks.onText).toHaveBeenCalledWith('Hello');
+    expect(callbacks.onText).toHaveBeenCalledWith('Hello world');
+    expect(callbacks.onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        accumulated: 'Hello world',
+        result: 'Hello world',
+      })
+    );
+    expect(callbacks.onError).not.toHaveBeenCalled();
+  });
+
+  it('calls onError when query reports error', async () => {
+    mockListSessions.mockResolvedValue([]);
+    mockQuery.mockReturnValue(createMockQuery([
+      { type: 'result', subtype: 'error_during_execution', errors: ['Network connection failed'], duration_ms: 100, num_turns: 1, total_cost_usd: 0, session_id: 'sess-2' },
+    ]));
 
     const callbacks = {
       onText: vi.fn(),
@@ -92,63 +138,48 @@ describe('ClaudeSDKAdapter', () => {
     adapter.run('test prompt', undefined, '/tmp', callbacks);
 
     await vi.waitFor(() => {
-      expect(callbacks.onError).toHaveBeenCalledWith(
-        expect.stringContaining('stderr: fatal: missing permission'),
-      );
+      expect(callbacks.onError).toHaveBeenCalledWith('Network connection failed');
     });
+
+    expect(callbacks.onComplete).not.toHaveBeenCalled();
   });
 
-  it('serializes workDir so concurrent runs each spawn in their own cwd', async () => {
-    const originalCwd = process.cwd();
-    const dirA = mkdtempSync(join(tmpdir(), 'cli-cwd-a-'));
-    const dirB = mkdtempSync(join(tmpdir(), 'cli-cwd-b-'));
-    // process.cwd() 展开符号链接（macOS 上 /tmp → /private/tmp），用 realpath 比对
-    const realA = realpathSync(dirA);
-    const realB = realpathSync(dirB);
-    const seenCwds: string[] = [];
+  it('passes sessionId to resume option', async () => {
+    mockListSessions.mockResolvedValue([]);
+    mockQuery.mockReturnValue(createMockQuery([
+      { type: 'system', subtype: 'init', session_id: 'sess-existing', tools: [], plugins: [], skills: [] },
+      { type: 'result', subtype: 'success', result: 'ok', total_cost_usd: 0, duration_ms: 1, num_turns: 1, errors: [], session_id: 'sess-existing' },
+    ]));
 
-    try {
-      vi.mocked(unstable_v2_createSession).mockImplementation(() => {
-        return {
-          send: async () => {
-            // 让两个并发 run 在 send() 期间重叠（无锁时会互相踩 cwd）
-            await new Promise((r) => setTimeout(r, 10));
-            seenCwds.push(process.cwd());
-          },
-          close: vi.fn(),
-          stream: async function* () {
-            yield {
-              type: 'result',
-              subtype: 'success',
-              result: 'ok',
-              total_cost_usd: 0,
-              duration_ms: 1,
-              num_turns: 1,
-              errors: [],
-            } as never;
-          },
-        } as never;
-      });
+    const callbacks = { onText: vi.fn(), onComplete: vi.fn(), onError: vi.fn() };
 
-      const mk = () => ({ onText: vi.fn(), onComplete: vi.fn(), onError: vi.fn() });
-      const cbsA = mk();
-      const cbsB = mk();
-      adapter.run('p', undefined, dirA, cbsA);
-      adapter.run('p', undefined, dirB, cbsB);
+    adapter.run('test', 'sess-existing', '/tmp', callbacks);
 
-      await vi.waitFor(() => {
-        expect(cbsA.onComplete).toHaveBeenCalled();
-        expect(cbsB.onComplete).toHaveBeenCalled();
-      });
+    await vi.waitFor(() => {
+      expect(callbacks.onComplete).toHaveBeenCalled();
+    });
 
-      // 每个 send() 必须观测到自己的 workDir（修复前 send() 在锁外、cwd 不受控）
-      expect(seenCwds).toContain(realA);
-      expect(seenCwds).toContain(realB);
-    } finally {
-      process.chdir(originalCwd);
-      try { rmSync(dirA, { recursive: true, force: true }); } catch { /* ignore */ }
-      try { rmSync(dirB, { recursive: true, force: true }); } catch { /* ignore */ }
-    }
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          resume: 'sess-existing',
+        }),
+      })
+    );
+  });
+
+  it('aborts the query on abort()', async () => {
+    mockListSessions.mockResolvedValue([]);
+    // Never-resolving query
+    mockQuery.mockReturnValue(createMockQuery([]));
+
+    const callbacks = { onText: vi.fn(), onComplete: vi.fn(), onError: vi.fn() };
+
+    const handle = adapter.run('test', undefined, '/tmp', callbacks);
+    handle.abort();
+
+    // Should not throw
+    await new Promise((r) => setTimeout(r, 50));
   });
 
   describe('findLatestClaudeSession', () => {

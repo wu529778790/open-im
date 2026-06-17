@@ -1,6 +1,6 @@
 import { getConfiguredAiCommands, type Config } from '../config.js';
 import type { ToolAdapter } from './tool-adapter.interface.js';
-import { ClaudeSDKAdapter, configureClaudeSdkSessionIdle } from './claude-sdk-adapter.js';
+import { ClaudeSDKAdapter } from './claude-sdk-adapter.js';
 import { CodexAdapter } from './codex-adapter.js';
 import { CodeBuddyAdapter } from './codebuddy-adapter.js';
 import { OpenCodeAdapter } from './opencode-adapter.js';
@@ -15,7 +15,6 @@ export function initAdapters(config: Config): void {
   for (const aiCommand of getConfiguredAiCommands(config)) {
     if (aiCommand === 'claude') {
       log.info('Claude Agent SDK adapter enabled');
-      configureClaudeSdkSessionIdle(config.claudeSessionIdleTtlMinutes);
       adapters.set('claude', new ClaudeSDKAdapter());
       continue;
     }
