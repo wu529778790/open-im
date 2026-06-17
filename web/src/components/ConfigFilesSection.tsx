@@ -1,7 +1,6 @@
 interface Props {
   configJson: string;
   setConfigJson: (v: string) => void;
-  originalConfigJson: string;
   claudeSettingsJson: string;
   setClaudeSettingsJson: (v: string) => void;
   codexSettingsJson: string;
@@ -18,150 +17,65 @@ interface Props {
   forwardRef?: React.RefObject<HTMLElement | null>;
 }
 
-export function ConfigFilesSection({
-  configJson,
-  setConfigJson,
-  claudeSettingsJson,
-  setClaudeSettingsJson,
-  codexSettingsJson,
-  setCodexSettingsJson,
-  jsonValidation,
-  onSaveConfig,
-  onSaveClaude,
-  onSaveCodex,
-  onFormat,
-  onReset,
-  meta,
-  setMessage,
-  t,
-  forwardRef,
-}: Props) {
-  const toErrorMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
 
+function JsonCard({ title, hint, json, setJson, onSave, formatBtn, resetBtn, onFormat, onReset, validation, setMessage, t }: {
+  title: string; hint: string; json: string; setJson: (v: string) => void;
+  onSave: () => Promise<void>; formatBtn?: boolean; resetBtn?: boolean;
+  onFormat?: () => void; onReset?: () => void;
+  validation?: { text: string; type: "success" | "error" } | null;
+  setMessage: (m: { text: string; type: "success" | "error" | "" }) => void;
+  t: (k: string) => string;
+}) {
+  const rows = formatBtn ? 18 : 12;
+  return (
+    <div className="card config-card">
+      <div className="card-head">
+        <span className="card-title">{title}</span>
+        <span className="form-hint" style={{ margin: 0 }}>{hint}</span>
+      </div>
+      <div className="card-body">
+        {(formatBtn || resetBtn) && (
+          <div className="config-card-toolbar">
+            {formatBtn && <button type="button" className="btn btn-g btn-sm" onClick={onFormat}>{t("formatJson")}</button>}
+            {resetBtn && <button type="button" className="btn btn-g btn-sm" onClick={onReset}>{t("resetJson")}</button>}
+          </div>
+        )}
+        <textarea className="form-input mono" rows={rows} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} style={{ minHeight: formatBtn ? 340 : 200, resize: "vertical", whiteSpace: "pre" }} />
+        {validation && <div className={`msg mt-4 ${validation.type === "success" ? "msg-ok" : "msg-err"}`}>{validation.text}</div>}
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="btn btn-s btn-sm" onClick={() => void (async () => { try { await onSave(); setMessage({ text: t("saveOk"), type: "success" }); } catch (e) { setMessage({ text: toMsg(e), type: "error" }); } })()}>
+            {t("saveBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ConfigFilesSection({
+  configJson, setConfigJson,
+  claudeSettingsJson, setClaudeSettingsJson,
+  codexSettingsJson, setCodexSettingsJson,
+  jsonValidation,
+  onSaveConfig, onSaveClaude, onSaveCodex,
+  onFormat, onReset,
+  meta, setMessage, t, forwardRef,
+}: Props) {
   return (
     <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
-      <div className="section-header">
-        <h2 className="section-title">{t("configFilesTitle")}</h2>
-        <p className="section-description">{t("configFilesHint")}</p>
-      </div>
-      <div className="config-files-stack">
-        <div className="card config-file-card">
-          <div className="card-header">
-            <h3 className="card-title mono">{t("configJson")}</h3>
-          </div>
-          <div className="card-body">
-            <p className="form-hint">{t("openImConfigCardHint")}</p>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 8 }}>
-              <button type="button" className="btn btn-sm btn-ghost" onClick={onFormat}>
-                {t("formatJson")}
-              </button>
-              <button type="button" className="btn btn-sm btn-ghost" onClick={onReset}>
-                {t("resetJson")}
-              </button>
-            </div>
-            <textarea
-              className="form-input mono"
-              rows={18}
-              spellCheck={false}
-              value={configJson}
-              onChange={(e) => setConfigJson(e.target.value)}
-              style={{ minHeight: 360, resize: "vertical", whiteSpace: "pre" }}
-            />
-            {jsonValidation ? (
-              <div className={`message mt-4 ${jsonValidation.type === "success" ? "message-success" : "message-error"}`}>{jsonValidation.text}</div>
-            ) : null}
-            <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() =>
-                  void (async () => {
-                    try {
-                      await onSaveConfig();
-                      setMessage({ text: t("saveOk"), type: "success" });
-                    } catch (e) {
-                      setMessage({ text: toErrorMsg(e), type: "error" });
-                    }
-                  })()
-                }
-              >
-                {t("saveBtn")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="card config-file-card">
-          <div className="card-header">
-            <h3 className="card-title mono">{t("claudeSettingsLabel")}</h3>
-          </div>
-          <div className="card-body">
-            <p className="form-hint">{t("claudeSettingsCardHint")}</p>
-            <textarea
-              className="form-input mono"
-              rows={12}
-              spellCheck={false}
-              value={claudeSettingsJson}
-              onChange={(e) => setClaudeSettingsJson(e.target.value)}
-              style={{ minHeight: 220, resize: "vertical", whiteSpace: "pre" }}
-            />
-            <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() =>
-                  void (async () => {
-                    try {
-                      await onSaveClaude();
-                      setMessage({ text: t("saveOk"), type: "success" });
-                    } catch (e) {
-                      setMessage({ text: toErrorMsg(e), type: "error" });
-                    }
-                  })()
-                }
-              >
-                {t("saveBtn")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="card config-file-card">
-          <div className="card-header">
-            <h3 className="card-title mono">{t("codexSettingsLabel")}</h3>
-          </div>
-          <div className="card-body">
-            <p className="form-hint">{t("codexSettingsCardHint")}</p>
-            <textarea
-              className="form-input mono"
-              rows={8}
-              spellCheck={false}
-              value={codexSettingsJson}
-              onChange={(e) => setCodexSettingsJson(e.target.value)}
-              style={{ minHeight: 160, resize: "vertical", whiteSpace: "pre" }}
-            />
-            <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() =>
-                  void (async () => {
-                    try {
-                      await onSaveCodex();
-                      setMessage({ text: t("saveOk"), type: "success" });
-                    } catch (e) {
-                      setMessage({ text: toErrorMsg(e), type: "error" });
-                    }
-                  })()
-                }
-              >
-                {t("saveBtn")}
-              </button>
-            </div>
-          </div>
+      <div className="section-head">
+        <div>
+          <h2 className="section-title">{t("configFilesTitle")}</h2>
+          <p className="section-desc">{t("configFilesHint")}</p>
         </div>
       </div>
-      <p className="form-hint" style={{ marginTop: 24 }}>
-        {meta.configPath ? `${t("configJson")}: ${meta.configPath}` : ""}
-      </p>
+      <div className="config-stack">
+        <JsonCard title={t("configJson")} hint={t("openImConfigCardHint")} json={configJson} setJson={setConfigJson} onSave={onSaveConfig} formatBtn resetBtn onFormat={onFormat} onReset={onReset} validation={jsonValidation} setMessage={setMessage} t={t} />
+        <JsonCard title={t("claudeSettingsLabel")} hint={t("claudeSettingsCardHint")} json={claudeSettingsJson} setJson={setClaudeSettingsJson} onSave={onSaveClaude} setMessage={setMessage} t={t} />
+        <JsonCard title={t("codexSettingsLabel")} hint={t("codexSettingsCardHint")} json={codexSettingsJson} setJson={setCodexSettingsJson} onSave={onSaveCodex} setMessage={setMessage} t={t} />
+      </div>
+      {meta.configPath && <p className="form-hint" style={{ marginTop: 16 }}>{t("configJson")}: {meta.configPath}</p>}
     </section>
   );
 }

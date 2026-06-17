@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  PLATFORM_DEFINITIONS,
-  PLATFORM_KEYS,
-  POLLING_INTERVAL_MS,
-  STORAGE_KEY_DARK_MODE,
-  STORAGE_KEY_LANG,
-} from "./constants.js";
+import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE, STORAGE_KEY_LANG } from "./constants.js";
 import { useI18n, type Lang } from "./hooks/useI18n.js";
 import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
 import { useApi } from "./context/ApiContext.js";
-
 import { Sidebar } from "./components/Sidebar.js";
 import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
@@ -18,21 +11,11 @@ import { AiConfigSection } from "./components/AiConfigSection.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
 
-/* ---------- helpers ---------- */
+function err(e: unknown): string { return e instanceof Error ? e.message : String(e); }
+function pretty(raw: string): string { return JSON.stringify(JSON.parse(raw), null, 2) + "\n"; }
+function normCmd(v: unknown): AiCommand { return v === "codex" || v === "codebuddy" || v === "claude" || v === "" ? (v as AiCommand) : "claude"; }
 
-function toErrorMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
-
-function prettyJson(raw: string): string {
-  return JSON.stringify(JSON.parse(raw), null, 2) + "\n";
-}
-
-function normalizeWebAiCommand(v: unknown): AiCommand {
-  return v === "codex" || v === "codebuddy" || v === "claude" || v === "" ? (v as AiCommand) : "claude";
-}
-
-function emptyPayload(): WebConfigPayload {
+function emptyP(): WebConfigPayload {
   return {
     platforms: {
       telegram: { enabled: false, aiCommand: "claude", botToken: "", proxy: "", allowedUserIds: "" },
@@ -43,397 +26,138 @@ function emptyPayload(): WebConfigPayload {
       workbuddy: { enabled: false, aiCommand: "claude", accessToken: "", refreshToken: "", userId: "", baseUrl: "", allowedUserIds: "" },
       clawbot: { enabled: false, aiCommand: "claude", apiUrl: "http://127.0.0.1:26322", apiToken: "", allowedUserIds: "" },
     },
-    ai: {
-      claudeWorkDir: "", claudeConfigPath: "", claudeProxy: "",
-      codexCliPath: "codex", codexProxy: "", codebuddyCliPath: "codebuddy",
-      hookPort: 0, logLevel: "default",
-    },
+    ai: { claudeWorkDir: "", claudeConfigPath: "", claudeProxy: "", codexCliPath: "codex", codexProxy: "", codebuddyCliPath: "codebuddy", hookPort: 0, logLevel: "default" },
   };
 }
 
-function coercePayload(raw: WebConfigPayload): WebConfigPayload {
-  const base = emptyPayload();
-  const mergePlatform = <K extends PlatformKey>(k: K) => {
-    const m = { ...base.platforms[k], ...raw.platforms[k] };
-    return { ...m, aiCommand: normalizeWebAiCommand(m.aiCommand) };
-  };
+function coerce(raw: WebConfigPayload): WebConfigPayload {
+  const base = emptyP();
+  const mp = <K extends PlatformKey>(k: K) => { const m = { ...base.platforms[k], ...raw.platforms[k] }; return { ...m, aiCommand: normCmd(m.aiCommand) }; };
   return {
-    platforms: {
-      telegram: mergePlatform("telegram"),
-      feishu: mergePlatform("feishu"),
-      qq: mergePlatform("qq"),
-      wework: mergePlatform("wework"),
-      dingtalk: mergePlatform("dingtalk"),
-      workbuddy: mergePlatform("workbuddy"),
-      clawbot: mergePlatform("clawbot"),
-    },
-    ai: {
-      ...base.ai,
-      ...raw.ai,
-      hookPort: typeof raw.ai.hookPort === "number" ? raw.ai.hookPort : Number(raw.ai.hookPort) || 0,
-    },
+    platforms: { telegram: mp("telegram"), feishu: mp("feishu"), qq: mp("qq"), wework: mp("wework"), dingtalk: mp("dingtalk"), workbuddy: mp("workbuddy"), clawbot: mp("clawbot") },
+    ai: { ...base.ai, ...raw.ai, hookPort: typeof raw.ai.hookPort === "number" ? raw.ai.hookPort : Number(raw.ai.hookPort) || 0 },
   };
 }
-
-/* ---------- Dashboard ---------- */
 
 export function Dashboard() {
-  const request = useApi();
-
-  /* i18n */
-  const [lang, setLang] = useState<Lang>(() => {
-    const s = localStorage.getItem(STORAGE_KEY_LANG) || "";
-    return s.startsWith("zh") || (typeof navigator !== "undefined" && navigator.language.startsWith("zh")) ? "zh" : "en";
-  });
+  const R = useApi();
+  const [lang, setLang] = useState<Lang>(() => { const s = localStorage.getItem(STORAGE_KEY_LANG) || ""; return s.startsWith("zh") || navigator.language.startsWith("zh") ? "zh" : "en"; });
   const { t, html } = useI18n(lang);
-
-  /* state */
-  const [payload, setPayload] = useState<WebConfigPayload>(emptyPayload);
-  const [meta, setMeta] = useState<{ configPath: string }>({ configPath: "" });
-  const [claudeSettingsJson, setClaudeSettingsJson] = useState("");
-  const [codexSettingsJson, setCodexSettingsJson] = useState("");
-  const [configJson, setConfigJson] = useState("");
-  const [originalConfigJson, setOriginalConfigJson] = useState("");
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
-  const [busy, setBusy] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>("overview");
+  const [pl, setPl]         = useState<WebConfigPayload>(emptyP);
+  const [meta, setMeta]     = useState({ configPath: "" });
+  const [claudeJ, setClaudeJ] = useState("");
+  const [codexJ, setCodexJ]   = useState("");
+  const [cfgJ, setCfgJ]       = useState("");
+  const [origCfgJ, setOrigCfgJ] = useState("");
+  const [msg, setMsg]       = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
+  const [busy, setBusy]     = useState(false);
+  const [nav, setNav]       = useState("overview");
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
-  const [serviceStatus, setServiceStatus] = useState<{ running: boolean; pid?: number }>({ running: false });
-  const [jsonValidation, setJsonValidation] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [testBusy, setTestBusy] = useState<PlatformKey | null>(null);
-  const [testMsg, setTestMsg] = useState<Partial<Record<PlatformKey, { text: string; ok: boolean }>>>({});
+  const [svc, setSvc]       = useState<{ running: boolean; pid?: number }>({ running: false });
+  const [jv, setJv]         = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [tBusy, setTBusy]   = useState<PlatformKey | null>(null);
+  const [tMsg, setTMsg]     = useState<Partial<Record<PlatformKey, { text: string; ok: boolean }>>>({});
+  const rPlat = useRef<HTMLElement>(null);
+  const rAi   = useRef<HTMLElement>(null);
+  const rFile = useRef<HTMLElement>(null);
 
-  /* refs */
-  const refOverview = useRef<HTMLElement>(null);
-  const refPlatforms = useRef<HTMLElement>(null);
-  const refAi = useRef<HTMLElement>(null);
-  const refFiles = useRef<HTMLElement>(null);
-
-  /* ---------- data loading ---------- */
-  const refreshStatus = useCallback(async () => {
-    const data = (await request("/api/service/status")) as { running?: boolean; pid?: number };
-    const next = { running: Boolean(data.running), pid: data.pid };
-    setServiceStatus(prev => (prev.running === next.running && prev.pid === next.pid ? prev : next));
-    return data;
-  }, [request]);
-
-  const refreshHealth = useCallback(async () => {
-    try {
-      const data = (await request("/api/health")) as Record<string, unknown>;
-      setHealth(prev => (prev && JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
-    } catch { /* ignore */ }
-  }, [request]);
+  const refreshSvc = useCallback(async () => { const d = (await R("/api/service/status")) as { running?: boolean; pid?: number }; const n = { running: Boolean(d.running), pid: d.pid }; setSvc(p => p.running === n.running && p.pid === n.pid ? p : n); return d; }, [R]);
+  const refreshH   = useCallback(async () => { try { const d = (await R("/api/health")) as Record<string, unknown>; setHealth(p => p && JSON.stringify(p) === JSON.stringify(d) ? p : d); } catch {} }, [R]);
 
   useEffect(() => {
-    let cancelled = false;
+    let ok = true;
     (async () => {
-      setBusy(true);
-      setMessage({ text: "", type: "" });
+      setBusy(true); setMsg({ text: "", type: "" });
       try {
-        const data = (await request("/api/config")) as ConfigApiResponse;
-        if (cancelled) return;
-        const coerced = coercePayload(data.payload);
-        setPayload(coerced);
-        setMeta({ configPath: data.meta.configPath });
-
-        const [claude, codex, file] = await Promise.all([
-          request("/api/claude/settings") as Promise<{ contents?: string }>,
-          request("/api/codex/settings") as Promise<{ contents?: string }>,
-          request("/api/config/file") as Promise<{ contents?: string }>,
-          refreshStatus(),
-          refreshHealth(),
+        const d = (await R("/api/config")) as ConfigApiResponse;
+        if (!ok) return;
+        const c = coerce(d.payload); setPl(c); setMeta({ configPath: d.meta.configPath });
+        const [cl, cx, fj] = await Promise.all([
+          R("/api/claude/settings") as Promise<{ contents?: string }>,
+          R("/api/codex/settings") as Promise<{ contents?: string }>,
+          R("/api/config/file") as Promise<{ contents?: string }>,
+          refreshSvc(), refreshH(),
         ]);
-        if (cancelled) return;
-
-        const fmt = (raw: string | undefined, fallback: string) => {
-          const s = (raw ?? "").trim();
-          if (!s) return fallback;
-          try { return prettyJson(s); } catch { return s; }
-        };
-        setClaudeSettingsJson(fmt(claude.contents, "{\n}\n"));
-        setCodexSettingsJson(fmt(codex.contents, "{\n}\n"));
-        const rawJ = (file.contents ?? "").trim();
-        setOriginalConfigJson(rawJ);
-        setConfigJson(fmt(file.contents, "{}\n"));
-      } catch (e) {
-        if (!cancelled) setMessage({ text: toErrorMsg(e), type: "error" });
-      } finally {
-        if (!cancelled) setBusy(false);
-      }
+        if (!ok) return;
+        const fmt = (r: string | undefined, fb: string) => { const s = (r ?? "").trim(); if (!s) return fb; try { return pretty(s); } catch { return s; } };
+        setClaudeJ(fmt(cl.contents, "{\n}\n")); setCodexJ(fmt(cx.contents, "{\n}\n"));
+        const rj = (fj.contents ?? "").trim(); setOrigCfgJ(rj); setCfgJ(fmt(fj.contents, "{}\n"));
+      } catch (e) { if (ok) setMsg({ text: err(e), type: "error" }); } finally { if (ok) setBusy(false); }
     })();
-    return () => { cancelled = true; };
-  }, [request, refreshHealth, refreshStatus]);
+    return () => { ok = false; };
+  }, [R, refreshH, refreshSvc]);
 
-  /* poll */
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      void refreshStatus().catch(() => {});
-      void refreshHealth().catch(() => {});
-    }, POLLING_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [refreshHealth, refreshStatus]);
+  useEffect(() => { const id = window.setInterval(() => { void refreshSvc(); void refreshH(); }, POLLING_INTERVAL_MS); return () => window.clearInterval(id); }, [refreshH, refreshSvc]);
 
-  /* ---------- json validation ---------- */
-  const validateJsonEditor = useCallback(() => {
-    try {
-      JSON.parse(configJson);
-      setJsonValidation({ text: t("jsonValid"), type: "success" });
-    } catch (err) {
-      setJsonValidation({ text: t("jsonInvalid", { error: err instanceof Error ? err.message : String(err) }), type: "error" });
-    }
-  }, [configJson, t]);
+  const validateJson = useCallback(() => { try { JSON.parse(cfgJ); setJv({ text: t("jsonValid"), type: "success" }); } catch (e) { setJv({ text: t("jsonInvalid", { error: e instanceof Error ? e.message : String(e) }), type: "error" }); } }, [cfgJ, t]);
+  useEffect(() => { validateJson(); }, [cfgJ, validateJson]);
 
-  useEffect(() => { validateJsonEditor(); }, [configJson, validateJsonEditor]);
-
-  /* ---------- save/start/stop ---------- */
-  const buildPayload = useCallback((): WebConfigPayload => ({
-    ...payload,
-    ai: { ...payload.ai, hookPort: Number(payload.ai.hookPort) || 0 },
-  }), [payload]);
-
-  const collectClientErrors = useCallback((): string[] => {
-    const errors: string[] = [];
-    if (!PLATFORM_KEYS.some(k => payload.platforms[k].enabled)) errors.push(t("validationNoPlatformEnabled"));
-    PLATFORM_DEFINITIONS.forEach((def) => {
-      if (!payload.platforms[def.key as PlatformKey].enabled) return;
-      const missing = def.requiredFields.filter(
-        f => !String((payload.platforms[def.key as PlatformKey] as Record<string, unknown>)[f] ?? "").trim()
-      );
-      if (missing.length) errors.push(t("validationPlatformIncomplete", { platform: def.label, fields: missing.join(", ") }));
+  const buildP = useCallback((): WebConfigPayload => ({ ...pl, ai: { ...pl.ai, hookPort: Number(pl.ai.hookPort) || 0 } }), [pl]);
+  const clientErrs = useCallback((): string[] => {
+    const es: string[] = [];
+    if (!PLATFORM_KEYS.some(k => pl.platforms[k].enabled)) es.push(t("validationNoPlatformEnabled"));
+    PLATFORM_DEFINITIONS.forEach(d => {
+      if (!pl.platforms[d.key as PlatformKey].enabled) return;
+      const m = d.requiredFields.filter(f => !String((pl.platforms[d.key as PlatformKey] as Record<string, unknown>)[f] ?? "").trim());
+      if (m.length) es.push(t("validationPlatformIncomplete", { platform: d.label, fields: m.join(", ") }));
     });
-    const anyCodex = PLATFORM_KEYS.some(k => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codex");
-    const anyCodebuddy = PLATFORM_KEYS.some(k => payload.platforms[k].enabled && payload.platforms[k].aiCommand === "codebuddy");
-    if (anyCodex && !payload.ai.codexCliPath.trim()) errors.push(t("validationAiCodexNoCli"));
-    if (anyCodebuddy && !payload.ai.codebuddyCliPath.trim()) errors.push(t("validationAiCodebuddyNoCli"));
-    return errors;
-  }, [payload, t]);
+    if (PLATFORM_KEYS.some(k => pl.platforms[k].enabled && pl.platforms[k].aiCommand === "codex") && !pl.ai.codexCliPath.trim()) es.push(t("validationAiCodexNoCli"));
+    if (PLATFORM_KEYS.some(k => pl.platforms[k].enabled && pl.platforms[k].aiCommand === "codebuddy") && !pl.ai.codebuddyCliPath.trim()) es.push(t("validationAiCodebuddyNoCli"));
+    return es;
+  }, [pl, t]);
 
-  const onValidate = async () => {
-    const err = collectClientErrors();
-    if (err.length) { setMessage({ text: err.join(" "), type: "error" }); return; }
-    setBusy(true);
+  const onValidate = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await R("/api/config/validate", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("validationOk"), type: "success" }); } catch (x) { setMsg({ text: err(x), type: "error" }); } finally { setBusy(false); } };
+  const saveClaude = async () => { await R("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: claudeJ }) }); };
+  const saveCodex  = async () => { await R("/api/codex/settings", { method: "POST", body: JSON.stringify({ contents: codexJ }) }); };
+  const saveCfg    = async () => { const j = cfgJ.trim(); if (!j) return; JSON.parse(j); await R("/api/config/file", { method: "POST", body: JSON.stringify({ contents: j }) }); setOrigCfgJ(j); };
+  const onSave     = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: err(x), type: "error" }); } finally { setBusy(false); } };
+  const onStart    = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: err(x), type: "error" }); } finally { setBusy(false); } };
+  const onStop     = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: t("stopOk"), type: "success" }); } catch (x) { setMsg({ text: err(x), type: "error" }); } finally { setBusy(false); } };
+  const onToggle   = async () => { if (svc.running) await onStop(); else await onStart(); };
+
+  const onTest = async (key: PlatformKey) => {
+    const def = PLATFORM_DEFINITIONS.find(d => d.key === key); if (!def) return;
+    setTBusy(key); setTMsg(m => ({ ...m, [key]: { text: "", ok: true } }));
     try {
-      await request("/api/config/validate", { method: "POST", body: JSON.stringify(buildPayload()) });
-      setMessage({ text: t("validationOk"), type: "success" });
-    } catch (e) { setMessage({ text: toErrorMsg(e), type: "error" }); } finally { setBusy(false); }
+      const cfg: Record<string, string> = {}; def.testFields.forEach(f => { cfg[f] = String((pl.platforms[key] as Record<string, string>)[f] ?? ""); });
+      const r = (await R("/api/config/test", { method: "POST", body: JSON.stringify({ platform: key, config: cfg }) })) as { success?: boolean; message?: string; error?: string };
+      setTMsg(m => ({ ...m, [key]: r.success ? { text: r.message || t("testSuccess"), ok: true } : { text: t("testFailed", { error: r.error || "?" }), ok: false } }));
+    } catch (x) { setTMsg(m => ({ ...m, [key]: { text: t("testFailed", { error: err(x) }), ok: false } })); }
+    finally { setTBusy(null); }
   };
 
-  const saveClaudeSettings = async () => {
-    await request("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: claudeSettingsJson }) });
-  };
-  const saveCodexSettings = async () => {
-    await request("/api/codex/settings", { method: "POST", body: JSON.stringify({ contents: codexSettingsJson }) });
-  };
-  const saveOpenImConfigFile = async () => {
-    const json = configJson.trim();
-    if (!json) return;
-    JSON.parse(json);
-    await request("/api/config/file", { method: "POST", body: JSON.stringify({ contents: json }) });
-    setOriginalConfigJson(json);
-  };
+  const upP = <K extends PlatformKey>(k: K, p: Partial<WebConfigPayload["platforms"][K]>) => { setPl(prev => ({ ...prev, platforms: { ...prev.platforms, [k]: { ...prev.platforms[k], ...p } } })); };
+  const upA = (p: Partial<WebConfigPayload["ai"]>) => { setPl(prev => ({ ...prev, ai: { ...prev.ai, ...p } })); };
+  const scrollTo = (id: string) => { setNav(id); ({ platforms: rPlat, ai: rAi, files: rFile } as Record<string, React.RefObject<HTMLElement | null>>)[id]?.current?.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
+  const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
+  const toggleLang = () => { const n: Lang = lang === "zh" ? "en" : "zh"; setLang(n); localStorage.setItem(STORAGE_KEY_LANG, n); };
+  const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
+  const onWizardDone = async () => { setNav("overview"); try { const d = (await R("/api/config")) as ConfigApiResponse; setPl(coerce(d.payload)); setMeta({ configPath: d.meta.configPath }); await Promise.all([refreshSvc(), refreshH()]); } catch {} };
 
-  const onSave = async () => {
-    const err = collectClientErrors();
-    if (err.length) { setMessage({ text: err.join(" "), type: "error" }); return; }
-    setBusy(true);
-    try {
-      await Promise.all([saveClaudeSettings(), saveCodexSettings(), saveOpenImConfigFile()]);
-      await request("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildPayload()) });
-      setMessage({ text: t("saveOk"), type: "success" });
-    } catch (e) { setMessage({ text: toErrorMsg(e), type: "error" }); } finally { setBusy(false); }
-  };
-
-  const onStart = async () => {
-    const err = collectClientErrors();
-    if (err.length) { setMessage({ text: err.join(" "), type: "error" }); return; }
-    setBusy(true);
-    try {
-      await Promise.all([
-        saveClaudeSettings(),
-        saveCodexSettings(),
-        request("/api/config/save", { method: "POST", body: JSON.stringify(buildPayload()) }),
-      ]);
-      await request("/api/service/start", { method: "POST" });
-      await Promise.all([refreshStatus(), refreshHealth()]);
-      setMessage({ text: t("startOk"), type: "success" });
-    } catch (e) { setMessage({ text: toErrorMsg(e), type: "error" }); } finally { setBusy(false); }
-  };
-
-  const onStop = async () => {
-    setBusy(true);
-    try {
-      await request("/api/service/stop", { method: "POST" });
-      await refreshStatus();
-      setMessage({ text: t("stopOk"), type: "success" });
-    } catch (e) { setMessage({ text: toErrorMsg(e), type: "error" }); } finally { setBusy(false); }
-  };
-
-  const onToggleService = async () => {
-    if (serviceStatus.running) await onStop(); else await onStart();
-  };
-
-  /* ---------- platform test ---------- */
-  const onTestPlatform = async (key: PlatformKey) => {
-    const def = PLATFORM_DEFINITIONS.find(d => d.key === key);
-    if (!def) return;
-    setTestBusy(key);
-    setTestMsg(m => ({ ...m, [key]: { text: "", ok: true } }));
-    try {
-      const cfg: Record<string, string> = {};
-      def.testFields.forEach(f => { cfg[f] = String((payload.platforms[key] as Record<string, string>)[f] ?? ""); });
-      const result = (await request("/api/config/test", {
-        method: "POST",
-        body: JSON.stringify({ platform: key, config: cfg }),
-      })) as { success?: boolean; message?: string; error?: string };
-      setTestMsg(m => ({
-        ...m,
-        [key]: result.success
-          ? { text: result.message || t("testSuccess"), ok: true }
-          : { text: t("testFailed", { error: result.error || "?" }), ok: false },
-      }));
-    } catch (e) {
-      setTestMsg(m => ({ ...m, [key]: { text: t("testFailed", { error: toErrorMsg(e) }), ok: false } }));
-    } finally { setTestBusy(null); }
-  };
-
-  /* ---------- platform update ---------- */
-  const updatePlatform = <K extends PlatformKey>(key: K, patch: Partial<WebConfigPayload["platforms"][K]>) => {
-    setPayload(p => ({
-      ...p,
-      platforms: { ...p.platforms, [key]: { ...p.platforms[key], ...patch } },
-    }));
-  };
-  const updateAi = (patch: Partial<WebConfigPayload["ai"]>) => {
-    setPayload(p => ({ ...p, ai: { ...p.ai, ...patch } }));
-  };
-
-  /* ---------- navigation ---------- */
-  const scrollTo = (id: string) => {
-    setActiveNav(id);
-    const map: Record<string, React.RefObject<HTMLElement | null>> = {
-      overview: refOverview, platforms: refPlatforms, ai: refAi, files: refFiles,
-    };
-    map[id]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  /* ---------- format / reset ---------- */
-  const formatJson = () => {
-    try { setConfigJson(prettyJson(configJson)); }
-    catch { setJsonValidation({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); }
-  };
-  const resetJson = () => setConfigJson(originalConfigJson ? `${originalConfigJson}\n` : "{}\n");
-
-  /* ---------- dark mode / lang ---------- */
-  const toggleLang = () => {
-    const next: Lang = lang === "zh" ? "en" : "zh";
-    setLang(next);
-    localStorage.setItem(STORAGE_KEY_LANG, next);
-  };
-  const toggleDark = () => {
-    const next = !document.documentElement.classList.contains("dark");
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem(STORAGE_KEY_DARK_MODE, next ? "true" : "false");
-  };
-
-  /* ---------- wizard callback ---------- */
-  const onWizardComplete = async () => {
-    setActiveNav("overview");
-    // re-fetch fresh state after wizard saved + started
-    try {
-      const data = (await request("/api/config")) as ConfigApiResponse;
-      const coerced = coercePayload(data.payload);
-      setPayload(coerced);
-      setMeta({ configPath: data.meta.configPath });
-      await Promise.all([refreshStatus(), refreshHealth()]);
-    } catch { /* ignore */ }
-  };
-
-  /* ---------- render ---------- */
   return (
     <div className="app">
-      <Sidebar activeNav={activeNav} onNavigate={scrollTo} t={t} />
-
+      <Sidebar activeNav={nav} onNavigate={scrollTo} t={t} />
       <main className="main">
-        <Header
-          lang={lang}
-          toggleLang={toggleLang}
-          toggleDark={toggleDark}
-          serviceStatus={serviceStatus}
-          busy={busy}
-          onValidate={() => void onValidate()}
-          onSave={() => void onSave()}
-          onToggleService={() => void onToggleService()}
-          t={t}
-        />
-
+        <Header lang={lang} toggleLang={toggleLang} toggleDark={toggleDark} serviceStatus={svc} busy={busy} onValidate={() => void onValidate()} onSave={() => void onSave()} onToggleService={() => void onToggle()} t={t} />
         <div className="content">
-          {message.text ? (
-            <div className={`message ${message.type === "success" ? "message-success" : message.type === "error" ? "message-error" : ""}`} style={{ marginBottom: 16 }}>
-              {message.text}
-            </div>
-          ) : null}
-
-          {activeNav === "wizard" ? (
-            <section className="section">
-              <SetupWizard
-                request={request}
-                t={t}
-                html={html}
-                onComplete={() => void onWizardComplete()}
-                initialPayload={payload}
-              />
-            </section>
+          {msg.text && <div className={`flash msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`}>{msg.text}</div>}
+          {nav === "wizard" ? (
+            <SetupWizard request={R} t={t} html={html} onComplete={() => void onWizardDone()} initialPayload={pl} />
           ) : (
             <>
-              <OverviewStats health={health} serviceStatus={serviceStatus} t={t} />
-
-              <section className="section" ref={refPlatforms as React.RefObject<HTMLElement>}>
-                <div className="section-header">
-                  <h2 className="section-title">{t("platformsTitle")}</h2>
-                  <p className="section-description">{t("platformsHint")}</p>
-                </div>
+              <OverviewStats health={health} serviceStatus={svc} t={t} />
+              <section className="section" ref={rPlat as React.RefObject<HTMLElement>}>
+                <div className="section-head"><div><h2 className="section-title">{t("platformsTitle")}</h2><p className="section-desc">{t("platformsHint")}</p></div></div>
                 <div className="platform-grid">
                   {PLATFORM_DEFINITIONS.map((def) => {
                     const pk = def.key as PlatformKey;
-                    return (
-                      <PlatformCard
-                        key={pk}
-                        def={def}
-                        values={payload.platforms[pk]}
-                        t={t}
-                        html={html}
-                        disabledVisual={!payload.platforms[pk].enabled}
-                        onChange={(patch) => updatePlatform(pk, patch)}
-                        onTest={() => void onTestPlatform(pk)}
-                        testing={testBusy === pk}
-                        testResult={testMsg[pk]}
-                      />
-                    );
+                    return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={!pl.platforms[pk].enabled} onChange={(p) => upP(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
                   })}
                 </div>
               </section>
-
-              <AiConfigSection ai={payload.ai} onUpdate={updateAi} t={t} html={html} forwardRef={refAi} />
-
-              <ConfigFilesSection
-                configJson={configJson}
-                setConfigJson={setConfigJson}
-                originalConfigJson={originalConfigJson}
-                claudeSettingsJson={claudeSettingsJson}
-                setClaudeSettingsJson={setClaudeSettingsJson}
-                codexSettingsJson={codexSettingsJson}
-                setCodexSettingsJson={setCodexSettingsJson}
-                jsonValidation={jsonValidation}
-                onSaveConfig={saveOpenImConfigFile}
-                onSaveClaude={saveClaudeSettings}
-                onSaveCodex={saveCodexSettings}
-                onFormat={formatJson}
-                onReset={resetJson}
-                meta={meta}
-                setMessage={setMessage}
-                t={t}
-                forwardRef={refFiles}
-              />
+              <AiConfigSection ai={pl.ai} onUpdate={upA} t={t} html={html} forwardRef={rAi} />
+              <ConfigFilesSection configJson={cfgJ} setConfigJson={setCfgJ} claudeSettingsJson={claudeJ} setClaudeSettingsJson={setClaudeJ} codexSettingsJson={codexJ} setCodexSettingsJson={setCodexJ} jsonValidation={jv} onSaveConfig={saveCfg} onSaveClaude={saveClaude} onSaveCodex={saveCodex} onFormat={fmtJson} onReset={resetJson} meta={meta} setMessage={setMsg} t={t} forwardRef={rFile} />
             </>
           )}
         </div>
