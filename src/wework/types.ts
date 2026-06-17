@@ -42,15 +42,6 @@ export interface WeWorkResponse {
   errmsg: string;
 }
 
-// 企业微信认证请求
-export interface WeWorkSubscribeRequest extends WeWorkRequest {
-  cmd: WeWorkCommand.SUBSCRIBE;
-  body: {
-    secret: string;
-    bot_id: string;
-  };
-}
-
 // 企业微信推送消息格式（cmd 为 aibot_msg_callback）
 export interface WeWorkCallbackMessage {
   cmd: WeWorkCommand.AIBOT_CALLBACK;
@@ -142,13 +133,6 @@ export interface WeWorkResponseMessage extends WeWorkRequest {
   };
 }
 
-// 消息状态（用于内部跟踪）
-export interface MessageState {
-  accumulatedText: string;
-  /** 流式回复的 streamId，用于保持同一个流式回复使用相同的 streamId */
-  streamId?: string;
-}
-
 // HTTP 响应请求格式（通过 response_url 发送）
 export interface WeWorkHttpResponseBody {
   msgtype: 'text' | 'markdown' | 'stream';
@@ -170,9 +154,4 @@ export interface WeWorkHttpResponseBody {
       };
     }>;
   };
-}
-
-export interface WeWorkHttpResponse {
-  msgtype: 'text' | 'markdown' | 'stream';
-  [key: string]: unknown;
 }

@@ -36,7 +36,7 @@ let platformConfig: NonNullable<NonNullable<Config['platforms']>['workbuddy']> |
 /** 单飞刷新 token 的在途 Promise，避免并发 401 重复刷新 */
 let refreshInFlight: Promise<void> | null = null;
 
-export function getChannelState(): WorkBuddyState {
+function getChannelState(): WorkBuddyState {
   return channelState;
 }
 
@@ -284,7 +284,7 @@ export function getCentrifugeClient(): WorkBuddyCentrifugeClient | null {
   return centrifugeClient;
 }
 
-export function getOAuth(): WorkBuddyOAuth | null {
+function getOAuth(): WorkBuddyOAuth | null {
   return oauthClient;
 }
 

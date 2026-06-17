@@ -1250,7 +1250,7 @@ const ALL_PLATFORMS: Platform[] = ["telegram", "feishu", "qq", "wework", "dingta
  * 显示全部 4 个平台，已配置的预选；若用户选择未配置的，引导运行 init
  * @returns 更新后的 config，或 null 表示取消
  */
-export async function runPlatformSelectionPrompt(
+async function runPlatformSelectionPrompt(
   config: Config,
 ): Promise<Config | null> {
   const withCreds = new Set(getPlatformsWithCredentials(config));

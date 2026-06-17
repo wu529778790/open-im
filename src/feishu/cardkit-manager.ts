@@ -85,7 +85,7 @@ function ensureCleanupTimer() {
   (cleanupTimer as NodeJS.Timeout).unref?.();
 }
 
-export function stopCleanupTimer(): void {
+function stopCleanupTimer(): void {
   if (cleanupTimer) {
     clearInterval(cleanupTimer);
     cleanupTimer = null;

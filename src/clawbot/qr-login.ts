@@ -42,7 +42,7 @@ function buildHeaders(): Record<string, string> {
   };
 }
 
-export async function fetchQRCode(): Promise<{ qrcode: string; qrcodeUrl: string }> {
+async function fetchQRCode(): Promise<{ qrcode: string; qrcodeUrl: string }> {
   const url = `${ILINK_BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=${BOT_TYPE}`;
   const res = await fetch(url, {
     method: 'POST',

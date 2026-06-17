@@ -918,7 +918,7 @@ export function getWebConfigUrl(): string {
   return `http://127.0.0.1:${getWebConfigPort()}`;
 }
 
-export function openWebConfigUrl(): void {
+function openWebConfigUrl(): void {
   openBrowser(getPublicWebDashboardUrl());
 }
 

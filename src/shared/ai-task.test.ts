@@ -60,7 +60,7 @@ describe("runAITask", () => {
           enabledPlatforms: ["wework"],
           claudeModel: "",
           codexProxy: "",
-          wechatUserId: "",
+
           dingtalkClientId: "",
           dingtalkClientSecret: "",
           qqAppId: "",
@@ -143,7 +143,7 @@ describe("runAITask", () => {
           enabledPlatforms: ["telegram"],
           claudeModel: "",
           codexProxy: "",
-          wechatUserId: "",
+
           dingtalkClientId: "",
           dingtalkClientSecret: "",
           qqAppId: "",
@@ -220,7 +220,7 @@ describe("runAITask", () => {
           enabledPlatforms: ["feishu"],
           claudeModel: "",
           codexProxy: "",
-          wechatUserId: "",
+
           dingtalkClientId: "",
           dingtalkClientSecret: "",
           qqAppId: "",
@@ -301,7 +301,7 @@ describe("runAITask", () => {
           enabledPlatforms: ["qq"],
           claudeModel: "claude-opus-4-5",
           codexProxy: "",
-          wechatUserId: "",
+
           dingtalkClientId: "",
           dingtalkClientSecret: "",
           qqAppId: "",
@@ -369,7 +369,7 @@ describe("runAITask", () => {
           enabledPlatforms: ["telegram"],
           claudeModel: "",
           codexProxy: "",
-          wechatUserId: "",
+
           dingtalkClientId: "",
           dingtalkClientSecret: "",
           qqAppId: "",

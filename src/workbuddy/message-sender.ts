@@ -84,7 +84,7 @@ export async function sendErrorReply(
 /**
  * Send streaming chunk to WeChat KF
  */
-export function sendStreamingChunk(
+function sendStreamingChunk(
   _client: WorkBuddyCentrifugeClient | null,
   chatId: string,
   text: string,
