@@ -33,6 +33,10 @@ export interface RunOptions {
   hookPort?: number;
   /** Codex 专用：HTTP/HTTPS 代理地址，如 http://127.0.0.1:7890 */
   proxy?: string;
+  /** 备用模型，主模型过载时自动切换 */
+  fallbackModel?: string;
+  /** 禁用的工具列表 */
+  disallowedTools?: string[];
 }
 
 export interface RunHandle {

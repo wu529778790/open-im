@@ -113,6 +113,12 @@ export class CommandHandler {
       if (t === '/new') return this.handleNew(chatId, userId);
       if (t === '/sessions' || t === '/resume') return this.handleSessions(chatId, userId, platform);
       if (t.startsWith('/resume ')) return this.handleResume(chatId, userId, t.slice(8).trim(), platform);
+      if (t.startsWith('/history')) return this.handleHistory(chatId, userId, t.slice(8).trim());
+      if (t.startsWith('/delete ')) return this.handleDelete(chatId, userId, t.slice(8).trim());
+      if (t.startsWith('/rename ')) return this.handleRename(chatId, userId, t.slice(8).trim());
+      if (t.startsWith('/fork')) return this.handleFork(chatId, userId, t.slice(5).trim());
+      if (t === '/models') return this.handleModels(chatId, userId, platform);
+      if (t === '/context') return this.handleContext(chatId, userId, platform);
       if (t === '/pwd') return this.handlePwd(chatId, userId);
       if (t === '/status') return this.handleStatus(chatId, userId, platform);
 
@@ -143,6 +149,12 @@ export class CommandHandler {
       '/new - 开始新会话（AI 上下文重置）',
       '/sessions - 查看历史会话',
       '/resume [序号] - 恢复历史会话（无参数恢复最近一条）',
+      '/history [序号] - 查看会话对话记录',
+      '/delete <序号> - 删除历史会话',
+      '/rename <标题> - 重命名当前会话',
+      '/fork [序号] - 分支会话（创建副本）',
+      '/models - 查看可用模型',
+      '/context - 查看上下文窗口占用',
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
@@ -247,6 +259,19 @@ export class CommandHandler {
       `工作目录: ${escapePathForMarkdown(workDir)}`,
       `会话: ${sessionId ?? '无'}`,
     ];
+
+    // 账号信息（仅 claude）
+    if (aiCommand === 'claude') {
+      try {
+        const account = await ClaudeSDKAdapter.getAccountInfo(workDir);
+        if (account) {
+          lines.push('', '👤 账号:');
+          if (account.email) lines.push(`邮箱: ${account.email}`);
+          if (account.organization) lines.push(`组织: ${account.organization}`);
+        }
+      } catch { /* ignore */ }
+    }
+
     await this.replySender().sendTextReply(chatId, lines.join('\n'));
     return true;
   }
@@ -276,6 +301,181 @@ export class CommandHandler {
     } catch (err) {
       await this.replySender().sendTextReply(chatId, err instanceof Error ? err.message : String(err));
     }
+    return true;
+  }
+
+  private async handleHistory(chatId: string, userId: string, arg: string): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const sessions = await ClaudeSDKAdapter.listSessionsForDir(workDir);
+
+    if (sessions.length === 0) {
+      await this.replySender().sendTextReply(chatId, '暂无会话记录。');
+      return true;
+    }
+
+    let targetSession = sessions[0]; // 默认当前/最近会话
+    if (arg) {
+      const index = parseInt(arg, 10);
+      if (isNaN(index) || index < 1 || index > sessions.length) {
+        await this.replySender().sendTextReply(chatId, `序号无效，共 ${sessions.length} 个会话。`);
+        return true;
+      }
+      targetSession = sessions[index - 1];
+    }
+
+    const messages = await ClaudeSDKAdapter.getSessionMessagesForId(targetSession.sessionId, workDir, 30);
+    if (messages.length === 0) {
+      await this.replySender().sendTextReply(chatId, '该会话暂无对话记录。');
+      return true;
+    }
+
+    const preview = truncateSummary(targetSession);
+    const lines = [`📜 会话记录: ${preview}`, ''];
+    for (const msg of messages) {
+      if (msg.type === 'system') continue;
+      const m = msg.message as Record<string, unknown> | undefined;
+      let text = '';
+      if (typeof m === 'string') {
+        text = m;
+      } else if (m && typeof m === 'object') {
+        const content = m.content;
+        if (Array.isArray(content) && content[0]?.text) {
+          text = content[0].text;
+        } else if (typeof content === 'string') {
+          text = content;
+        }
+      }
+      if (!text) continue;
+      const prefix = msg.type === 'user' ? '👤' : '🤖';
+      lines.push(`${prefix} ${text.slice(0, 200)}`);
+    }
+
+    await this.replySender().sendTextReply(chatId, lines.join('\n'));
+    return true;
+  }
+
+  private async handleDelete(chatId: string, userId: string, arg: string): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const sessions = await ClaudeSDKAdapter.listSessionsForDir(workDir);
+
+    const index = parseInt(arg, 10);
+    if (isNaN(index) || index < 1 || index > sessions.length) {
+      await this.replySender().sendTextReply(chatId, `用法: /delete <序号>\n共 ${sessions.length} 个会话。`);
+      return true;
+    }
+
+    const session = sessions[index - 1];
+    const preview = truncateSummary(session);
+    const ok = await ClaudeSDKAdapter.deleteSessionById(session.sessionId, workDir);
+    await this.replySender().sendTextReply(
+      chatId,
+      ok ? `✅ 已删除会话: ${preview}` : `❌ 删除失败`
+    );
+    return true;
+  }
+
+  private async handleRename(chatId: string, userId: string, title: string): Promise<boolean> {
+    if (!title) {
+      await this.replySender().sendTextReply(chatId, '用法: /rename <新标题>');
+      return true;
+    }
+
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const convId = this.deps.sessionManager.getConvId(userId);
+    const aiCommand: 'claude' | 'codex' | 'codebuddy' | 'opencode' = 'claude';
+    const sessionId = this.deps.sessionManager.getSessionIdForConv(userId, convId, aiCommand);
+
+    if (!sessionId) {
+      await this.replySender().sendTextReply(chatId, '当前没有活动会话。');
+      return true;
+    }
+
+    const ok = await ClaudeSDKAdapter.renameSessionById(sessionId, title, workDir);
+    await this.replySender().sendTextReply(
+      chatId,
+      ok ? `✅ 会话已重命名为: ${title}` : '❌ 重命名失败'
+    );
+    return true;
+  }
+
+  private async handleFork(chatId: string, userId: string, arg: string): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const sessions = await ClaudeSDKAdapter.listSessionsForDir(workDir);
+
+    if (sessions.length === 0) {
+      await this.replySender().sendTextReply(chatId, '暂无会话可分支。');
+      return true;
+    }
+
+    let targetSession = sessions[0];
+    if (arg) {
+      const index = parseInt(arg, 10);
+      if (isNaN(index) || index < 1 || index > sessions.length) {
+        await this.replySender().sendTextReply(chatId, `序号无效，共 ${sessions.length} 个会话。`);
+        return true;
+      }
+      targetSession = sessions[index - 1];
+    }
+
+    const newSessionId = await ClaudeSDKAdapter.forkSessionById(targetSession.sessionId, workDir);
+    if (newSessionId) {
+      this.deps.sessionManager.setActiveSessionId(userId, newSessionId);
+      const preview = truncateSummary(targetSession);
+      await this.replySender().sendTextReply(
+        chatId,
+        `✅ 已分支会话: ${preview}\n新会话 ID: ${newSessionId.slice(0, 8)}...\n继续发消息即可。`
+      );
+    } else {
+      await this.replySender().sendTextReply(chatId, '❌ 分支失败');
+    }
+    return true;
+  }
+
+  private async handleModels(chatId: string, userId: string, _platform: Platform): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const models = await ClaudeSDKAdapter.getSupportedModels(workDir);
+
+    if (models.length === 0) {
+      await this.replySender().sendTextReply(chatId, '暂无可用模型信息。');
+      return true;
+    }
+
+    const lines = ['🤖 可用模型:', ''];
+    for (const model of models) {
+      const name = model.displayName || model.value;
+      const desc = model.description ? ` - ${model.description.slice(0, 60)}` : '';
+      lines.push(`• ${name}${desc}`);
+    }
+
+    await this.replySender().sendTextReply(chatId, lines.join('\n'));
+    return true;
+  }
+
+  private async handleContext(chatId: string, userId: string, _platform: Platform): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const usage = await ClaudeSDKAdapter.getContextUsage(workDir);
+
+    if (!usage) {
+      await this.replySender().sendTextReply(chatId, '暂无上下文信息。');
+      return true;
+    }
+
+    const lines = ['📏 上下文窗口占用:', ''];
+    if (usage.model) lines.push(`模型: ${usage.model}`);
+    if (usage.totalTokens) lines.push(`已用: ${usage.totalTokens.toLocaleString()} tokens`);
+    if (usage.maxTokens) lines.push(`上限: ${usage.maxTokens.toLocaleString()} tokens`);
+    if (usage.percentage != null) lines.push(`使用率: ${usage.percentage}%`);
+
+    if (usage.categories?.length) {
+      lines.push('', '分类:');
+      for (const cat of usage.categories) {
+        if (cat.tokens > 0) {
+          lines.push(`  ${cat.name}: ${cat.tokens.toLocaleString()}`);
+        }
+      }
+    }
+
+    await this.replySender().sendTextReply(chatId, lines.join('\n'));
     return true;
   }
 

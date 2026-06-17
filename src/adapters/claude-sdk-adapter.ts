@@ -7,8 +7,8 @@
  * - SDK 内部管理 session 生命周期，无需手动维护 session pool
  */
 
-import { query, listSessions } from '@anthropic-ai/claude-agent-sdk';
-import type { SDKMessage, SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { query, listSessions, getSessionMessages, deleteSession, renameSession, forkSession } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage, SDKSessionInfo, SessionMessage, ModelInfo, SDKControlGetContextUsageResponse, AccountInfo } from '@anthropic-ai/claude-agent-sdk';
 import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
@@ -219,7 +219,6 @@ export class ClaudeSDKAdapter implements ToolAdapter {
    */
   static destroy(): void {
     // query() API 的 Query 对象通过 abortController.abort() 清理
-    // 不再需要手动管理 session pool
   }
 
   /**
@@ -231,6 +230,121 @@ export class ClaudeSDKAdapter implements ToolAdapter {
     } catch (err) {
       log.warn(`Failed to list sessions for ${workDir}: ${err}`);
       return [];
+    }
+  }
+
+  /**
+   * Get session messages for a given session ID.
+   */
+  static async getSessionMessagesForId(sessionId: string, workDir: string, limit = 50): Promise<SessionMessage[]> {
+    try {
+      return await getSessionMessages(sessionId, { dir: workDir, limit });
+    } catch (err) {
+      log.warn(`Failed to get session messages for ${sessionId}: ${err}`);
+      return [];
+    }
+  }
+
+  /**
+   * Delete a session by ID.
+   */
+  static async deleteSessionById(sessionId: string, workDir?: string): Promise<boolean> {
+    try {
+      await deleteSession(sessionId, { dir: workDir });
+      return true;
+    } catch (err) {
+      log.warn(`Failed to delete session ${sessionId}: ${err}`);
+      return false;
+    }
+  }
+
+  /**
+   * Rename a session.
+   */
+  static async renameSessionById(sessionId: string, title: string, workDir?: string): Promise<boolean> {
+    try {
+      await renameSession(sessionId, title, { dir: workDir });
+      return true;
+    } catch (err) {
+      log.warn(`Failed to rename session ${sessionId}: ${err}`);
+      return false;
+    }
+  }
+
+  /**
+   * Fork a session.
+   */
+  static async forkSessionById(sessionId: string, workDir?: string): Promise<string | undefined> {
+    try {
+      const result = await forkSession(sessionId, { dir: workDir });
+      return result.sessionId;
+    } catch (err) {
+      log.warn(`Failed to fork session ${sessionId}: ${err}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Create a short-lived query for fetching session info (models, context, etc).
+   * The caller must close the returned query when done.
+   */
+  static async createInfoQuery(workDir: string, model?: string): Promise<ReturnType<typeof query>> {
+    const resolvedModel = model?.trim() || process.env.ANTHROPIC_MODEL?.trim() || 'claude-opus-4-5';
+    return query({
+      prompt: '',
+      options: {
+        cwd: workDir,
+        model: resolvedModel,
+        permissionMode: 'default' as const,
+      },
+    });
+  }
+
+  /**
+   * Get available models for a work directory.
+   */
+  static async getSupportedModels(workDir: string, model?: string): Promise<ModelInfo[]> {
+    let q: Awaited<ReturnType<typeof this.createInfoQuery>> | undefined;
+    try {
+      q = await this.createInfoQuery(workDir, model);
+      return await q.supportedModels();
+    } catch (err) {
+      log.warn(`Failed to get supported models: ${err}`);
+      return [];
+    } finally {
+      if (q) { try { await q.return(undefined); } catch { /* ignore */ } }
+    }
+  }
+
+  /**
+   * Get context usage for a work directory.
+   */
+  static async getContextUsage(workDir: string, model?: string): Promise<SDKControlGetContextUsageResponse | undefined> {
+    let q: Awaited<ReturnType<typeof this.createInfoQuery>> | undefined;
+    try {
+      q = await this.createInfoQuery(workDir, model);
+      return await q.getContextUsage();
+    } catch (err) {
+      log.warn(`Failed to get context usage: ${err}`);
+      return undefined;
+    } finally {
+      if (q) { try { await q.return(undefined); } catch { /* ignore */ } }
+    }
+  }
+
+  /**
+   * Get account info for a work directory.
+   */
+  static async getAccountInfo(workDir: string, model?: string): Promise<AccountInfo | undefined> {
+    let q: Awaited<ReturnType<typeof this.createInfoQuery>> | undefined;
+    try {
+      q = await this.createInfoQuery(workDir, model);
+      return await q.accountInfo();
+    } catch (err) {
+      log.warn(`Failed to get account info: ${err}`);
+      return undefined;
+    } finally {
+      if (q) { try { await q.return(undefined); } catch { /* ignore */ } }
     }
   }
 
@@ -293,6 +407,8 @@ export class ClaudeSDKAdapter implements ToolAdapter {
             model: resolvedModel,
             permissionMode,
             ...(resumeId ? { resume: resumeId } : {}),
+            ...(options?.fallbackModel ? { fallbackModel: options.fallbackModel } : {}),
+            ...(options?.disallowedTools?.length ? { disallowedTools: options.disallowedTools } : {}),
             abortController,
             stderr: (data: string) => {
               recentStderr = appendStderrSnippet(recentStderr, data);

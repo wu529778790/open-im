@@ -45,7 +45,6 @@ export const IMAGE_DIR = join(tmpdir(), "open-im-images");
 export const DEFAULT_OPEN_IM_COAUTHOR_ADDR = "529778790@qq.com";
 
 export const TERMINAL_ONLY_COMMANDS = new Set([
-  "/context",
   "/rewind",
   "/copy",
   "/export",
