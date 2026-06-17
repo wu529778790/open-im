@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { createLogger } from '../logger.js';
 import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/reconnect.js';
 import { cacheContextToken } from './message-sender.js';
+import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
 import type { Config } from '../config.js';
 import type {
   ClawBotState,
@@ -115,6 +116,7 @@ function startPolling(): void {
             log.warn(`ClawBot fatal error (errcode=${res.errcode}), entering slow-probe mode`);
             fatal = true;
             getUpdatesBuf = '';   // session expired, cursor is stale
+            clearClawbotContextToken(); // session expired, token is stale
             updateState('error');
             scheduleReconnect();
             return;
@@ -154,9 +156,10 @@ function startPolling(): void {
             continue;
           }
 
-          // Cache context_token for reply capability
+          // Cache context_token for reply capability (in-memory + persisted)
           if (msg.context_token) {
             cacheContextToken(chatId, msg.context_token);
+            setClawbotContextToken(msg.context_token);
           }
 
           log.info(`ClawBot message: chatId=${chatId}, msgId=${msgId}, content="${content.substring(0, 100)}"`);
@@ -313,6 +316,7 @@ export function stopClawbot(): void {
   if (pollController) { pollController.abort(); pollController = null; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   messageHandler = null;
+  // Don't clear context_token here — it's persisted for startup notifications
   updateState('disconnected');
   log.info('ClawBot client stopped');
 }

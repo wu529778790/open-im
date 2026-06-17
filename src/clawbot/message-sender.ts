@@ -9,6 +9,7 @@ import { createLogger } from '../logger.js';
 import { splitLongContent, toReplyPlainText } from '../shared/utils.js';
 import { MAX_CLAWBOT_MESSAGE_LENGTH } from '../constants.js';
 import { getChannelState } from './client.js';
+import { getActiveChatId, getClawbotContextToken } from '../shared/active-chats.js';
 import type { SendMessageResponse } from './types.js';
 
 const log = createLogger('ClawBotSender');
@@ -22,6 +23,14 @@ const contextTokenCache = new Map<string, string>();
 export function initClawBotSender(url: string, token: string): void {
   apiUrl = url;
   apiToken = token;
+
+  // Restore persisted context_token for the active chat (survives restarts)
+  const activeChatId = getActiveChatId('clawbot');
+  const savedToken = getClawbotContextToken();
+  if (activeChatId && savedToken) {
+    contextTokenCache.set(activeChatId, savedToken);
+    log.info(`Restored context_token for chatId=${activeChatId}`);
+  }
 }
 
 /** Cache a context_token for a chatId (called when receiving messages) */
@@ -57,8 +66,9 @@ async function postMessage(chatId: string, text: string, contextToken?: string):
 
   const token = contextToken ?? getCachedContextToken(chatId);
   if (!token) {
-    log.warn(`ClawBot no context_token for chatId=${chatId}, cannot send reply`);
-    return false;
+    const errMsg = `ClawBot no context_token for chatId=${chatId}, cannot send reply`;
+    log.warn(errMsg);
+    throw new Error(errMsg);
   }
 
   try {

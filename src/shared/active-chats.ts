@@ -25,6 +25,8 @@ interface Data {
   wework?: string;
   workbuddy?: string;
   clawbot?: string;
+  /** Persisted context_token for ClawBot iLink API (survives restarts) */
+  clawbotContextToken?: string;
 }
 
 let data: Data = {};
@@ -107,6 +109,25 @@ export function setDingTalkActiveTarget(
     return;
   }
 
+  scheduleSave();
+}
+
+/** Get persisted ClawBot context_token (survives restarts) */
+export function getClawbotContextToken(): string | undefined {
+  return data.clawbotContextToken;
+}
+
+/** Persist ClawBot context_token (called when receiving messages with context_token) */
+export function setClawbotContextToken(token: string): void {
+  if (data.clawbotContextToken === token) return;
+  data.clawbotContextToken = token;
+  scheduleSave();
+}
+
+/** Clear persisted ClawBot context_token (e.g. on session expiry) */
+export function clearClawbotContextToken(): void {
+  if (!data.clawbotContextToken) return;
+  data.clawbotContextToken = undefined;
   scheduleSave();
 }
 
