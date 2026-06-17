@@ -15,6 +15,7 @@ interface ConvHistoryEntry {
   convId: string;
   totalTurns: number;
   createdAt: number;
+  workDir?: string;
 }
 
 interface UserSession {
@@ -131,35 +132,67 @@ export class SessionManager {
     return convId;
   }
 
-  async setWorkDir(userId: string, workDir: string): Promise<string> {
+  async setWorkDir(userId: string, workDir: string): Promise<{ path: string; resumed: boolean }> {
     const currentDir = this.getWorkDir(userId);
     const realPath = await this.resolveAndValidate(currentDir, workDir);
     const s = this.sessions.get(userId);
     let oldConvId: string | undefined;
+    let resumed = false;
+
     if (s) {
+      // Same directory — no-op
+      if (realPath === currentDir) {
+        return { path: realPath, resumed: false };
+      }
+
       oldConvId = s.activeConvId;
       this.persistActiveConvSessions(userId, s);
+
+      // Archive current conversation with its workDir
       if (oldConvId) {
         if (!s.convHistory) s.convHistory = [];
         s.convHistory.push({
           convId: oldConvId,
           totalTurns: s.totalTurns ?? 0,
           createdAt: Date.now(),
+          workDir: currentDir,
         });
         if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
       }
+
+      // Look for a previous conversation in the target directory
+      if (!s.convHistory) s.convHistory = [];
+      const matchIdx = s.convHistory.findIndex((e) => e.workDir === realPath);
+      if (matchIdx !== -1) {
+        const [entry] = s.convHistory.splice(matchIdx, 1);
+        s.activeConvId = entry.convId;
+        s.totalTurns = entry.totalTurns;
+        s.sessionIds = {};
+        for (const toolId of ['claude', 'codex', 'codebuddy', 'opencode'] as const) {
+          const sessionId = this.convSessionMap.get(this.getConvSessionKey(userId, entry.convId, toolId));
+          if (sessionId) {
+            if (!s.sessionIds) s.sessionIds = {};
+            s.sessionIds[toolId] = sessionId;
+          }
+        }
+        resumed = true;
+        log.info(`Resumed session for user ${userId}: convId=${entry.convId}, workDir=${realPath}, turns=${entry.totalTurns}`);
+      } else {
+        s.sessionIds = {};
+        s.activeConvId = randomBytes(4).toString('hex');
+      }
+
       s.workDir = realPath;
-      s.sessionIds = {};
-      s.activeConvId = randomBytes(4).toString('hex');
     } else {
       this.sessions.set(userId, {
         workDir: realPath,
         activeConvId: randomBytes(4).toString('hex'),
       });
     }
+
     this.flushSync();
-    log.info(`WorkDir changed for user ${userId}: ${realPath}, oldConvId=${oldConvId}`);
-    return realPath;
+    log.info(`WorkDir changed for user ${userId}: ${realPath}, oldConvId=${oldConvId}, resumed=${resumed}`);
+    return { path: realPath, resumed };
   }
 
   newSession(userId: string): boolean {
@@ -175,6 +208,7 @@ export class SessionManager {
           convId: oldConvId,
           totalTurns: s.totalTurns ?? 0,
           createdAt: Date.now(),
+          workDir: s.workDir,
         });
         // Keep last 10 entries
         if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
@@ -234,6 +268,7 @@ export class SessionManager {
         convId: s.activeConvId,
         totalTurns: s.totalTurns ?? 0,
         createdAt: Date.now(),
+        workDir: s.workDir,
       });
     }
 

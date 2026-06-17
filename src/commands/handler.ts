@@ -233,12 +233,11 @@ export class CommandHandler {
     }
     try {
       this.deps.requestQueue.cancelUser(userId);
-      const resolved = await this.deps.sessionManager.setWorkDir(userId, dir);
-      await this.replySender().sendTextReply(
-        chatId,
-        `📁 工作目录已切换到: ${escapePathForMarkdown(resolved)}\n\n` +
-        `🔄 AI 会话已重置，下一条消息将使用全新上下文。`
-      );
+      const result = await this.deps.sessionManager.setWorkDir(userId, dir);
+      const msg = result.resumed
+        ? `📁 工作目录已切换到: ${escapePathForMarkdown(result.path)}\n\n🔄 已恢复该目录的最近会话，继续之前的上下文。`
+        : `📁 工作目录已切换到: ${escapePathForMarkdown(result.path)}\n\n🆕 该目录暂无历史会话，已创建全新上下文。`;
+      await this.replySender().sendTextReply(chatId, msg);
     } catch (err) {
       await this.replySender().sendTextReply(chatId, err instanceof Error ? err.message : String(err));
     }
