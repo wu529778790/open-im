@@ -200,7 +200,7 @@ function buildStartupMessage(
     `📱 平台: ${platformName}`,
     `🤖 AI: ${toolName}`,
     `📁 目录: ${dir}`,
-  ].join("\n");
+  ].join("\n\n");
 }
 
 function buildShutdownMessage(uptimeMinutes: number): string {
@@ -209,7 +209,7 @@ function buildShutdownMessage(uptimeMinutes: number): string {
     `🛑 open-im 正在关闭`,
     "",
     `⏱️ 运行时长: ${uptime} 分钟`,
-  ].join("\n");
+  ].join("\n\n");
 }
 
 export async function main() {
