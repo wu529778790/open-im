@@ -11,23 +11,13 @@ const SESSIONS_FILE = join(APP_HOME, 'data', 'sessions.json');
 type ToolId = 'claude' | 'codex' | 'codebuddy' | 'opencode';
 type ToolSessionIds = Partial<Record<ToolId, string>>;
 
-interface ConvHistoryEntry {
-  convId: string;
-  totalTurns: number;
-  createdAt: number;
-  workDir?: string;
-  firstMessage?: string;
-}
-
 interface UserSession {
   sessionIds?: ToolSessionIds;
   workDir: string;
   activeConvId?: string;
   totalTurns?: number;
-  firstMessage?: string;
   claudeModel?: string;
   threads?: Record<string, { sessionIds?: ToolSessionIds; totalTurns?: number; claudeModel?: string }>;
-  convHistory?: ConvHistoryEntry[];
 }
 
 export function resolveWorkDirInput(baseDir: string, targetDir: string): string {
@@ -138,8 +128,6 @@ export class SessionManager {
     const currentDir = this.getWorkDir(userId);
     const realPath = await this.resolveAndValidate(currentDir, workDir);
     const s = this.sessions.get(userId);
-    let oldConvId: string | undefined;
-    let resumed = false;
 
     if (s) {
       // Same directory — no-op
@@ -147,45 +135,11 @@ export class SessionManager {
         return { path: realPath, resumed: false };
       }
 
-      oldConvId = s.activeConvId;
       this.persistActiveConvSessions(userId, s);
-
-      // Archive current conversation with its workDir
-      if (oldConvId) {
-        if (!s.convHistory) s.convHistory = [];
-        s.convHistory.push({
-          convId: oldConvId,
-          totalTurns: s.totalTurns ?? 0,
-          createdAt: Date.now(),
-          workDir: currentDir,
-          firstMessage: s.firstMessage,
-        });
-        if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
-      }
-
-      // Look for a previous conversation in the target directory
-      if (!s.convHistory) s.convHistory = [];
-      const matchIdx = s.convHistory.findIndex((e) => e.workDir === realPath);
-      if (matchIdx !== -1) {
-        const [entry] = s.convHistory.splice(matchIdx, 1);
-        s.activeConvId = entry.convId;
-        s.totalTurns = entry.totalTurns;
-        s.sessionIds = {};
-        for (const toolId of ['claude', 'codex', 'codebuddy', 'opencode'] as const) {
-          const sessionId = this.convSessionMap.get(this.getConvSessionKey(userId, entry.convId, toolId));
-          if (sessionId) {
-            if (!s.sessionIds) s.sessionIds = {};
-            s.sessionIds[toolId] = sessionId;
-          }
-        }
-        resumed = true;
-        log.info(`Resumed session for user ${userId}: convId=${entry.convId}, workDir=${realPath}, turns=${entry.totalTurns}`);
-      } else {
-        s.sessionIds = {};
-        s.activeConvId = randomBytes(4).toString('hex');
-        s.firstMessage = undefined;
-      }
-
+      // Clear active session IDs; SDK adapter will auto-resume latest CLI session for new dir
+      s.sessionIds = {};
+      s.activeConvId = randomBytes(4).toString('hex');
+      s.totalTurns = 0;
       s.workDir = realPath;
     } else {
       this.sessions.set(userId, {
@@ -195,8 +149,8 @@ export class SessionManager {
     }
 
     this.flushSync();
-    log.info(`WorkDir changed for user ${userId}: ${realPath}, oldConvId=${oldConvId}, resumed=${resumed}`);
-    return { path: realPath, resumed };
+    log.info(`WorkDir changed for user ${userId}: ${realPath}`);
+    return { path: realPath, resumed: false };
   }
 
   newSession(userId: string): boolean {
@@ -205,23 +159,9 @@ export class SessionManager {
       const oldSessionIds = { ...(s.sessionIds ?? {}) };
       const oldConvId = s.activeConvId;
       this.persistActiveConvSessions(userId, s);
-      // Archive old conversation to history (keep convSessionMap entries for resume)
-      if (oldConvId) {
-        if (!s.convHistory) s.convHistory = [];
-        s.convHistory.push({
-          convId: oldConvId,
-          totalTurns: s.totalTurns ?? 0,
-          createdAt: Date.now(),
-          workDir: s.workDir,
-          firstMessage: s.firstMessage,
-        });
-        // Keep last 10 entries
-        if (s.convHistory.length > 10) s.convHistory = s.convHistory.slice(-10);
-      }
       s.sessionIds = {};
       s.activeConvId = randomBytes(4).toString('hex');
       s.totalTurns = 0;
-      s.firstMessage = undefined;
       this.flushSync();
       log.info(
         `New session for user ${userId}: oldConvId=${oldConvId}, oldSessionIds=${JSON.stringify(oldSessionIds)}, newConvId=${s.activeConvId}, sessionIds={}`
@@ -229,6 +169,25 @@ export class SessionManager {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Set the active session to a specific SDK session (used by /resume).
+   * Bridges the SDK sessionId to our internal activeConvId tracking.
+   */
+  setActiveSessionId(userId: string, sessionId: string): void {
+    let s = this.sessions.get(userId);
+    if (!s) {
+      s = { workDir: this.defaultWorkDir };
+      this.sessions.set(userId, s);
+    }
+    this.persistActiveConvSessions(userId, s);
+    s.activeConvId = randomBytes(4).toString('hex');
+    s.totalTurns = 0;
+    if (!s.sessionIds) s.sessionIds = {};
+    s.sessionIds.claude = sessionId;
+    this.flushSync();
+    log.info(`Set active session for user ${userId}: sessionId=${sessionId}, convId=${s.activeConvId}`);
   }
 
   clearActiveToolSession(userId: string, toolId: ToolId): boolean {
@@ -244,61 +203,6 @@ export class SessionManager {
     this.flushSync();
     log.info(`Cleared active ${toolId} session for user ${userId}, convId=${activeConvId ?? 'none'}`);
     return hadSession;
-  }
-
-  listConvHistory(userId: string): ConvHistoryEntry[] {
-    const s = this.sessions.get(userId);
-    if (!s) return [];
-    return s.convHistory ?? [];
-  }
-
-  getActiveConvInfo(userId: string): { convId: string; totalTurns: number; firstMessage?: string } | undefined {
-    const s = this.sessions.get(userId);
-    if (!s?.activeConvId) return undefined;
-    return { convId: s.activeConvId, totalTurns: s.totalTurns ?? 0, firstMessage: s.firstMessage };
-  }
-
-  resumeConv(userId: string, convId: string): boolean {
-    const s = this.sessions.get(userId);
-    if (!s) return false;
-
-    // Find target in history
-    const idx = s.convHistory?.findIndex((e) => e.convId === convId) ?? -1;
-    if (idx === -1) return false;
-
-    // Archive current active session
-    this.persistActiveConvSessions(userId, s);
-    if (s.activeConvId) {
-      if (!s.convHistory) s.convHistory = [];
-      s.convHistory.push({
-        convId: s.activeConvId,
-        totalTurns: s.totalTurns ?? 0,
-        createdAt: Date.now(),
-        workDir: s.workDir,
-        firstMessage: s.firstMessage,
-      });
-    }
-
-    // Remove target from history
-    const [entry] = s.convHistory!.splice(idx, 1);
-
-    // Restore target as active
-    s.activeConvId = entry.convId;
-    s.totalTurns = entry.totalTurns;
-    s.firstMessage = entry.firstMessage;
-    s.sessionIds = {};
-    // Restore sessionIds from convSessionMap
-    for (const toolId of ['claude', 'codex', 'codebuddy'] as const) {
-      const sessionId = this.convSessionMap.get(this.getConvSessionKey(userId, entry.convId, toolId));
-      if (sessionId) {
-        if (!s.sessionIds) s.sessionIds = {};
-        s.sessionIds[toolId] = sessionId;
-      }
-    }
-
-    this.flushSync();
-    log.info(`Resumed session for user ${userId}: convId=${entry.convId}, turns=${entry.totalTurns}`);
-    return true;
   }
 
   addTurns(userId: string, turns: number): number {
@@ -318,14 +222,6 @@ export class SessionManager {
     t.totalTurns = (t.totalTurns ?? 0) + turns;
     this.save();
     return t.totalTurns;
-  }
-
-  /** Save the first message preview for the current conversation (only on first turn). */
-  setConvPreview(userId: string, preview: string): void {
-    const s = this.sessions.get(userId);
-    if (!s || (s.totalTurns ?? 0) > 0) return;
-    s.firstMessage = preview;
-    this.save();
   }
 
   getModel(userId: string, threadId?: string): string | undefined {
@@ -391,6 +287,9 @@ export class SessionManager {
             log.warn(`Legacy shared sessionId found for user ${k}; clearing it to avoid cross-tool resume conflicts`);
           }
           delete (v as UserSession & { sessionId?: string }).sessionId;
+          // Clean up legacy fields
+          delete (v as UserSession & { firstMessage?: string; convHistory?: unknown[] }).firstMessage;
+          delete (v as UserSession & { firstMessage?: string; convHistory?: unknown[] }).convHistory;
           if (v.threads) {
             for (const thread of Object.values(v.threads)) {
               if (!thread.sessionIds) thread.sessionIds = {};

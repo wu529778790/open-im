@@ -9,9 +9,9 @@
  * 认证：ANTHROPIC_API_KEY 或 CLAUDE_CODE_OAUTH_TOKEN
  */
 
-import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk';
-import type { SDKMessage, SDKSession } from '@anthropic-ai/claude-agent-sdk';
-import { existsSync, readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
+import { unstable_v2_createSession, unstable_v2_resumeSession, listSessions } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage, SDKSession, SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -119,52 +119,29 @@ interface ClaudeSessionMeta {
 }
 
 /**
- * 扫描 ~/.claude/projects/<encoded-path>/ 找到最新的 CLI session。
- * 只返回 JSONL 文件（排除子目录如 subagents/），按修改时间倒序。
- * @param homeOverride 测试用：覆盖 homedir() 的返回值
+ * Find the latest CLI session for a work directory using the SDK's listSessions.
+ * Falls back to undefined if no sessions found.
  */
-export function findLatestClaudeSession(workDir: string, homeOverride?: string): ClaudeSessionMeta | undefined {
-  const projectDir = join(homeOverride ?? homedir(), '.claude', 'projects', workDirToProjectPath(workDir));
-  if (!existsSync(projectDir)) {
-    log.info(`No Claude Code project dir found: ${projectDir}`);
-    return undefined;
-  }
-
+export async function findLatestClaudeSession(workDir: string): Promise<ClaudeSessionMeta | undefined> {
   try {
-    const entries = readdirSync(projectDir, { withFileTypes: true });
-    const sessions: ClaudeSessionMeta[] = [];
-
-    for (const entry of entries) {
-      // 只处理 .jsonl 文件，跳过子目录（如 subagents/）和 memory 目录
-      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
-
-      const sessionId = entry.name.replace('.jsonl', '');
-      // 校验 UUID 格式
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sessionId)) continue;
-
-      const filePath = join(projectDir, entry.name);
-      try {
-        const stat = statSync(filePath);
-        // 跳过空文件
-        if (stat.size === 0) continue;
-        sessions.push({ sessionId, mtime: stat.mtimeMs, filePath, size: stat.size });
-      } catch {
-        continue;
-      }
-    }
-
+    const sessions = await listSessions({ dir: workDir, limit: 1 });
     if (sessions.length === 0) {
-      log.info(`No session files found in ${projectDir}`);
+      log.info(`No sessions found for ${workDir}`);
       return undefined;
     }
-
-    // 按修改时间倒序，最新的在前
-    sessions.sort((a, b) => b.mtime - a.mtime);
     const latest = sessions[0];
-    log.info(`Found latest Claude Code session: ${latest.sessionId} (mtime: ${new Date(latest.mtime).toISOString()}, size: ${latest.size})`);
-    return latest;
+    // filePath is needed for isCliSessionActive check — derive from standard path
+    const projectDir = join(homedir(), '.claude', 'projects', workDirToProjectPath(workDir));
+    const filePath = join(projectDir, `${latest.sessionId}.jsonl`);
+    log.info(`Found latest session via SDK: ${latest.sessionId} (lastModified: ${new Date(latest.lastModified).toISOString()})`);
+    return {
+      sessionId: latest.sessionId,
+      mtime: latest.lastModified,
+      filePath,
+      size: latest.fileSize ?? 0,
+    };
   } catch (err) {
-    log.warn(`Failed to scan Claude Code project dir: ${err}`);
+    log.warn(`Failed to list sessions via SDK: ${err}`);
     return undefined;
   }
 }
@@ -376,7 +353,7 @@ async function getOrCreateSession(
   // NOTE: process.chdir() 是进程级全局副作用，在并发服务器中不理想。
   // 但 SDK 的 createSession/resumeSession 不接受 cwd 参数，且这些调用是同步的，
   // 所以 mutex + try/finally 已是最优方案。如果 SDK 未来支持 cwd 选项，应移除 chdir。
-  return withChdirMutex(() => {
+  return withChdirMutex(async () => {
     let session: SDKSession;
 
     const originalCwd = process.cwd();
@@ -414,7 +391,7 @@ async function getOrCreateSession(
       // 没有指定 sessionId 时，尝试自动恢复 Claude Code CLI 的最新 session
       // 实现手机/电脑无缝切换：同目录下默认共享同一个对话
       if (!sessionId) {
-        const latest = findLatestClaudeSession(workDir);
+        const latest = await findLatestClaudeSession(workDir);
         if (latest) {
           // 检测 CLI 是否正在使用该 session（用于日志，不阻止 resume）
           const cliActive = isCliSessionActive(latest.sessionId, latest.filePath);
@@ -503,6 +480,19 @@ export class ClaudeSDKAdapter implements ToolAdapter {
       sessionLastUsed.delete(sessionId);
       sessionWorkDirs.delete(sessionId);
       log.info(`Explicitly removed session: ${sessionId}`);
+    }
+  }
+
+  /**
+   * List sessions for a directory using the SDK's listSessions API.
+   * Replaces the custom file-scanning logic in findLatestClaudeSession.
+   */
+  static async listSessionsForDir(workDir: string, limit = 20): Promise<SDKSessionInfo[]> {
+    try {
+      return await listSessions({ dir: workDir, limit });
+    } catch (err) {
+      log.warn(`Failed to list sessions for ${workDir}: ${err}`);
+      return [];
     }
   }
 

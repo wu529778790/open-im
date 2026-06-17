@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync, mkdirSync, utimesSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,9 +14,11 @@ vi.mock('../logger.js', () => ({
 }));
 
 // Mock the Claude Agent SDK
+const mockListSessions = vi.fn();
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   unstable_v2_createSession: vi.fn(),
   unstable_v2_resumeSession: vi.fn(),
+  listSessions: (...args: unknown[]) => mockListSessions(...args),
 }));
 
 // Import after mocks are set up
@@ -30,6 +32,7 @@ describe('ClaudeSDKAdapter', () => {
     adapter = new ClaudeSDKAdapter();
     vi.mocked(unstable_v2_createSession).mockReset();
     vi.mocked(unstable_v2_resumeSession).mockReset();
+    mockListSessions.mockReset();
   });
 
   afterEach(() => {
@@ -148,96 +151,68 @@ describe('ClaudeSDKAdapter', () => {
     }
   });
 
-  describe('findLatestClaudeSession (unit)', () => {
-    let tempHome: string;
-    let projectDir: string;
+  describe('findLatestClaudeSession', () => {
+    it('returns the latest session from SDK listSessions', async () => {
+      mockListSessions.mockResolvedValue([
+        {
+          sessionId: 'aaaa-bbbb',
+          summary: 'Fix login bug',
+          lastModified: 2000,
+          firstPrompt: 'Fix the login bug',
+          fileSize: 1024,
+        },
+      ]);
 
-    beforeEach(() => {
-      tempHome = mkdtempSync(join(tmpdir(), 'open-im-test-home-'));
-      projectDir = join(tempHome, '.claude', 'projects', '-test-project');
-      mkdirSync(projectDir, { recursive: true });
-    });
-
-    afterEach(() => {
-      try { rmSync(tempHome, { recursive: true, force: true }); } catch { /* ignore */ }
-    });
-
-    function createSessionFile(sessionId: string, options?: { mtime?: number; content?: string }) {
-      const filePath = join(projectDir, `${sessionId}.jsonl`);
-      const content = options?.content ?? JSON.stringify({
-        type: 'mode',
-        mode: 'normal',
-        sessionId,
-      }) + '\n';
-      writeFileSync(filePath, content);
-      if (options?.mtime) {
-        const ts = options.mtime / 1000;
-        utimesSync(filePath, ts, ts);
-      }
-      return filePath;
-    }
-
-    it('returns the latest session by modification time', () => {
-      const sessionA = '11111111-1111-1111-1111-111111111111';
-      const sessionB = '22222222-2222-2222-2222-222222222222';
-
-      createSessionFile(sessionA, { mtime: 1000 });
-      createSessionFile(sessionB, { mtime: 2000 });
-
-      const result = findLatestClaudeSession('/test/project', tempHome);
+      const result = await findLatestClaudeSession('/test/project');
 
       expect(result).toBeDefined();
-      expect(result!.sessionId).toBe(sessionB);
+      expect(result!.sessionId).toBe('aaaa-bbbb');
+      expect(result!.mtime).toBe(2000);
+      expect(result!.size).toBe(1024);
+      expect(mockListSessions).toHaveBeenCalledWith({ dir: '/test/project', limit: 1 });
     });
 
-    it('returns undefined when no sessions exist', () => {
-      const result = findLatestClaudeSession('/test/empty', tempHome);
+    it('returns undefined when no sessions exist', async () => {
+      mockListSessions.mockResolvedValue([]);
+
+      const result = await findLatestClaudeSession('/test/empty');
       expect(result).toBeUndefined();
     });
 
-    it('returns undefined when project dir does not exist', () => {
-      const result = findLatestClaudeSession('/nonexistent/path', tempHome);
+    it('returns undefined on SDK error', async () => {
+      mockListSessions.mockRejectedValue(new Error('SDK error'));
+
+      const result = await findLatestClaudeSession('/test/project');
       expect(result).toBeUndefined();
     });
+  });
 
-    it('ignores non-UUID files and subdirectories', () => {
-      const sessionId = '33333333-3333-3333-3333-333333333333';
-      createSessionFile(sessionId, { mtime: 1000 });
+  describe('listSessionsForDir', () => {
+    it('returns sessions from SDK', async () => {
+      const sessions = [
+        { sessionId: 's1', summary: 'Test', lastModified: 1000 },
+        { sessionId: 's2', summary: 'Another', lastModified: 2000 },
+      ];
+      mockListSessions.mockResolvedValue(sessions);
 
-      // 创建非 UUID 文件
-      writeFileSync(join(projectDir, 'not-a-session.jsonl'), '{}');
-      // 创建子目录
-      mkdirSync(join(projectDir, 'subagents'), { recursive: true });
+      const result = await ClaudeSDKAdapter.listSessionsForDir('/test/project');
 
-      const result = findLatestClaudeSession('/test/project', tempHome);
-
-      expect(result).toBeDefined();
-      expect(result!.sessionId).toBe(sessionId);
+      expect(result).toHaveLength(2);
+      expect(mockListSessions).toHaveBeenCalledWith({ dir: '/test/project', limit: 20 });
     });
 
-    it('ignores empty session files', () => {
-      const sessionA = '44444444-4444-4444-4444-444444444444';
-      const sessionB = '55555555-5555-5555-5555-555555555555';
+    it('returns empty array on error', async () => {
+      mockListSessions.mockRejectedValue(new Error('SDK error'));
 
-      // A 为空文件
-      writeFileSync(join(projectDir, `${sessionA}.jsonl`), '');
-      // B 有内容且更新
-      createSessionFile(sessionB, { mtime: 2000 });
-
-      const result = findLatestClaudeSession('/test/project', tempHome);
-
-      expect(result).toBeDefined();
-      expect(result!.sessionId).toBe(sessionB);
+      const result = await ClaudeSDKAdapter.listSessionsForDir('/test/project');
+      expect(result).toHaveLength(0);
     });
 
-    it('handles a single session file', () => {
-      const sessionId = '66666666-6666-6666-6666-666666666666';
-      createSessionFile(sessionId);
+    it('passes custom limit', async () => {
+      mockListSessions.mockResolvedValue([]);
 
-      const result = findLatestClaudeSession('/test/project', tempHome);
-
-      expect(result).toBeDefined();
-      expect(result!.sessionId).toBe(sessionId);
+      await ClaudeSDKAdapter.listSessionsForDir('/test/project', 5);
+      expect(mockListSessions).toHaveBeenCalledWith({ dir: '/test/project', limit: 5 });
     });
   });
 });

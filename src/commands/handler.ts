@@ -4,6 +4,8 @@ import type { RequestQueue } from '../queue/request-queue.js';
 import { escapePathForMarkdown } from '../shared/utils.js';
 import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
+import { ClaudeSDKAdapter } from '../adapters/claude-sdk-adapter.js';
+import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 
 const log = createLogger('Commands');
 
@@ -20,9 +22,9 @@ function formatRelativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString('zh-CN');
 }
 
-function truncatePreview(msg?: string, maxLen = 30): string {
-  if (!msg) return '新会话';
-  const firstLine = msg.split('\n')[0].trim();
+function truncateSummary(session: SDKSessionInfo, maxLen = 30): string {
+  const text = session.customTitle || session.summary || session.firstPrompt || '新会话';
+  const firstLine = text.split('\n')[0].trim();
   return firstLine.length > maxLen ? firstLine.slice(0, maxLen) + '...' : firstLine;
 }
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -150,25 +152,20 @@ export class CommandHandler {
   }
 
   private async handleSessions(chatId: string, userId: string, _platform: Platform): Promise<boolean> {
-    const history = this.deps.sessionManager.listConvHistory(userId);
-    const active = this.deps.sessionManager.getActiveConvInfo(userId);
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const sessions = await ClaudeSDKAdapter.listSessionsForDir(workDir);
 
-    if (history.length === 0 && !active) {
+    if (sessions.length === 0) {
       await this.replySender().sendTextReply(chatId, '📋 暂无会话记录。');
       return true;
     }
 
     const lines = ['📋 会话列表:', ''];
-    history.forEach((entry, i) => {
-      const preview = truncatePreview(entry.firstMessage);
-      const time = entry.createdAt ? ` · ${formatRelativeTime(entry.createdAt)}` : '';
-      lines.push(`${i + 1}. ${preview} · ${entry.totalTurns}轮${time}`);
+    sessions.forEach((session, i) => {
+      const preview = truncateSummary(session);
+      const time = session.lastModified ? ` · ${formatRelativeTime(session.lastModified)}` : '';
+      lines.push(`${i + 1}. ${preview}${time}`);
     });
-    if (active) {
-      const num = history.length + 1;
-      const preview = truncatePreview(active.firstMessage);
-      lines.push(`▸ ${num}. ${preview} · ${active.totalTurns}轮（当前）`);
-    }
 
     lines.push('', '使用 /resume <序号> 恢复，或 /resume 恢复最近一条');
     await this.replySender().sendTextReply(chatId, lines.join('\n'));
@@ -176,26 +173,23 @@ export class CommandHandler {
   }
 
   private async handleResume(chatId: string, userId: string, arg: string, _platform: Platform): Promise<boolean> {
-    const history = this.deps.sessionManager.listConvHistory(userId);
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const sessions = await ClaudeSDKAdapter.listSessionsForDir(workDir);
 
     // /resume (no arg) — resume the most recent session
     if (!arg) {
-      if (history.length === 0) {
+      if (sessions.length === 0) {
         await this.replySender().sendTextReply(chatId, '没有可恢复的历史会话。');
         return true;
       }
-      const entry = history[history.length - 1];
+      const session = sessions[0];
       this.deps.requestQueue.cancelUser(userId);
-      const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
-      if (ok) {
-        const preview = truncatePreview(entry.firstMessage);
-        await this.replySender().sendTextReply(
-          chatId,
-          `✅ 已恢复最近会话: ${preview}（${entry.totalTurns}轮）\n继续发消息即可。`
-        );
-      } else {
-        await this.replySender().sendTextReply(chatId, '❌ 恢复会话失败，请重试。');
-      }
+      this.deps.sessionManager.setActiveSessionId(userId, session.sessionId);
+      const preview = truncateSummary(session);
+      await this.replySender().sendTextReply(
+        chatId,
+        `✅ 已恢复最近会话: ${preview}\n继续发消息即可。`
+      );
       return true;
     }
 
@@ -205,23 +199,19 @@ export class CommandHandler {
       return true;
     }
 
-    if (index > history.length) {
-      await this.replySender().sendTextReply(chatId, `序号 ${index} 无效，共 ${history.length} 个历史会话。`);
+    if (index > sessions.length) {
+      await this.replySender().sendTextReply(chatId, `序号 ${index} 无效，共 ${sessions.length} 个历史会话。`);
       return true;
     }
 
-    const entry = history[index - 1];
+    const session = sessions[index - 1];
     this.deps.requestQueue.cancelUser(userId);
-    const ok = this.deps.sessionManager.resumeConv(userId, entry.convId);
-    if (ok) {
-      const preview = truncatePreview(entry.firstMessage);
-      await this.replySender().sendTextReply(
-        chatId,
-        `✅ 已恢复会话: ${preview}（${entry.totalTurns}轮）\n继续发消息即可。`
-      );
-    } else {
-      await this.replySender().sendTextReply(chatId, '❌ 恢复会话失败，请重试。');
-    }
+    this.deps.sessionManager.setActiveSessionId(userId, session.sessionId);
+    const preview = truncateSummary(session);
+    await this.replySender().sendTextReply(
+      chatId,
+      `✅ 已恢复会话: ${preview}\n继续发消息即可。`
+    );
     return true;
   }
 
@@ -279,10 +269,10 @@ export class CommandHandler {
     try {
       this.deps.requestQueue.cancelUser(userId);
       const result = await this.deps.sessionManager.setWorkDir(userId, dir);
-      const msg = result.resumed
-        ? `📁 工作目录已切换到: ${escapePathForMarkdown(result.path)}\n\n🔄 已恢复该目录的最近会话，继续之前的上下文。`
-        : `📁 工作目录已切换到: ${escapePathForMarkdown(result.path)}\n\n🆕 该目录暂无历史会话，已创建全新上下文。`;
-      await this.replySender().sendTextReply(chatId, msg);
+      await this.replySender().sendTextReply(
+        chatId,
+        `📁 工作目录已切换到: ${escapePathForMarkdown(result.path)}\n\n下一条消息将自动查找该目录的最近会话。`
+      );
     } catch (err) {
       await this.replySender().sendTextReply(chatId, err instanceof Error ? err.message : String(err));
     }

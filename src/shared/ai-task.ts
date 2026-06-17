@@ -241,7 +241,6 @@ export function runAITask(
 
     const startRun = () => {
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
-      sessionManager.setConvPreview(ctx.userId, prompt.slice(0, 80));
       emitStructuredEvent('AITask', 'ai.task.start', {
         platform: ctx.platform,
         taskKey: hashUserId(ctx.taskKey),
