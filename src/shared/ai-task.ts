@@ -315,6 +315,7 @@ export function runAITask(
             success: result.success,
             numTurns: result.numTurns,
             model: result.model,
+            toolStats: result.toolStats,
           });
           settled = true;
           if (pendingUpdate) {
