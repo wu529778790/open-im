@@ -48,10 +48,10 @@ After `start`, the CLI prints the dashboard URL (default **`http://127.0.0.1:392
 | --- | --- |
 | `/help` | Help |
 | `/new` | New AI session |
-| `/sessions` | Session history |
-| `/resume <N>` | Resume by list number |
+| `/sessions` | Session history with preview |
+| `/resume [N]` | Resume session (no arg = most recent) |
 | `/status` | AI + session info |
-| `/cd` / `/pwd` | Working directory |
+| `/cd` / `/pwd` | Switch work dir (auto-resumes that dir's session) |
 | `/allow` / `/y`, `/deny` / `/n` | Permission prompts |
 
 ## Session continuity
