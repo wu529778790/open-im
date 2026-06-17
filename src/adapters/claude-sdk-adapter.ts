@@ -20,6 +20,18 @@ import type { ToolAdapter, RunCallbacks, RunOptions, RunHandle } from './tool-ad
 
 const log = createLogger('ClaudeSDK');
 
+/**
+ * 注入交互式上下文指令，让 Claude 认为这是交互式终端会话。
+ * 解决 query() 非交互环境下 Claude 跳过用户选择、直接自主决策的问题。
+ */
+const INTERACTIVE_CONTEXT = `[SYSTEM: You are in an interactive chat session via instant messenger. The user CAN and WILL respond to your messages — treat this like an interactive terminal session. Rules:
+1. When you need to make a decision involving user preference (choosing an approach, selecting between options, deciding what to do next), ALWAYS present clearly numbered options and WAIT for the user's response.
+2. Do NOT proceed autonomously when user input would be valuable.
+3. Only proceed autonomously for obvious single-path tasks (e.g. reading a file, running a simple command).
+4. When presenting options, format them as a numbered list and end with a question.
+]
+`;
+
 // ── 从 ~/.claude/settings.json 读取用户插件配置 ──
 
 interface UserPluginSettings {
@@ -401,7 +413,7 @@ export class ClaudeSDKAdapter implements ToolAdapter {
         }
 
         const q = query({
-          prompt,
+          prompt: INTERACTIVE_CONTEXT + prompt,
           options: {
             cwd: workDir,
             model: resolvedModel,
