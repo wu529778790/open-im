@@ -37,6 +37,7 @@ describe("runAITask", () => {
       clearSessionForConv,
       clearActiveToolSession,
       getModel: vi.fn(() => undefined),
+      setConvPreview: vi.fn(),
     };
 
     const streamUpdate = vi.fn();
@@ -110,6 +111,7 @@ describe("runAITask", () => {
       clearSessionForConv: vi.fn(),
       clearActiveToolSession: vi.fn(),
       getModel: vi.fn(() => undefined),
+      setConvPreview: vi.fn(),
     };
 
     const streamUpdate = vi.fn();
@@ -197,6 +199,7 @@ describe("runAITask", () => {
       clearActiveToolSession: vi.fn(),
       newSession: vi.fn(() => true),
       getModel: vi.fn(() => undefined),
+      setConvPreview: vi.fn(),
     };
 
     const streamUpdate = vi.fn();
@@ -268,6 +271,7 @@ describe("runAITask", () => {
       clearSessionForConv: vi.fn(),
       clearActiveToolSession: vi.fn(),
       getModel: vi.fn(() => "MiniMax-M2.7"),
+      setConvPreview: vi.fn(),
     };
 
     const streamUpdate = vi.fn();
@@ -347,6 +351,7 @@ describe("runAITask", () => {
       clearActiveToolSession: vi.fn(),
       newSession: vi.fn(() => true),
       getModel: vi.fn(() => undefined),
+      setConvPreview: vi.fn(),
     };
 
     const sendError = vi.fn(async () => {});
