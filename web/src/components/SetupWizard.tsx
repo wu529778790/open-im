@@ -116,7 +116,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
     setQrMessage("");
     setQrCodeUrl("");
     try {
-      const startRes = (await request("/api/clawbot/qr-login/start")) as {
+      const startRes = (await request("/api/clawbot/qr-login/start", { method: "POST" })) as {
         success?: boolean; qrcodeUrl?: string; sessionKey?: string; error?: string;
       };
       if (!startRes.success || !startRes.qrcodeUrl || !startRes.sessionKey) {
