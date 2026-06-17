@@ -437,7 +437,7 @@ export async function sendTextReply(chatId: string, text: string): Promise<void>
 }
 
 /** 使用 open_id 发送（私聊时 context 可能只有 open_id） */
-export async function sendTextReplyByOpenId(openId: string, text: string): Promise<void> {
+async function sendTextReplyByOpenId(openId: string, text: string): Promise<void> {
   const client = getClient();
   const cardContent = createFeishuCard(OPEN_IM_SYSTEM_TITLE, text, 'done');
   try {

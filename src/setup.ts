@@ -143,25 +143,17 @@ function printManualInstructions(configPath: string): void {
       "cardTemplateId": "你的钉钉 AI 卡片模板 ID（可选，配置后启用单条流式）",
       "allowedUserIds": ["允许访问的钉钉用户 ID（可选）"]
     },
-    "wechat": {
-      "enabled": false,
-      "aiCommand": "claude",
-      "workbuddyAccessToken": "（由 open-im init 在浏览器完成 WorkBuddy 登录后自动写入）",
-      "workbuddyRefreshToken": "",
-      "userId": "",
-      "allowedUserIds": ["允许访问的微信用户 ID（可选）"]
-    },
     "clawbot": {
       "enabled": false,
       "aiCommand": "claude",
-      "apiUrl": "http://127.0.0.1:26322",
+      "apiUrl": "https://ilinkai.weixin.qq.com",
       "apiToken": "你的 ClawBot Bearer Token（可选）",
       "allowedUserIds": ["允许访问的微信用户 ID（可选）"]
     }
   }
 }`);
   console.log("");
-  console.log("提示：至少需要配置 Telegram、Feishu、QQ、WeChat、WeWork、DingTalk 或 ClawBot 其中一个平台");
+  console.log("提示：至少需要配置 Telegram、Feishu、QQ、WeWork、DingTalk、WorkBuddy 或 ClawBot 其中一个平台");
   console.log(
     "或设置环境变量: TELEGRAM_BOT_TOKEN=xxx、FEISHU_APP_ID=xxx、QQ_BOT_APPID=xxx、WECHAT_WORKBUDDY_ACCESS_TOKEN=xxx、WEWORK_CORP_ID=xxx、DINGTALK_CLIENT_ID=xxx 或 CLAWBOT_API_TOKEN=xxx 后再运行",
   );
@@ -1258,7 +1250,7 @@ const ALL_PLATFORMS: Platform[] = ["telegram", "feishu", "qq", "wework", "dingta
  * 显示全部 4 个平台，已配置的预选；若用户选择未配置的，引导运行 init
  * @returns 更新后的 config，或 null 表示取消
  */
-export async function runPlatformSelectionPrompt(
+async function runPlatformSelectionPrompt(
   config: Config,
 ): Promise<Config | null> {
   const withCreds = new Set(getPlatformsWithCredentials(config));

@@ -245,14 +245,15 @@ export class CommandHandler {
     return true;
   }
 
-  private getAiVersion(aiCommand: 'claude' | 'codex' | 'codebuddy'): Promise<string> {
+  private getAiVersion(aiCommand: 'claude' | 'codex' | 'codebuddy' | 'opencode'): Promise<string> {
     if (aiCommand === 'claude') {
-      // Claude 使用 SDK，返回 SDK 版本
       return Promise.resolve('SDK Mode');
     }
     const cmd = aiCommand === 'codex'
       ? this.deps.config.codexCliPath
-      : this.deps.config.codebuddyCliPath;
+      : aiCommand === 'opencode'
+        ? this.deps.config.opencodeCliPath
+        : this.deps.config.codebuddyCliPath;
     return new Promise((resolve) => {
       execFile(cmd, ['--version'], { timeout: 5000 }, (err, stdout) => {
         resolve(err ? '未知' : (stdout?.toString().trim() || '未知'));

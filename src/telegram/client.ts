@@ -13,7 +13,7 @@ export function getBot(): Telegraf {
   return bot;
 }
 
-export function getBotUsername(): string | undefined {
+function getBotUsername(): string | undefined {
   return botUsername;
 }
 

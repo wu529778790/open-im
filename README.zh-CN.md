@@ -42,16 +42,6 @@ npx @wu529778790/open-im start
 
 `start` 后会提示控制台地址（默认 **`http://127.0.0.1:39282`**）。
 
-## Git 共同作者
-
-默认在 AI 发起的提交里追加 `Co-authored-by`。**关闭**：设置环境变量 **`OPEN_IM_GIT_COAUTHOR=0`** 并重启桥接。
-
-## Web 控制台
-
-`open-im start` / `open-im dashboard` 在 **`OPEN_IM_WEB_PORT`**（默认 **39282**）提供内置页面与 **`/api/*`**。浏览器打开 **`http://127.0.0.1:39282`** 即可（与 API 同源）。反向代理时可设 **`OPEN_IM_PUBLIC_WEB_URL`**。
-
-**局域网 / 远程：** `export OPEN_IM_WEB_HOST=0.0.0.0` — 首次外网访问可能需一次性登录链接。可选 **`OPEN_IM_ALLOW_REMOTE_API`**、**`OPEN_IM_CORS_ORIGINS`**。
-
 ## IM 内命令
 
 | 命令 | 说明 |
@@ -63,8 +53,6 @@ npx @wu529778790/open-im start
 | `/status` | AI 与会话信息 |
 | `/cd` / `/pwd` | 工作目录 |
 | `/allow` / `/y`、`/deny` / `/n` | 权限确认 |
-
-会话状态保存在 **`~/.open-im/data/sessions.json`**（按用户，与 IM 聊天记录无关）。
 
 ## 会话接力
 
@@ -85,33 +73,35 @@ cd /my-project && claude        # 正常工作，退出时 Ctrl+C
 claude -c                       # 接上手机端的对话
 ```
 
-> **注意：** 同一时刻只能有一端活跃。从手机发消息前先退出 CLI，反之亦然。
+> 同一时刻只能有一端活跃。从手机发消息前先退出 CLI，反之亦然。
 
-## 配置说明
+## Git 共同作者
 
-### 按平台指定 AI
+默认在 AI 发起的提交里追加 `Co-authored-by`。**关闭**：设置环境变量 **`OPEN_IM_GIT_COAUTHOR=0`** 并重启桥接。
 
-在每个已启用渠道上设置 **`platforms.<name>.aiCommand`**（`claude` / `codex` / `codebuddy`）。若未设置，会尝试进程环境变量 **`AI_COMMAND`**；再否则默认为 **`claude`**。
+## 最小配置
 
 ```json
 {
+  "tools": {
+    "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
+  },
   "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "codex", "botToken": "..." }
+    "telegram": { "enabled": true, "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
   }
 }
 ```
 
+在 **`platforms`** 下按需补充其他平台。完整模板请用 **`open-im init`**。
+
 ### Claude（Agent SDK）
 
-无需本地 `claude` 可执行文件。凭证顺序：环境变量 → **`config.json`** 的 **`tools.claude.env`** → **`~/.claude/settings.json`**（控制台保存的 API 配置写入后者）。
-
-第三方兼容接口示例：
+无需本地 `claude` 可执行文件。第三方兼容接口示例：
 
 ```json
 {
   "tools": {
     "claude": {
-      "workDir": "/path/to/project",
       "env": {
         "ANTHROPIC_AUTH_TOKEN": "your-token",
         "ANTHROPIC_BASE_URL": "https://your-api-endpoint",
@@ -122,88 +112,25 @@ claude -c                       # 接上手机端的对话
 }
 ```
 
-### CodeBuddy
+### 按平台指定 AI
 
-```bash
-npm install -g @tencent-ai/codebuddy-code
-codebuddy login
-```
+在每个平台上设置 **`platforms.<name>.aiCommand`**（`claude` / `codex` / `codebuddy`）。默认 `claude`。
 
-### 最小配置结构
+### Web 控制台
 
-```json
-{
-  "tools": {
-    "claude": { "workDir": "/path/to/project", "skipPermissions": true, "timeoutMs": 600000 }
-  },
-  "platforms": {
-    "telegram": { "enabled": true, "aiCommand": "claude", "botToken": "YOUR_TELEGRAM_BOT_TOKEN" }
-  }
-}
-```
-
-在 **`platforms`** 下按需补充飞书、QQ、企业微信、钉钉、WorkBuddy。完整模板请用 **`open-im init`**。微信建议 **`open-im init`** 走 WorkBuddy OAuth。
+`open-im start` 在 **`OPEN_IM_WEB_PORT`**（默认 **39282**）提供内置页面与 **`/api/*`**。局域网访问：`export OPEN_IM_WEB_HOST=0.0.0.0`。
 
 ### 环境变量
 
-可在 **`config.json`**（平台与 `tools.*` 等）或环境变量中设置；控制台会展示常用项。常见：**`ANTHROPIC_*`**（shell 或 **`tools.claude.env`**）、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。根级 **`config.json` `env`** 已不再使用。
+常见：**`ANTHROPIC_*`**（shell 或 **`tools.claude.env`**）、**`TELEGRAM_BOT_TOKEN`**、**`OPEN_IM_WEB_PORT`**、**`OPEN_IM_WEB_HOST`**，以及各平台的 `*_APP_ID`、`*_SECRET`、`WORKBUDDY_*` 等。
 
 ### 隐私
 
 为改进稳定性，可能记录**匿名**运行信息（不含聊天或 prompt 内容）。若需关闭：环境变量 **`OPEN_IM_TELEMETRY=false`**，或 **`config.json`** 中 **`"telemetry": { "enabled": false }`**。
 
-### 平台凭证
+## 平台配置与故障排除
 
-| 平台 | 说明 |
-| --- | --- |
-| Telegram | [@BotFather](https://t.me/BotFather) |
-| 飞书 | [开放平台](https://open.feishu.cn/) |
-| QQ | [QQ 开放平台](https://bot.q.qq.com/) |
-| 钉钉 | 开放平台创建应用，机器人开 **Stream Mode**；可选 **`cardTemplateId`** 走 AI 助理卡片 |
-| 企业微信 | [管理后台](https://work.weixin.qq.com/) |
-| 微信 | **`open-im init`** → WorkBuddy OAuth |
-| ClawBot（微信） | 扫码登录 iLink API，参见 [ClawBot 配置](#clawbot-配置) |
-
-### ClawBot 配置
-
-ClawBot 通过官方 iLink Bot API 连接微信（与 `@tencent-weixin/openclaw-weixin` 协议相同）。支持文本、语音、图片、文件和视频消息。
-
-**使用方法：**
-
-1. 在配置中启用：
-   ```json
-   {
-     "platforms": {
-       "clawbot": { "enabled": true }
-     }
-   }
-   ```
-2. 打开 Web 控制台 → **ClawBot** 区域 → **扫码登录**（用微信扫码）。
-3. 扫码成功后 `bot_token` 和 `apiUrl` 自动保存。
-
-**配置字段：**
-
-| 字段 | 默认值 | 说明 |
-| --- | --- | --- |
-| `apiUrl` | `https://ilinkai.weixin.qq.com` | iLink API 地址 |
-| `apiToken` | — | Bot Token（扫码后自动写入） |
-| `aiCommand` | `claude` | AI 后端覆盖 |
-
-**协议：** POST + JSON body + Bearer token 鉴权，通过 `ilink/bot/getupdates` 长轮询 + `get_updates_buf` 游标拉取消息。
-
-## 故障排除
-
-| 现象 | 处理 |
-| --- | --- |
-| Telegram / 网络 | 配置 `proxy` 或 **`TELEGRAM_PROXY`** |
-| QQ | 核对 **`QQ_BOT_APPID`**、**`QQ_BOT_SECRET`**；重复回复请升级版本 |
-| 飞书卡片 | 未配回调时用 **`/mode ask`** 或 **`/mode yolo`** |
-| 企业微信 | 先给机器人发一条消息 |
-| 钉钉 | 开启 Stream Mode；自定义机器人可能仅纯文本 |
-| Codex 断流 | **`CODEX_PROXY`** 或 **`tools.codex.proxy`** |
-| CodeBuddy 登录 | **`codebuddy login`** |
-| WorkBuddy / 微信 | 重跑 **`open-im init`**（Token 会过期） |
-| ClawBot | Web 控制台重新扫码；`apiUrl` 默认 `https://ilinkai.weixin.qq.com` |
+详见 **[docs/platforms.zh-CN.md](./docs/platforms.zh-CN.md)**。
 
 ## License
 

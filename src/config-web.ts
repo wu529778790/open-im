@@ -199,13 +199,13 @@ export interface StartedWebConfigServer {
 
 interface WebConfigPayload {
   platforms: {
-    telegram: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; botToken: string; proxy: string; allowedUserIds: string };
-    feishu: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; appId: string; appSecret: string; allowedUserIds: string };
-    qq: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; appId: string; secret: string; allowedUserIds: string };
-    wework: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; corpId: string; secret: string; allowedUserIds: string };
-    dingtalk: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
-    workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
-    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy"; apiUrl: string; apiToken: string; allowedUserIds: string };
+    telegram: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; botToken: string; proxy: string; allowedUserIds: string };
+    feishu: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; appId: string; appSecret: string; allowedUserIds: string };
+    qq: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; appId: string; secret: string; allowedUserIds: string };
+    wework: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; corpId: string; secret: string; allowedUserIds: string };
+    dingtalk: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
+    workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
+    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; apiUrl: string; apiToken: string; allowedUserIds: string };
   };
   ai: {
     claudeWorkDir: string;
@@ -216,6 +216,7 @@ interface WebConfigPayload {
     claudeProxy: string;
     codexCliPath: string;
     codebuddyCliPath: string;
+    opencodeCliPath: string;
     codexProxy: string;
     codexApiKey?: string;
     logDir?: string;
@@ -427,6 +428,7 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
       claudeProxy: file.tools?.claude?.proxy ?? "",
       codexCliPath: file.tools?.codex?.cliPath ?? "codex",
       codebuddyCliPath: file.tools?.codebuddy?.cliPath ?? "codebuddy",
+      opencodeCliPath: file.tools?.opencode?.cliPath ?? "opencode",
       codexProxy: file.tools?.codex?.proxy ?? "",
       codexApiKey: (() => {
         if (process.env.OPENAI_API_KEY) return maskSecret(process.env.OPENAI_API_KEY);
@@ -576,6 +578,7 @@ function createProbeConfig(values: Partial<Config>): Config {
     logLevel: "INFO",
     telemetry: { enabled: true },
     codebuddyCliPath: "codebuddy",
+    opencodeCliPath: "opencode",
     platforms: {},
     ...values,
   };
@@ -799,6 +802,10 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
         ...existing.tools?.codebuddy,
         cliPath: clean(payload.ai.codebuddyCliPath) ?? "codebuddy",
       },
+      opencode: {
+        ...existing.tools?.opencode,
+        cliPath: clean(payload.ai.opencodeCliPath) ?? "opencode",
+      },
     },
     platforms: {
       ...existing.platforms,
@@ -911,7 +918,7 @@ export function getWebConfigUrl(): string {
   return `http://127.0.0.1:${getWebConfigPort()}`;
 }
 
-export function openWebConfigUrl(): void {
+function openWebConfigUrl(): void {
   openBrowser(getPublicWebDashboardUrl());
 }
 

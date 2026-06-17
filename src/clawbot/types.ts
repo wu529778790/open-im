@@ -12,14 +12,6 @@ export type ClawBotState =
   | 'connected'
   | 'error';
 
-/** ClawBot configuration */
-export interface ClawBotConfig {
-  /** iLink API base URL (default: https://ilinkai.weixin.qq.com) */
-  apiUrl: string;
-  /** Bearer token for authentication */
-  apiToken: string;
-}
-
 /** iLink message content item types */
 export const enum MessageItemType {
   NONE = 0,

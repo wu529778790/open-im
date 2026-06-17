@@ -36,19 +36,6 @@ export interface CentrifugeTokens {
   channel: string;
 }
 
-/** WeChat KF message from Centrifuge */
-export interface WeChatKfMessage {
-  chatId: string;
-  msgId: string;
-  content: string;
-  msgType?: string;
-  user?: {
-    nickname?: string;
-    avatar?: string;
-  };
-  timestamp?: number;
-}
-
 /** AGP envelope format (for compatibility with existing handlers) */
 export interface AGPEnvelope<T = unknown> {
   msg_id: string;

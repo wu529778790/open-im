@@ -15,10 +15,7 @@ import { cacheContextToken } from './message-sender.js';
 import type { Config } from '../config.js';
 import type {
   ClawBotState,
-  GetUpdatesResponse,
   ILinkMessage,
-  MessageItem,
-  SendMessageResponse,
 } from './types.js';
 import { MessageItemType } from './types.js';
 import { CLAWBOT_POLL_INTERVAL_MS } from '../constants.js';

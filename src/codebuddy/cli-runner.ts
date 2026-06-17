@@ -469,7 +469,7 @@ export function runCodeBuddy(
   };
 }
 
-export function checkCodeBuddyCliAvailable(cliPath: string): boolean {
+function checkCodeBuddyCliAvailable(cliPath: string): boolean {
   const target = normalizeCliPath(cliPath);
   if (isAbsolute(target) || target.includes('/') || target.includes('\\')) {
     try {
