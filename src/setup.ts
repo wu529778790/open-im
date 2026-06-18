@@ -373,7 +373,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
         {
           title:
             "ClawBot 微信 iLink (需要 API Token)" +
-            (!!existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""),
+            (existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""),
           value: "clawbot",
         },
         { title: "配置多个平台", value: "multi" },
@@ -404,7 +404,7 @@ export async function runInteractiveSetup(): Promise<boolean> {
           { title: "企业微信 (WeWork)" + (hasWw ? " ✓已配置" : ""), value: "wework", selected: hasWw },
           { title: "钉钉 (DingTalk)" + (hasDt ? " ✓已配置" : ""), value: "dingtalk", selected: hasDt },
           { title: "WorkBuddy 微信客服 (WeChat KF)" + (hasWc ? " ✓已配置" : ""), value: "workbuddy", selected: hasWc },
-          { title: "ClawBot 微信 iLink" + (!!existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""), value: "clawbot" },
+          { title: "ClawBot 微信 iLink" + (existing?.platforms?.clawbot?.apiToken ? " ✓已配置" : ""), value: "clawbot" },
         ],
       },
       { onCancel },
