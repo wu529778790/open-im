@@ -193,12 +193,32 @@ function buildStartupMessage(
   const toolName = getAIToolDisplayName(aiCommand);
   const dir = sessionDir ? escapePathForMarkdown(sessionDir) : '发送 `/pwd` 查看';
 
+  // 读取插件列表
+  const pluginLines: string[] = [];
+  try {
+    const { readFileSync, existsSync } = require("fs");
+    const { join } = require("path");
+    const { homedir } = require("os");
+    const settingsPath = join(homedir(), ".claude", "settings.json");
+    if (existsSync(settingsPath)) {
+      const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      const plugins = settings.enabledPlugins ?? {};
+      const enabled = Object.entries(plugins)
+        .filter(([, v]) => v === true)
+        .map(([k]) => k.split("@")[0]); // 只取插件名，去掉 @scope
+      if (enabled.length > 0) {
+        pluginLines.push("", `🧩 插件: ${enabled.join(", ")}`);
+      }
+    }
+  } catch { /* ignore */ }
+
   return [
     `✅ open-im v${appVersion} 已就绪`,
     "",
     `📱 平台: ${platformName}`,
     `🤖 AI: ${toolName}`,
     `📁 目录: ${dir}`,
+    ...pluginLines,
   ].join("\n\n");
 }
 
