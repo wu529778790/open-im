@@ -407,7 +407,7 @@ export async function main() {
       platform,
       APP_VERSION,
       resolvePlatformAiCommand(config, platform),
-      startupCwd,
+      config.claudeWorkDir,
       sessionManager,
     );
     await sendLifecycleNotification(platform, startupMsg).catch((err) => {
