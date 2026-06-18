@@ -604,6 +604,7 @@ export function loadConfig(): Config {
           allowedUserIds: clawbotAllowedUserIds,
           apiUrl: clawbotApiUrl,
           apiToken: clawbotApiToken,
+          tts: file.platforms?.clawbot?.tts,
         }
       : {
           enabled: false,
