@@ -163,7 +163,7 @@ function startPolling(): void {
 
           // Debug: log raw item_list for image messages
           if (extracted === '[图片]') {
-            log.info(`Image message raw item_list: ${JSON.stringify(msg.item_list).substring(0, 500)}`);
+            log.info(`Image message raw item_list: ${JSON.stringify(msg.item_list).substring(0, 2000)}`);
           }
 
           // Extract and download images from message
