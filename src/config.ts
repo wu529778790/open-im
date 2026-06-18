@@ -10,8 +10,6 @@ import { join, isAbsolute } from 'node:path';
 import { createLogger, type LogLevel } from './logger.js';
 import {
   APP_HOME,
-  DEFAULT_TELEMETRY_INGEST_URL,
-  DEFAULT_TELEMETRY_INGEST_TOKEN,
 } from './constants.js';
 
 const log = createLogger('config');
@@ -513,48 +511,8 @@ export function loadConfig(): Config {
     telemetryEnabled = true;
   }
 
-  let telemetryUrl: string | undefined;
-  const telemetryUrlRaw = process.env.OPEN_IM_TELEMETRY_URL ?? file.telemetry?.url;
-  if (telemetryUrlRaw && typeof telemetryUrlRaw === 'string' && telemetryUrlRaw.trim()) {
-    try {
-      const u = new URL(telemetryUrlRaw.trim());
-      if (u.protocol !== 'https:') {
-        log.warn('OPEN_IM_TELEMETRY_URL / telemetry.url 必须为 https，已忽略上传地址');
-      } else {
-        telemetryUrl = u.href;
-      }
-    } catch {
-      log.warn('无效的 OPEN_IM_TELEMETRY_URL / telemetry.url，已忽略上传地址');
-    }
-  }
-
-  if (!telemetryUrl && telemetryEnabled && DEFAULT_TELEMETRY_INGEST_URL.trim()) {
-    try {
-      const u = new URL(DEFAULT_TELEMETRY_INGEST_URL.trim());
-      if (u.protocol === 'https:') {
-        telemetryUrl = u.href;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  let telemetryToken: string | undefined;
-  if (process.env.OPEN_IM_TELEMETRY_TOKEN !== undefined) {
-    const t = process.env.OPEN_IM_TELEMETRY_TOKEN.trim();
-    telemetryToken = t.length > 0 ? t : undefined;
-  } else if (file.telemetry?.token !== undefined) {
-    const t = String(file.telemetry.token).trim();
-    telemetryToken = t.length > 0 ? t : undefined;
-  } else {
-    telemetryToken = DEFAULT_TELEMETRY_INGEST_TOKEN.trim() || undefined;
-  }
-
-  if (telemetryEnabled && !telemetryUrl) {
-    log.warn(
-      '遥测已开启但未配置有效的 HTTPS 采集 URL：仅写入本地 events-*.jsonl；可设置 OPEN_IM_TELEMETRY_URL 或在 constants 中配置 DEFAULT_TELEMETRY_INGEST_URL。'
-    );
-  }
+  // Telemetry: local event logging only (no cloud upload)
+  // Users can disable via OPEN_IM_TELEMETRY=false or telemetry.enabled=false
 
   const platforms: Config['platforms'] = {
     telegram: telegramEnabled
@@ -690,8 +648,6 @@ export function loadConfig(): Config {
     logLevel,
     telemetry: {
       enabled: telemetryEnabled,
-      url: telemetryUrl,
-      token: telemetryToken,
     },
     platforms,
   };

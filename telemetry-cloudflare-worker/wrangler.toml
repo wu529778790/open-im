@@ -1,8 +1,0 @@
-name = "open-im-telemetry-ingest"
-main = "src/index.ts"
-compatibility_date = "2024-11-01"
-
-# Create the bucket in the Cloudflare dashboard, then set its name here:
-[[r2_buckets]]
-binding = "TELEMETRY_BUCKET"
-bucket_name = "open-im-telemetry"
