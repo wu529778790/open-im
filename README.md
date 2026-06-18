@@ -4,7 +4,7 @@
 
 > 你的 AI 编程助手，在每个聊天 App 里。
 
-open-im 把 Claude Code、Codex、CodeBuddy 接入 Telegram、飞书、企业微信、钉钉、QQ、微信（WorkBuddy）、微信（ClawBot）。手机发条消息，服务器上就写好代码。
+open-im 把 Claude Code、Codex、CodeBuddy 接入 Telegram、飞书、企业微信、钉钉、QQ、微信（WorkBuddy）、微信（ClawBot）。手机发条消息，电脑上就写好代码。
 
 ## 架构
 
