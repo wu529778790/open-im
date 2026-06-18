@@ -191,7 +191,7 @@ function getEnabledPlugins(): string[] {
 /**
  * 统一通知格式模板
  * 所有发送给 IM 的通知都使用这个格式，保持一致性
- * 注意：ClawBot/微信不支持 \n 换行，使用 | 分隔
+ * 注意：ClawBot/微信不支持 \n，使用 | 分隔，插件列表截断
  */
 function buildNotification(opts: {
   emoji: string;
@@ -207,22 +207,21 @@ function buildNotification(opts: {
   // 标题
   parts.push(`${opts.emoji} ${opts.title}`);
 
-  // 详情
+  // 详情（只显示关键信息）
   if (opts.platform) parts.push(`📱 ${opts.platform}`);
   if (opts.aiCommand) parts.push(`🤖 ${opts.aiCommand}`);
-  if (opts.dir) parts.push(`📁 ${opts.dir}`);
 
+  // 插件：最多显示 3 个，超过则截断
   const plugins = getEnabledPlugins();
-  if (plugins.length > 0) parts.push(`🧩 ${plugins.join(", ")}`);
+  if (plugins.length > 0) {
+    const display = plugins.length <= 3
+      ? plugins.join(", ")
+      : `${plugins.slice(0, 3).join(", ")} 等${plugins.length}个`;
+    parts.push(`🧩 ${display}`);
+  }
 
   if (opts.uptime) parts.push(`⏱️ ${opts.uptime}`);
 
-  // 额外信息
-  if (opts.extra?.length) {
-    parts.push(...opts.extra);
-  }
-
-  // 使用 | 分隔（ClawBot/微信不支持 \n）
   return parts.join(" | ");
 }
 
