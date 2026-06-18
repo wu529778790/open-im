@@ -10,9 +10,6 @@ jobs:
   install-latest:
     runs-on: ubuntu-latest
     steps:
-      - name: Random delay (0~3600s)
-        run: sleep $(( $(date +%s) % 3601 ))
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -34,9 +31,6 @@ jobs:
   install-beta:
     runs-on: ubuntu-latest
     steps:
-      - name: Random delay (0~3600s)
-        run: sleep $(( $(date +%s) % 3601 ))
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
