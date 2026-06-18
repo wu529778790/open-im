@@ -18,6 +18,8 @@ interface UserSession {
   totalTurns?: number;
   claudeModel?: string;
   lastActiveAt?: number;
+  /** /new 后标记为 true，阻止自动恢复 CLI session */
+  freshSession?: boolean;
   threads?: Record<string, { sessionIds?: ToolSessionIds; totalTurns?: number; claudeModel?: string }>;
 }
 
@@ -106,9 +108,19 @@ export class SessionManager {
     const s = this.sessions.get(userId);
     if (s) {
       s.lastActiveAt = Date.now();
+      // 首次访问后清除 freshSession 标记（允许后续消息恢复 CLI session）
+      if (s.freshSession) s.freshSession = false;
       return s.workDir;
     }
     return this.defaultWorkDir;
+  }
+
+  /**
+   * 检查 session 是否是 /new 后的新 session
+   * 如果是，不应该自动恢复 CLI session
+   */
+  isFreshSession(userId: string): boolean {
+    return this.sessions.get(userId)?.freshSession === true;
   }
 
   /**
@@ -184,6 +196,7 @@ export class SessionManager {
       s.sessionIds = {};
       s.activeConvId = randomBytes(4).toString('hex');
       s.totalTurns = 0;
+      s.freshSession = true; // 标记为新 session，阻止自动恢复 CLI session
       this.flushSync();
       log.info(
         `New session for user ${userId}: oldConvId=${oldConvId}, oldSessionIds=${JSON.stringify(oldSessionIds)}, newConvId=${s.activeConvId}, sessionIds={}`

@@ -394,9 +394,9 @@ export class ClaudeSDKAdapter implements ToolAdapter {
       let hadSessionInvalid = false;
 
       try {
-        // 先尝试自动恢复 CLI 的最新 session（如果用户没有指定 sessionId）
+        // 先尝试自动恢复 CLI 的最新 session（如果用户没有指定 sessionId，且不是 /new 后的新 session）
         let resumeId = sessionId;
-        if (!resumeId) {
+        if (!resumeId && !options?.skipAutoResume) {
           const latest = await findLatestClaudeSession(workDir);
           if (latest) {
             const cliActive = isCliSessionActive(latest.sessionId, latest.filePath);

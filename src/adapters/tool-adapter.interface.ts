@@ -37,6 +37,8 @@ export interface RunOptions {
   fallbackModel?: string;
   /** 禁用的工具列表 */
   disallowedTools?: string[];
+  /** /new 后跳过自动恢复 CLI session */
+  skipAutoResume?: boolean;
 }
 
 export interface RunHandle {

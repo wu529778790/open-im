@@ -33,6 +33,7 @@ describe("runAITask", () => {
       clearSessionForConv,
       clearActiveToolSession,
       getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
     };
 
     const streamUpdate = vi.fn();
@@ -106,6 +107,7 @@ describe("runAITask", () => {
       clearSessionForConv: vi.fn(),
       clearActiveToolSession: vi.fn(),
       getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
     };
 
     const streamUpdate = vi.fn();
@@ -114,7 +116,7 @@ describe("runAITask", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
-      run(_prompt, _sessionId, _workDir, callbacks) {
+      run(_prompt, _sessionId, _workDir, callbacks, _options) {
         // Simulate text streaming then completion
         callbacks.onText("Hello from AI");
         callbacks.onComplete({
@@ -193,6 +195,7 @@ describe("runAITask", () => {
       clearActiveToolSession: vi.fn(),
       newSession: vi.fn(() => true),
       getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
     };
 
     const streamUpdate = vi.fn();
@@ -264,6 +267,7 @@ describe("runAITask", () => {
       clearSessionForConv: vi.fn(),
       clearActiveToolSession: vi.fn(),
       getModel: vi.fn(() => "MiniMax-M2.7"),
+      isFreshSession: vi.fn(() => false),
     };
 
     const streamUpdate = vi.fn();
@@ -343,6 +347,7 @@ describe("runAITask", () => {
       clearActiveToolSession: vi.fn(),
       newSession: vi.fn(() => true),
       getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
     };
 
     const sendError = vi.fn(async () => {});
