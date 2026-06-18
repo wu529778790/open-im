@@ -6,7 +6,6 @@ import { useApi } from "./context/ApiContext.js";
 import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
 import { PlatformCard } from "./components/PlatformCard.js";
-import { AiConfigSection } from "./components/AiConfigSection.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
 
@@ -122,7 +121,6 @@ export function Dashboard() {
   };
 
   const upP = <K extends PlatformKey>(k: K, p: Partial<WebConfigPayload["platforms"][K]>) => { setPl(prev => ({ ...prev, platforms: { ...prev.platforms, [k]: { ...prev.platforms[k], ...p } } })); };
-  const upA = (p: Partial<WebConfigPayload["ai"]>) => { setPl(prev => ({ ...prev, ai: { ...prev.ai, ...p } })); };
   const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
   const toggleLang = () => { const n: Lang = lang === "zh" ? "en" : "zh"; setLang(n); localStorage.setItem(STORAGE_KEY_LANG, n); };
@@ -153,8 +151,6 @@ export function Dashboard() {
                 })}
               </div>
             </section>
-
-            <AiConfigSection ai={pl.ai} onUpdate={upA} t={t} html={html} />
 
             <ConfigFilesSection configJson={cfgJ} setConfigJson={setCfgJ} claudeSettingsJson={claudeJ} setClaudeSettingsJson={setClaudeJ} codexSettingsJson={codexJ} setCodexSettingsJson={setCodexJ} jsonValidation={jv} onSaveConfig={saveCfg} onSaveClaude={saveClaude} onSaveCodex={saveCodex} onFormat={fmtJson} onReset={resetJson} meta={meta} setMessage={setMsg} t={t} />
           </>
