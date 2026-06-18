@@ -272,7 +272,7 @@ function buildStartupMessage(
 
   const platformName = PLATFORM_DISPLAY_NAMES[platform] ?? platform;
   const toolName = getAIToolDisplayName(aiCommand);
-  const dir = sessionDir ? escapePathForMarkdown(sessionDir) : '发送 `/pwd` 查看';
+  const dir = escapePathForMarkdown(sessionDir || defaultWorkDir);
 
   return buildNotification({
     emoji: "✅",
