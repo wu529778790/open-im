@@ -1,48 +1,48 @@
 /* ═══════════════════════════════════════════════════════
-   open-im  —  Design System v3
-   Minimal · Dark-optimized · Developer-focused
+   open-im  —  Design System v4
+   Distinctive · Technical · Bridge-focused
    ═══════════════════════════════════════════════════════ */
 
 /* ─── Google Fonts ─── */
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ─── Tokens ─── */
 :root {
-  /* Surface */
-  --c-bg:          #f8fafc;
+  /* Surface — warm off-white */
+  --c-bg:          #fafafa;
   --c-surface:     #ffffff;
-  --c-surface-alt: #f1f5f9;
-  --c-border:      #e2e8f0;
-  --c-border-foc:  #94a3b8;
+  --c-surface-alt: #f5f5f5;
+  --c-border:      #e5e5e5;
+  --c-border-foc:  #a3a3a3;
 
-  /* Text */
-  --c-text:        #0f172a;
-  --c-text-2:      #475569;
-  --c-text-3:      #94a3b8;
+  /* Text — deep navy */
+  --c-text:        #1a1a2e;
+  --c-text-2:      #525252;
+  --c-text-3:      #a3a3a3;
 
-  /* Accent — Green (CTA focus) */
-  --c-accent:      #22c55e;
-  --c-accent-h:    #16a34a;
-  --c-accent-bg:   #f0fdf4;
-  --c-accent-bdr:  #86efac;
+  /* Accent — indigo (distinctive, not common green/blue) */
+  --c-accent:      #6366f1;
+  --c-accent-h:    #4f46e5;
+  --c-accent-bg:   #eef2ff;
+  --c-accent-bdr:  #c7d2fe;
 
   /* Status */
-  --c-ok:          #22c55e;
-  --c-ok-bg:       #f0fdf4;
-  --c-ok-bdr:      #86efac;
+  --c-ok:          #10b981;
+  --c-ok-bg:       #ecfdf5;
+  --c-ok-bdr:      #a7f3d0;
   --c-warn:        #f59e0b;
   --c-warn-bg:     #fffbeb;
-  --c-warn-bdr:    #fcd34d;
+  --c-warn-bdr:    #fde68a;
   --c-err:         #ef4444;
   --c-err-bg:      #fef2f2;
-  --c-err-bdr:     #fca5a5;
+  --c-err-bdr:     #fecaca;
 
   /* Shadows */
-  --shadow-xs:     0 1px 2px rgba(15,23,42,.05);
-  --shadow-s:      0 1px 3px rgba(15,23,42,.1), 0 1px 2px rgba(15,23,42,.06);
-  --shadow-m:      0 4px 6px -1px rgba(15,23,42,.1), 0 2px 4px -2px rgba(15,23,42,.1);
-  --shadow-l:      0 10px 15px -3px rgba(15,23,42,.1), 0 4px 6px -4px rgba(15,23,42,.1);
-  --shadow-glow:   0 0 20px rgba(34,197,94,.15);
+  --shadow-xs:     0 1px 2px rgba(0,0,0,.05);
+  --shadow-s:      0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-m:      0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+  --shadow-l:      0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+  --shadow-glow:   0 0 20px rgba(99,102,241,.15);
 
   /* Radius */
   --r-s:  6px;
@@ -51,8 +51,9 @@
   --r-xl: 16px;
 
   /* Typography */
-  --font:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --mono:    'Fira Code', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: 'Space Grotesk', -apple-system, sans-serif;
+  --font-body:    'Inter', -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', monospace;
 
   /* Motion */
   --fast: 120ms ease;
@@ -61,23 +62,23 @@
 }
 
 :root.dark {
-  --c-bg:          #0f172a;
-  --c-surface:     #1e293b;
-  --c-surface-alt: #334155;
-  --c-border:      #334155;
-  --c-border-foc:  #64748b;
+  --c-bg:          #0a0a0f;
+  --c-surface:     #141418;
+  --c-surface-alt: #1e1e24;
+  --c-border:      #2a2a32;
+  --c-border-foc:  #52525e;
 
-  --c-text:        #f8fafc;
-  --c-text-2:      #cbd5e1;
-  --c-text-3:      #64748b;
+  --c-text:        #f0f0f5;
+  --c-text-2:      #a0a0ae;
+  --c-text-3:      #5a5a68;
 
-  --c-accent:      #4ade80;
-  --c-accent-h:    #22c55e;
-  --c-accent-bg:   rgba(34,197,94,.12);
-  --c-accent-bdr:  rgba(34,197,94,.3);
+  --c-accent:      #818cf8;
+  --c-accent-h:    #6366f1;
+  --c-accent-bg:   rgba(99,102,241,.12);
+  --c-accent-bdr:  rgba(99,102,241,.3);
 
-  --c-ok-bg:       rgba(34,197,94,.12);
-  --c-ok-bdr:      rgba(34,197,94,.3);
+  --c-ok-bg:       rgba(16,185,129,.12);
+  --c-ok-bdr:      rgba(16,185,129,.3);
   --c-warn-bg:     rgba(245,158,11,.12);
   --c-warn-bdr:    rgba(245,158,11,.3);
   --c-err-bg:      rgba(239,68,68,.12);
@@ -87,14 +88,14 @@
   --shadow-s:      0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
   --shadow-m:      0 4px 6px -1px rgba(0,0,0,.4), 0 2px 4px -2px rgba(0,0,0,.3);
   --shadow-l:      0 10px 15px -3px rgba(0,0,0,.4), 0 4px 6px -4px rgba(0,0,0,.3);
-  --shadow-glow:   0 0 20px rgba(74,222,128,.2);
+  --shadow-glow:   0 0 20px rgba(129,140,248,.2);
 }
 
 /* ─── Reset ─── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: var(--font);
+  font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
   color: var(--c-text);
@@ -103,7 +104,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Focus States (Accessibility) ─── */
+/* ─── Focus States ─── */
 :focus-visible {
   outline: 2px solid var(--c-accent);
   outline-offset: 2px;
@@ -112,7 +113,7 @@ body {
 /* ─── Layout ─── */
 .content {
   padding: 32px 40px 64px;
-  max-width: 960px;
+  max-width: 800px;
   width: 100%;
   margin: 0 auto;
 }
@@ -129,13 +130,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 .header-title {
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 600;
   color: var(--c-text);
+  letter-spacing: -.02em;
 }
 .header-actions {
   display: flex;
@@ -161,12 +162,21 @@ body {
   color: var(--c-text-2);
 }
 .header-toolbar-status .dot {
-  width: 6px; height: 6px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   display: inline-block;
 }
-.header-toolbar-status .dot.running { background: var(--c-ok); box-shadow: 0 0 8px var(--c-ok); }
-.header-toolbar-status .dot.idle    { background: var(--c-text-3); }
+.header-toolbar-status .dot.running {
+  background: var(--c-ok);
+  box-shadow: 0 0 12px var(--c-ok);
+  animation: pulse 2s infinite;
+}
+.header-toolbar-status .dot.idle { background: var(--c-text-3); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .6; }
+}
 
 /* ─── Stats Grid ─── */
 .stats-grid {
@@ -180,29 +190,32 @@ body {
   border: 1px solid var(--c-border);
   border-radius: var(--r-l);
   padding: 20px;
-  transition: box-shadow var(--norm);
+  transition: all var(--norm);
 }
 .stat-card:hover {
   box-shadow: var(--shadow-m);
+  transform: translateY(-2px);
 }
 .stat-label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--c-text-3);
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .06em;
   margin-bottom: 8px;
 }
 .stat-value {
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 32px;
   font-weight: 700;
   color: var(--c-text);
   line-height: 1;
+  letter-spacing: -.02em;
 }
 .stat-meta {
   font-size: 12px;
   color: var(--c-text-3);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 /* ─── Sections ─── */
@@ -216,9 +229,11 @@ body {
   gap: 8px;
 }
 .section-title {
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 600;
   color: var(--c-text);
+  letter-spacing: -.01em;
 }
 .section-desc {
   font-size: 13px;
@@ -231,7 +246,7 @@ body {
   border: 1px solid var(--c-border);
   border-radius: var(--r-l);
   overflow: hidden;
-  transition: box-shadow var(--norm);
+  transition: all var(--norm);
 }
 .card:hover {
   box-shadow: var(--shadow-s);
@@ -243,8 +258,11 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  cursor: pointer;
 }
+.card-head:hover { background: var(--c-surface-alt); }
 .card-title {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--c-text);
@@ -271,6 +289,7 @@ body {
 .platform-card.disabled { opacity: .55; }
 .platform-card.enabled {
   border-color: var(--c-accent-bdr);
+  box-shadow: 0 0 0 1px var(--c-accent-bdr);
 }
 .platform-card-head {
   padding: 14px 20px;
@@ -283,6 +302,7 @@ body {
 }
 .platform-card-head:hover { background: var(--c-surface-alt); }
 .platform-card-name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--c-text);
@@ -291,14 +311,14 @@ body {
   gap: 8px;
 }
 .platform-card-name .dot {
-  width: 6px; height: 6px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   background: var(--c-text-3);
-  transition: background var(--fast), box-shadow var(--fast);
+  transition: all var(--fast);
 }
 .platform-card.enabled .platform-card-name .dot {
   background: var(--c-ok);
-  box-shadow: 0 0 8px var(--c-ok);
+  box-shadow: 0 0 10px var(--c-ok);
 }
 .platform-card-chevron {
   font-size: 12px;
@@ -362,7 +382,7 @@ body {
 }
 .form-input.mono,
 .form-textarea.mono {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 .form-textarea { min-height: 80px; resize: vertical; }
@@ -374,7 +394,7 @@ body {
 }
 .form-hint a { color: var(--c-accent); }
 .form-hint code {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 1px 4px;
   background: var(--c-surface-alt);
@@ -388,7 +408,7 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 7px 14px;
-  font-family: inherit;
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 500;
   border-radius: var(--r-s);
@@ -448,7 +468,7 @@ body {
 }
 .toggle-input:checked + .toggle-track {
   background: var(--c-accent);
-  box-shadow: 0 0 8px var(--c-accent);
+  box-shadow: 0 0 10px var(--c-accent);
 }
 .toggle-input:checked + .toggle-track::after {
   transform: translateX(16px);
@@ -515,7 +535,7 @@ body {
 }
 .field-tip a { color: var(--c-accent); }
 .field-tip code {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 1px 4px;
   background: var(--c-surface-alt);
@@ -528,7 +548,7 @@ body {
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
 .text-center { text-align: center; }
-.mono { font-family: var(--mono); }
+.mono { font-family: var(--font-mono); }
 .hidden { display: none !important; }
 .sr-only {
   position: absolute;
@@ -561,7 +581,7 @@ body {
 
 /* ─── Config Files Stack ─── */
 .config-stack { display: flex; flex-direction: column; gap: 16px; }
-.config-card .card-title { font-family: var(--mono); font-size: 13px; }
+.config-card .card-title { font-family: var(--font-mono); font-size: 13px; }
 .config-card textarea { width: 100%; }
 
 /* ═══════════════════════════════════════════════════════
@@ -578,7 +598,7 @@ body {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--r-xl);
-  box-shadow: var(--shadow-m);
+  box-shadow: var(--shadow-l);
   overflow: hidden;
 }
 
@@ -658,11 +678,12 @@ body {
 }
 .wizard-icon { font-size: 36px; margin-bottom: 12px; }
 .wizard-title {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 20px;
   font-weight: 700;
   color: var(--c-text);
   margin-bottom: 6px;
-  letter-spacing: -.01em;
+  letter-spacing: -.02em;
 }
 .wizard-desc {
   font-size: 13px;
@@ -721,6 +742,7 @@ body {
 }
 .wizard-platform-head:hover { background: var(--c-surface-alt); }
 .wizard-platform-name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   display: flex;
@@ -731,7 +753,7 @@ body {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--c-text-3);
-  transition: background var(--fast), box-shadow var(--fast);
+  transition: all var(--fast);
 }
 .wizard-platform-card.on .wizard-platform-name .dot {
   background: var(--c-ok);
@@ -756,6 +778,7 @@ body {
 }
 .wizard-cred:last-child { margin-bottom: 0; }
 .wizard-cred-name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 14px;
@@ -808,7 +831,7 @@ body {
 }
 .wizard-kv span { color: var(--c-text-2); }
 .wizard-kv code {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--c-text);
   background: var(--c-surface-alt);
@@ -891,10 +914,12 @@ body {
 }
 .conn-logo svg { width: 22px; height: 22px; color: #fff; }
 .conn-title {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 20px;
   font-weight: 700;
   color: var(--c-text);
   margin-bottom: 6px;
+  letter-spacing: -.02em;
 }
 .conn-desc {
   font-size: 13px;
@@ -909,7 +934,7 @@ body {
 .conn-input {
   flex: 1;
   padding: 8px 10px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--c-text);
   background: var(--c-surface-alt);
