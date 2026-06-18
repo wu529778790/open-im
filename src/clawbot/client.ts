@@ -13,7 +13,7 @@ import { createLogger } from '../logger.js';
 import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/reconnect.js';
 import { cacheContextToken } from './message-sender.js';
 import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
-import { downloadMediaFromUrl, decryptAes256CbcMedia, saveBufferMedia, createMediaTargetPath } from '../shared/media-storage.js';
+import { downloadMediaFromUrl, decryptAes256CbcMedia, createMediaTargetPath } from '../shared/media-storage.js';
 import { createDecipheriv } from 'node:crypto';
 import type { Config } from '../config.js';
 import type {
@@ -316,7 +316,10 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
 
       // Save to disk
       const targetPath = createMediaTargetPath('.jpg', `clawbot-${Date.now()}`);
-      await saveBufferMedia(decrypted, targetPath);
+      const { writeFile } = await import('node:fs/promises');
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir('/tmp/t/open-im-images', { recursive: true });
+      await writeFile(targetPath, decrypted);
       paths.push(targetPath);
       log.info(`ClawBot image saved: ${targetPath}`);
     } catch (err) {
