@@ -670,7 +670,7 @@ export function getPlatformsWithCredentials(config: Config): Platform[] {
 
 export function resolvePlatformAiCommand(config: Config, platform: Platform): AiCommand {
   const v = config.platforms[platform]?.aiCommand;
-  return v === 'claude' || v === 'codex' || v === 'codebuddy' ? v : 'claude';
+  return v === 'claude' || v === 'codex' || v === 'codebuddy' || v === 'opencode' ? v : 'claude';
 }
 
 export function getConfiguredAiCommands(config: Config): AiCommand[] {

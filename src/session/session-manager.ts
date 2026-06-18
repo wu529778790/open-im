@@ -386,7 +386,7 @@ export class SessionManager {
   }
 
   private clearConvSessionMappings(userId: string, convId: string): void {
-    for (const toolId of ['claude', 'codex', 'codebuddy'] as const) {
+    for (const toolId of ['claude', 'codex', 'codebuddy', 'opencode'] as const) {
       this.convSessionMap.delete(this.getConvSessionKey(userId, convId, toolId));
     }
   }

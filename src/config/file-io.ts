@@ -28,7 +28,7 @@ const OLD_ROOT_KEYS = [
   'claudeModel',
 ] as const;
 
-const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy'];
+const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy', 'opencode'];
 const require = createRequire(import.meta.url);
 
 /** Claude 认证相关的环境变量 key 列表 */
