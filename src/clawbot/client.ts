@@ -161,10 +161,13 @@ function startPolling(): void {
             setClawbotContextToken(msg.context_token);
           }
 
-          // Extract and download images from message
-          const imagePaths = await extractImages(msg);
+          // Debug: log raw item_list for image messages
+          if (extracted === '[图片]') {
+            log.info(`Image message raw item_list: ${JSON.stringify(msg.item_list).substring(0, 500)}`);
+          }
 
-          userMessages.push({ chatId, msgId, content: extracted, imagePaths: imagePaths.length > 0 ? imagePaths : undefined });
+          // Extract and download images from message
+          const imagePaths = await extractImages(msg);          userMessages.push({ chatId, msgId, content: extracted, imagePaths: imagePaths.length > 0 ? imagePaths : undefined });
         }
 
         // Step 2: Aggregate consecutive messages from the same user
@@ -269,9 +272,15 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
 
   const paths: string[] = [];
   for (const item of msg.item_list) {
+    // 调试：记录所有 item 类型
+    log.info(`Item type=${item.type}, has image_item=${!!item.image_item}, has media=${!!item.image_item?.media}, has cdn_url=${!!item.image_item?.media?.cdn_url}`);
+
     if (item.type !== MessageItemType.IMAGE) continue;
     const media = item.image_item?.media;
-    if (!media?.cdn_url) continue;
+    if (!media?.cdn_url) {
+      log.warn(`Image item missing cdn_url: ${JSON.stringify(item.image_item).substring(0, 200)}`);
+      continue;
+    }
 
     try {
       // Download from CDN
