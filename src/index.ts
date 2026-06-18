@@ -227,7 +227,7 @@ function buildNotification(opts: {
     lines.push("", ...details);
   }
 
-  return lines.join("\n");
+  return lines.join("\n\n");
 }
 
 function buildStartupMessage(
