@@ -208,7 +208,14 @@ const commands: Record<string, () => Promise<void>> = {
   dashboard: cmdDashboard,
 };
 
-if (cmd === "--help" || cmd === "-h") {
+if (cmd === "--version" || cmd === "-v") {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const __dirname = join(fileURLToPath(import.meta.url), "..");
+  const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+  console.log(pkg.version);
+} else if (cmd === "--help" || cmd === "-h") {
   showHelp(0);
 } else if (cmd === undefined) {
   cmdDev().catch((err) => {
