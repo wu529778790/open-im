@@ -7,6 +7,7 @@ import type { SessionManager } from '../session/session-manager.js';
 import type { ToolAdapter } from '../adapters/tool-adapter.interface.js';
 import type { ParsedResult } from '../adapters/tool-adapter.interface.js';
 import { resolvePlatformAiCommand, type Platform } from '../config.js';
+import { captureError } from './sentry.js';
 import {
   formatToolStats,
   formatToolCallNotification,
@@ -454,6 +455,11 @@ export function runAITask(
         settled = true;
         cleanup();
         log.error(`[AITask] Synchronous error in startRun: ${err}`);
+        captureError(err instanceof Error ? err : new Error(String(err)), {
+          platform: ctx.platform,
+          userId: ctx.userId,
+          aiCommand,
+        });
         emitStructuredEvent('AITask', 'ai.task.error', {
           platform: ctx.platform,
           taskKey: hashUserId(ctx.taskKey),

@@ -49,6 +49,7 @@ import { createRequire } from "node:module";
 import { escapePathForMarkdown, getAIToolDisplayName } from "./shared/utils.js";
 import { applyOpenImGitCoauthorToProcessEnv } from "./shared/git-coauthor.js";
 import { emitInterruptedTerminals } from "./shared/task-cleanup.js";
+import { initSentry, captureError, flushSentry } from "./shared/sentry.js";
 
 const require = createRequire(import.meta.url);
 const { version: APP_VERSION } = require("../package.json") as {
@@ -231,6 +232,7 @@ export async function main() {
       logLevel: config.logLevel,
       telemetry: config.telemetry,
     });
+    initSentry();
     applyOpenImGitCoauthorToProcessEnv();
   } catch (err) {
     if (
@@ -393,6 +395,7 @@ export async function main() {
     cleanupAdapters();
     flushActiveChats();
     await shutdownLoggerTelemetry();
+    await flushSentry();
     await closeLogger();
     process.exit(0);
   };
@@ -422,6 +425,7 @@ export async function main() {
   // Global error handlers to prevent unhandled crashes
   process.on("unhandledRejection", (reason) => {
     log.error("Unhandled Promise rejection (this indicates a bug — the affected request may hang without a response):", reason);
+    captureError(reason instanceof Error ? reason : new Error(String(reason)), { source: 'unhandledRejection' });
   });
   process.on("uncaughtException", (err) => {
     const msg = err?.message ?? String(err);
@@ -432,6 +436,7 @@ export async function main() {
       return;
     }
     log.error("Uncaught exception (process will exit):", err);
+    captureError(err, { fatal: true, source: 'uncaughtException' });
     // 进程即将因未捕获异常退出：补发在途任务的终态，避免 miss
     for (const platform of successfulPlatforms) {
       const handle = activeHandles.get(platform);
