@@ -2,17 +2,16 @@
  * WorkBuddy Message Sender - Send responses to WeChat KF
  */
 
-import { randomUUID } from 'node:crypto';
 import { createLogger } from '../logger.js';
-import { splitLongContent, toReplyPlainText } from '../shared/utils.js';
-import { MAX_WORKBUDDY_MESSAGE_LENGTH } from '../constants.js';
+import { toReplyPlainText } from '../shared/utils.js';
 import { getCentrifugeClient } from './client.js';
 import type { WorkBuddyCentrifugeClient } from './centrifuge-client.js';
 
 const log = createLogger('WorkBuddySender');
 
 /**
- * Send text reply to WeChat KF, splitting long messages automatically.
+ * Send text reply to WeChat KF.
+ * 不拆分消息，直接发送完整内容（微信客服会自动截断过长的消息）
  */
 export async function sendTextReply(
   _client: WorkBuddyCentrifugeClient | null,
@@ -27,33 +26,14 @@ export async function sendTextReply(
   }
 
   const plainText = toReplyPlainText(text);
-  const parts = splitLongContent(plainText, MAX_WORKBUDDY_MESSAGE_LENGTH);
 
-  if (parts.length === 1) {
-    log.info(`Sending WorkBuddy reply to chatId=${chatId}, msgId=${msgId}, len=${plainText.length}`);
-    await client.sendPromptResponse({
-      session_id: chatId,
-      prompt_id: msgId,
-      content: [{ type: 'text', text: plainText }],
-      stop_reason: 'end_turn',
-    });
-    return;
-  }
-
-  log.info(`Sending WorkBuddy reply in ${parts.length} parts to chatId=${chatId}, msgId=${msgId}, totalLen=${plainText.length}`);
-  for (let i = 0; i < parts.length; i++) {
-    const partText = i === 0
-      ? `${parts[i]}\n\n_(1/${parts.length})_`
-      : `_(续 ${i + 1}/${parts.length})_\n\n${parts[i]}`;
-    const partMsgId = i === 0 ? msgId : randomUUID();
-    await client.sendPromptResponse({
-      session_id: chatId,
-      prompt_id: partMsgId,
-      content: [{ type: 'text', text: partText }],
-      stop_reason: 'end_turn',
-    });
-    log.info(`WorkBuddy part ${i + 1}/${parts.length} sent, msgId=${partMsgId}`);
-  }
+  log.info(`Sending WorkBuddy reply to chatId=${chatId}, msgId=${msgId}, len=${plainText.length}`);
+  await client.sendPromptResponse({
+    session_id: chatId,
+    prompt_id: msgId,
+    content: [{ type: 'text', text: plainText }],
+    stop_reason: 'end_turn',
+  });
 }
 
 /**
