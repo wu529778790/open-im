@@ -414,6 +414,39 @@ export function setupTelegramHandlers(
         await ctx.answerCbQuery("任务已完成或不存在");
       }
     }
+
+    // 处理选择回调
+    if (data.startsWith("choice:")) {
+      const parts = data.split(":");
+      if (parts.length >= 3) {
+        const choiceNum = parts[2];
+        const chatId = String(ctx.chat?.id ?? "");
+        // 将用户选择作为消息发送给 AI
+        const { handleTextFlow } = await import("../platform/handle-text-flow.js");
+
+        await handleTextFlow({
+          platform: "telegram",
+          userId,
+          chatId,
+          text: choiceNum,
+          ctx: createPlatformEventContext({
+            platform: "telegram",
+            allowedUserIds: config.telegramAllowedUserIds,
+            config,
+            sessionManager,
+            sender: { sendTextReply: async () => {} },
+          }),
+          handleAIRequest: async () => {},
+          sendTextReply: async (c, t) => {
+            await sendTextReply(c, t);
+          },
+          workDir: sessionManager.getWorkDir(userId),
+          convId: sessionManager.getConvId(userId),
+        });
+
+        await ctx.answerCbQuery(`已选择 ${choiceNum}`);
+      }
+    }
   });
 
   bot.on(message("text"), async (tgCtx) => {

@@ -13,6 +13,7 @@ import {
   listDirectories,
   buildDirectoryKeyboard,
 } from "../commands/handler.js";
+import { detectChoices, buildChoiceKeyboard } from "../shared/choice-detector.js";
 
 const log = createLogger("TgSender");
 const lastSentByMsg = new Map<string, string>();
@@ -188,12 +189,30 @@ export async function sendTextReply(
   const bot = getBot();
   try {
     const formatted = formatMessage(text, "done", undefined, OPEN_IM_SYSTEM_TITLE);
-    // 尝试 Markdown 模式，如果失败则回退到纯文本
-    try {
-      await bot.telegram.sendMessage(Number(chatId), formatted, { parse_mode: "Markdown" });
-    } catch {
-      // Markdown 解析失败，回退到纯文本
-      await bot.telegram.sendMessage(Number(chatId), formatted);
+
+    // 检测是否有编号选择
+    const detection = detectChoices(text);
+
+    if (detection.hasChoices) {
+      // 有选择：发送纯文本 + 按钮
+      const keyboard = buildChoiceKeyboard(detection.choices, chatId);
+      try {
+        await bot.telegram.sendMessage(Number(chatId), detection.cleanText || formatted, {
+          parse_mode: "Markdown",
+          reply_markup: keyboard,
+        });
+      } catch {
+        await bot.telegram.sendMessage(Number(chatId), detection.cleanText || formatted, {
+          reply_markup: keyboard,
+        });
+      }
+    } else {
+      // 无选择：普通消息
+      try {
+        await bot.telegram.sendMessage(Number(chatId), formatted, { parse_mode: "Markdown" });
+      } catch {
+        await bot.telegram.sendMessage(Number(chatId), formatted);
+      }
     }
   } catch (err) {
     log.error("Failed to send text:", err);
