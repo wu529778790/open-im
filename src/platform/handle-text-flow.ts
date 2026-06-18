@@ -25,6 +25,26 @@ import type { HandleAIRequestParams } from './handle-ai-request.js';
 import { createLogger, auditLog } from '../logger.js';
 import { handleEnqueueResult, DEFAULT_QUEUE_FULL_MESSAGE, DEFAULT_QUEUED_MESSAGE } from '../shared/utils.js';
 import type { MessageSender } from '../commands/handler.js';
+import { walWrite, walCommit } from '../shared/message-wal.js';
+
+/* ── 幂等性：消息去重 ── */
+const DEDUP_TTL_MS = 60_000; // 1 分钟内的相同 msgId 视为重复
+const dedupCache = new Map<string, number>(); // msgId → timestamp
+
+function isDuplicate(msgId: string | undefined): boolean {
+  if (!msgId) return false;
+  const now = Date.now();
+  const prev = dedupCache.get(msgId);
+  if (prev && now - prev < DEDUP_TTL_MS) return true;
+  dedupCache.set(msgId, now);
+  // 清理过期条目
+  if (dedupCache.size > 1000) {
+    for (const [k, v] of dedupCache) {
+      if (now - v > DEDUP_TTL_MS) dedupCache.delete(k);
+    }
+  }
+  return false;
+}
 
 /** AI request handler function type (object params, as returned by createPlatformAIRequestHandler). */
 export type HandleAIRequestFn = (params: HandleAIRequestParams) => Promise<void>;
@@ -49,6 +69,8 @@ export interface HandleTextFlowParams {
   chatId: string;
   /** The trimmed text content of the message. */
   text: string;
+  /** Optional message ID for deduplication. */
+  msgId?: string;
   /** The platform event context (accessControl, commandHandler, requestQueue, etc.). */
   ctx: PlatformEventContext;
   /** The platform-specific AI request handler (from createPlatformAIRequestHandler). */
@@ -100,6 +122,7 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
     userId,
     chatId,
     text,
+    msgId,
     ctx,
     handleAIRequest,
     sendTextReply,
@@ -118,6 +141,16 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
     await sendTextReply(chatId, accessDeniedMessage(userId));
     return false;
   }
+
+  // 1b. Deduplication check
+  if (isDuplicate(msgId)) {
+    log.info(`[${platform}] Duplicate message ignored: msgId=${msgId}`);
+    return true;
+  }
+
+  // 1c. WAL: persist message before processing
+  const walMsgId = msgId || `${platform}:${userId}:${Date.now()}`;
+  walWrite({ msgId: walMsgId, platform, userId, chatId, text: text.substring(0, 500), timestamp: Date.now() });
 
   // 2. Set active chat ID
   setActiveChatId(platform, chatId);
@@ -162,6 +195,7 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
       commandSender,
     );
     if (handled) {
+      walCommit(walMsgId);
       return true;
     }
   } catch (err) {
@@ -206,5 +240,6 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
     await handleEnqueueResult(enqueueResult, (text) => sendTextReply(chatId, text), { queueFull: queueFullMessage, queued: queuedMessage });
   }
 
+  walCommit(walMsgId);
   return true;
 }

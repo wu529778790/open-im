@@ -95,6 +95,7 @@ export function setupClawbotHandlers(
       userId,
       chatId,
       text: enrichedText,
+      msgId,
       ctx,
       handleAIRequest,
       sendTextReply: (c, t) => sendTextReply(c, t),
