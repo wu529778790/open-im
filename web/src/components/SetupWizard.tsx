@@ -150,7 +150,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
         {f === "allowedUserIds" ? (
           <><textarea className="form-textarea mono" value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} /><div className="form-hint">{t("commaSeparatedIds")}</div></>
         ) : f === "aiCommand" ? (
-          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}><option value="claude">claude</option><option value="codex">codex</option><option value="codebuddy">codebuddy</option></select>
+          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}><option value="claude">claude</option><option value="codex">codex</option><option value="codebuddy">codebuddy</option><option value="opencode">opencode</option></select>
         ) : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} />
         )}

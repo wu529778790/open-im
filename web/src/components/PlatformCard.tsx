@@ -52,6 +52,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             <option value="claude">claude</option>
             <option value="codex">codex</option>
             <option value="codebuddy">codebuddy</option>
+            <option value="opencode">opencode</option>
           </select>
         ) : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />

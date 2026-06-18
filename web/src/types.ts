@@ -1,4 +1,4 @@
-export type AiCommand = "" | "claude" | "codex" | "codebuddy";
+export type AiCommand = "" | "claude" | "codex" | "codebuddy" | "opencode";
 
 export type PlatformKey = "telegram" | "feishu" | "qq" | "wework" | "dingtalk" | "workbuddy" | "clawbot";
 
