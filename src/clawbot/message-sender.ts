@@ -5,11 +5,12 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createLogger } from '../logger.js';
-import { splitLongContent, toReplyPlainText } from '../shared/utils.js';
-import { MAX_CLAWBOT_MESSAGE_LENGTH } from '../constants.js';
+import { toReplyPlainText } from '../shared/utils.js';
 import { getChannelState } from './client.js';
 import { getActiveChatId, getClawbotContextToken } from '../shared/active-chats.js';
+import { textToSpeech, getTTSConfig } from '../shared/tts.js';
 import type { SendMessageResponse } from './types.js';
 
 const log = createLogger('ClawBotSender');
@@ -106,25 +107,85 @@ async function postMessage(chatId: string, text: string, contextToken?: string):
 }
 
 /**
+ * 发送语音消息
+ */
+async function postVoiceMessage(chatId: string, audioPath: string, contextToken?: string): Promise<boolean> {
+  if (getChannelState() !== 'connected') {
+    log.warn('ClawBot not connected, cannot send voice message');
+    return false;
+  }
+
+  const token = contextToken ?? getCachedContextToken(chatId);
+  if (!token) {
+    log.warn(`ClawBot no context_token for chatId=${chatId}, cannot send voice`);
+    return false;
+  }
+
+  try {
+    // 读取音频文件并转为 base64
+    const audioBuffer = readFileSync(audioPath);
+    const audioBase64 = audioBuffer.toString('base64');
+
+    const url = `${apiUrl}/ilink/bot/sendmessage`;
+    const body = JSON.stringify({
+      msg: {
+        from_user_id: '',
+        to_user_id: chatId,
+        client_id: generateClientId(),
+        message_type: 2,     // BOT
+        message_state: 2,    // FINISH
+        item_list: [{
+          type: 3,  // VOICE
+          voice_item: {
+            media: { cdn_url: `data:audio/mp3;base64,${audioBase64}` },
+          },
+        }],
+        context_token: token,
+      },
+      base_info: { channel_version: '0.1.0' },
+    });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body,
+    });
+
+    const data = await res.json() as SendMessageResponse;
+    const ok = data.ret === 0 || data.ret === undefined;
+    if (!ok) {
+      log.error(`ClawBot voice message failed: ret=${data.ret} errcode=${data.errcode} errmsg=${data.errmsg}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    log.error('ClawBot voice message error:', err);
+    return false;
+  }
+}
+
+/**
  * Send text reply to a ClawBot chat, splitting long messages automatically.
  */
 export async function sendTextReply(chatId: string, text: string, contextToken?: string): Promise<void> {
   const plainText = toReplyPlainText(text);
-  const parts = splitLongContent(plainText, MAX_CLAWBOT_MESSAGE_LENGTH);
 
-  if (parts.length === 1) {
-    log.info(`Sending ClawBot reply to chatId=${chatId}, len=${plainText.length}`);
-    await postMessage(chatId, plainText, contextToken);
-    return;
-  }
+  // 发送文字消息
+  log.info(`Sending ClawBot reply to chatId=${chatId}, len=${plainText.length}`);
+  await postMessage(chatId, plainText, contextToken);
 
-  log.info(`Sending ClawBot reply in ${parts.length} parts to chatId=${chatId}, totalLen=${plainText.length}`);
-  for (let i = 0; i < parts.length; i++) {
-    const partText = i === 0
-      ? `${parts[i]}\n\n_(1/${parts.length})_`
-      : `_(续 ${i + 1}/${parts.length})_\n\n${parts[i]}`;
-    await postMessage(chatId, partText, contextToken);
-    log.info(`ClawBot part ${i + 1}/${parts.length} sent`);
+  // 如果 TTS 启用，同时发送语音消息
+  const ttsConfig = getTTSConfig();
+  if (ttsConfig.enabled && plainText.length > 10) {
+    try {
+      const audioPath = await textToSpeech(plainText);
+      if (audioPath) {
+        await postVoiceMessage(chatId, audioPath, contextToken);
+        log.info(`Voice message sent to chatId=${chatId}`);
+      }
+    } catch (err) {
+      log.warn('Failed to send voice message:', err);
+    }
   }
 }
 
