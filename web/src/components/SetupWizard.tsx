@@ -14,7 +14,7 @@ function emptyPayload(): WebConfigPayload {
       wework:    { enabled: false, aiCommand: "claude", corpId: "", secret: "", allowedUserIds: "" },
       dingtalk:  { enabled: false, aiCommand: "claude", clientId: "", clientSecret: "", cardTemplateId: "", allowedUserIds: "" },
       workbuddy: { enabled: false, aiCommand: "claude", accessToken: "", refreshToken: "", userId: "", baseUrl: "", allowedUserIds: "" },
-      clawbot:   { enabled: false, aiCommand: "claude", apiUrl: "http://127.0.0.1:26322", apiToken: "", allowedUserIds: "" },
+      clawbot:   { enabled: false, aiCommand: "claude", apiUrl: "http://127.0.0.1:26322", apiToken: "", allowedUserIds: "", ttsEnabled: false, ttsVoice: "zh-CN-XiaoxiaoNeural" },
     },
     ai: { claudeWorkDir: "", claudeConfigPath: "", claudeProxy: "", codexCliPath: "codex", codexProxy: "", codebuddyCliPath: "codebuddy", hookPort: 0, logLevel: "default" },
   };
