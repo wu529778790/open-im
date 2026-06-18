@@ -211,6 +211,7 @@ function buildNotification(opts: {
   const details: string[] = [];
   if (opts.platform) details.push(`📱 平台: ${opts.platform}`);
   if (opts.aiCommand) details.push(`🤖 AI: ${opts.aiCommand}`);
+  if (opts.dir) details.push(`📁 目录: ${opts.dir}`);
 
   // 插件：最多显示 3 个，超过则截断
   const plugins = getEnabledPlugins();
