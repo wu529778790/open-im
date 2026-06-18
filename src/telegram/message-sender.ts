@@ -187,7 +187,14 @@ export async function sendTextReply(
 ): Promise<void> {
   const bot = getBot();
   try {
-    await bot.telegram.sendMessage(Number(chatId), formatMessage(text, "done", undefined, OPEN_IM_SYSTEM_TITLE));
+    const formatted = formatMessage(text, "done", undefined, OPEN_IM_SYSTEM_TITLE);
+    // 尝试 Markdown 模式，如果失败则回退到纯文本
+    try {
+      await bot.telegram.sendMessage(Number(chatId), formatted, { parse_mode: "Markdown" });
+    } catch {
+      // Markdown 解析失败，回退到纯文本
+      await bot.telegram.sendMessage(Number(chatId), formatted);
+    }
   } catch (err) {
     log.error("Failed to send text:", err);
     throw err;
