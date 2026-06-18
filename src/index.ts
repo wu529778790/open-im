@@ -191,6 +191,7 @@ function getEnabledPlugins(): string[] {
 /**
  * 统一通知格式模板
  * 所有发送给 IM 的通知都使用这个格式，保持一致性
+ * 注意：ClawBot/微信不支持 \n 换行，使用 | 分隔
  */
 function buildNotification(opts: {
   emoji: string;
@@ -201,32 +202,28 @@ function buildNotification(opts: {
   uptime?: string;
   extra?: string[];
 }): string {
-  const lines: string[] = [];
+  const parts: string[] = [];
 
-  // 标题行
-  lines.push(`${opts.emoji} ${opts.title}`);
+  // 标题
+  parts.push(`${opts.emoji} ${opts.title}`);
 
-  // 详情行
-  const details: string[] = [];
-  if (opts.platform) details.push(`📱 平台: ${opts.platform}`);
-  if (opts.aiCommand) details.push(`🤖 AI: ${opts.aiCommand}`);
-  if (opts.dir) details.push(`📁 目录: ${opts.dir}`);
+  // 详情
+  if (opts.platform) parts.push(`📱 ${opts.platform}`);
+  if (opts.aiCommand) parts.push(`🤖 ${opts.aiCommand}`);
+  if (opts.dir) parts.push(`📁 ${opts.dir}`);
 
   const plugins = getEnabledPlugins();
-  if (plugins.length > 0) details.push(`🧩 插件: ${plugins.join(", ")}`);
+  if (plugins.length > 0) parts.push(`🧩 ${plugins.join(", ")}`);
 
-  if (opts.uptime) details.push(`⏱️ 运行: ${opts.uptime}`);
-
-  if (details.length > 0) {
-    lines.push("", ...details);
-  }
+  if (opts.uptime) parts.push(`⏱️ ${opts.uptime}`);
 
   // 额外信息
   if (opts.extra?.length) {
-    lines.push("", ...opts.extra);
+    parts.push(...opts.extra);
   }
 
-  return lines.join("\n");
+  // 使用 | 分隔（ClawBot/微信不支持 \n）
+  return parts.join(" | ");
 }
 
 function buildStartupMessage(
