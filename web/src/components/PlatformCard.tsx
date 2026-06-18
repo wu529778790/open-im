@@ -78,6 +78,13 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
         {sk && <p className="platform-card-hint">{t(sk)}</p>}
         {def.fields.map(field)}
         {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: html(hk) }} />}
+        {(def as Record<string, unknown>).docUrl && (
+          <div style={{ marginTop: 12 }}>
+            <a href={(def as Record<string, string>).docUrl} target="_blank" rel="noreferrer" className="btn btn-g btn-sm" style={{ textDecoration: "none" }}>
+              📖 {(def as Record<string, string>).docLabel || "接入指南"}
+            </a>
+          </div>
+        )}
         <div className="platform-card-actions">
           <button type="button" className="btn btn-s btn-sm" disabled={testing} onClick={onTest}>
             {testing ? t("testing") : t("test")}
