@@ -127,7 +127,7 @@ export function Dashboard() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--c-bg)" }}>
-      <Header lang={lang} toggleLang={toggleLang} toggleDark={toggleDark} serviceStatus={svc} busy={busy} onValidate={() => void onValidate()} onSave={() => void onSave()} onToggleService={() => void onToggle()} t={t} />
+      <Header toggleDark={toggleDark} serviceStatus={svc} busy={busy} onValidate={() => void onValidate()} onSave={() => void onSave()} onToggleService={() => void onToggle()} t={t} />
 
       <div className="content">
         {msg.text && <div className={`flash msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`}>{msg.text}</div>}
