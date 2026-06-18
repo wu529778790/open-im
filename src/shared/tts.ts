@@ -1,9 +1,9 @@
 /**
  * TTS (Text-to-Speech) 模块
- * 使用 edge-tts-node 调用微软 Edge TTS 服务
+ * 使用 gTTS（Google Text-to-Speech）生成语音
  */
 
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'edge-tts-node';
+import gTTS from 'gtts';
 import { createLogger } from '../logger.js';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,17 +15,16 @@ const log = createLogger('TTS');
 /** TTS 配置 */
 export interface TTSConfig {
   enabled: boolean;
-  voice?: string;  // 默认中文女声
+  voice?: string;  // 语言代码：zh, en, ja 等
 }
 
 /** 默认配置 */
 const DEFAULT_TTS_CONFIG: TTSConfig = {
   enabled: false,
-  voice: 'zh-CN-XiaoxiaoNeural',
+  voice: 'zh',
 };
 
 let config: TTSConfig = DEFAULT_TTS_CONFIG;
-let tts: MsEdgeTTS | null = null;
 
 /**
  * 初始化 TTS
@@ -33,8 +32,7 @@ let tts: MsEdgeTTS | null = null;
 export function initTTS(cfg?: Partial<TTSConfig>): void {
   config = { ...DEFAULT_TTS_CONFIG, ...cfg };
   if (config.enabled) {
-    tts = new MsEdgeTTS({ enableLogger: false });
-    log.info(`TTS enabled, voice: ${config.voice}`);
+    log.info(`TTS enabled, language: ${config.voice}`);
   }
 }
 
@@ -50,7 +48,7 @@ export function getTTSConfig(): TTSConfig {
  * @returns 音频文件路径
  */
 export async function textToSpeech(text: string): Promise<string | null> {
-  if (!config.enabled || !tts) {
+  if (!config.enabled) {
     return null;
   }
 
@@ -75,11 +73,9 @@ export async function textToSpeech(text: string): Promise<string | null> {
     }
     const audioPath = join(audioDir, `tts-${randomBytes(8).toString('hex')}.mp3`);
 
-    // 设置 TTS 元数据
-    await tts.setMetadata(config.voice!, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-
-    // 调用 TTS
-    await tts.toFile(audioPath, cleanText);
+    // 调用 gTTS
+    const tts = new gTTS(cleanText, config.voice);
+    await tts.save(audioPath);
 
     log.info(`TTS generated: ${audioPath}`);
     return audioPath;

@@ -138,7 +138,7 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
         const { initTTS } = await import('./shared/tts.js');
         initTTS({
           enabled: pc.tts?.enabled ?? false,
-          voice: pc.tts?.voice ?? 'zh-CN-XiaoxiaoNeural',
+          voice: pc.tts?.voice ?? 'zh',
         });
       }
       const handle = setupClawbotHandlers(config, sessionManager);
