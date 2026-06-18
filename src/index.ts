@@ -232,7 +232,7 @@ export async function main() {
       logLevel: config.logLevel,
       telemetry: config.telemetry,
     });
-    initSentry();
+    initSentry(config.telemetry.enabled);
     applyOpenImGitCoauthorToProcessEnv();
   } catch (err) {
     if (
