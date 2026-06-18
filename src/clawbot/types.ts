@@ -29,7 +29,13 @@ export interface TextItem {
 
 /** Image content item */
 export interface ImageItem {
-  media?: { aes_key?: string; cdn_url?: string };
+  aeskey?: string;
+  media?: {
+    aes_key?: string;
+    cdn_url?: string;
+    full_url?: string;
+    encrypt_query_param?: string;
+  };
   width?: number;
   height?: number;
 }

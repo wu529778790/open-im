@@ -272,26 +272,30 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
 
   const paths: string[] = [];
   for (const item of msg.item_list) {
-    // 调试：记录所有 item 类型
-    log.info(`Item type=${item.type}, has image_item=${!!item.image_item}, has media=${!!item.image_item?.media}, has cdn_url=${!!item.image_item?.media?.cdn_url}`);
-
     if (item.type !== MessageItemType.IMAGE) continue;
-    const media = item.image_item?.media;
-    if (!media?.cdn_url) {
-      log.warn(`Image item missing cdn_url: ${JSON.stringify(item.image_item).substring(0, 200)}`);
+
+    const imageItem = item.image_item;
+    const media = imageItem?.media;
+    // iLink API 使用 full_url 而非 cdn_url
+    const imageUrl = media?.full_url || media?.cdn_url;
+    if (!imageUrl) {
+      log.warn('Image item missing full_url/cdn_url');
       continue;
     }
 
+    // AES key: 优先 media.aes_key (base64)，其次 aeskey (hex)
+    const aesKey = media?.aes_key || imageItem?.aeskey;
+
     try {
       // Download from CDN
-      const response = await fetch(media.cdn_url, { signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
       if (!response.ok) { log.warn(`Image download failed: HTTP ${response.status}`); continue; }
       const buffer = Buffer.from(await response.arrayBuffer());
 
       // Decrypt if AES key provided
       let decrypted: Buffer;
-      if (media.aes_key) {
-        decrypted = decryptAes256CbcMedia(buffer, media.aes_key);
+      if (aesKey) {
+        decrypted = decryptAes256CbcMedia(buffer, aesKey);
       } else {
         decrypted = buffer;
       }
