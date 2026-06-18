@@ -284,29 +284,37 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       continue;
     }
 
-    // AES key: aeskey 字段是 32 字符 hex（16 字节），需要直接用作 AES-128-CBC key
-    const aesKeyHex = imageItem?.aeskey;
-
     try {
-      // Download from CDN
+      // 直接从 full_url 下载图片（CDN 返回的是已解密的图片数据）
       const response = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
       if (!response.ok) { log.warn(`Image download failed: HTTP ${response.status}`); continue; }
       const buffer = Buffer.from(await response.arrayBuffer());
 
-      // 解密：aeskey 是 hex 编码的 16 字节密钥，用 AES-128-CBC 解密
-      let decrypted: Buffer;
-      if (aesKeyHex && aesKeyHex.length === 32) {
-        try {
-          const keyBuf = Buffer.from(aesKeyHex, 'hex');
-          const iv = keyBuf.subarray(0, 16);
-          const decipher = createDecipheriv('aes-128-cbc', keyBuf, iv);
-          decrypted = Buffer.concat([decipher.update(buffer), decipher.final()]);
-        } catch {
-          log.info('AES-128 decryption failed, using raw image data');
-          decrypted = buffer;
-        }
+      // 检查是否是有效图片
+      const first4 = buffer.subarray(0, 4).toString('hex');
+      const isJpeg = first4 === 'ffd8ffe0' || first4 === 'ffd8ffe1';
+      const isPng = first4 === '89504e47';
+
+      let finalBuffer: Buffer;
+      if (isJpeg || isPng) {
+        // CDN 返回的是有效图片，直接使用
+        finalBuffer = buffer;
       } else {
-        decrypted = buffer;
+        // CDN 返回的是加密数据，尝试解密
+        const aesKeyHex = imageItem?.aeskey;
+        if (aesKeyHex && aesKeyHex.length === 32) {
+          try {
+            const keyBuf = Buffer.from(aesKeyHex, 'hex');
+            const iv = keyBuf.subarray(0, 16);
+            const decipher = createDecipheriv('aes-128-cbc', keyBuf, iv);
+            finalBuffer = Buffer.concat([decipher.update(buffer), decipher.final()]);
+          } catch {
+            log.info('AES decryption failed, using raw image data');
+            finalBuffer = buffer;
+          }
+        } else {
+          finalBuffer = buffer;
+        }
       }
 
       // Save to disk
@@ -314,7 +322,7 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       const { writeFile } = await import('node:fs/promises');
       const { mkdir } = await import('node:fs/promises');
       await mkdir('/tmp/t/open-im-images', { recursive: true });
-      await writeFile(targetPath, decrypted);
+      await writeFile(targetPath, finalBuffer);
       paths.push(targetPath);
       log.info(`ClawBot image saved: ${targetPath}`);
     } catch (err) {
