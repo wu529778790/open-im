@@ -14,6 +14,7 @@ import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/r
 import { cacheContextToken } from './message-sender.js';
 import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
 import { downloadMediaFromUrl, decryptAes256CbcMedia, saveBufferMedia, createMediaTargetPath } from '../shared/media-storage.js';
+import { createDecipheriv } from 'node:crypto';
 import type { Config } from '../config.js';
 import type {
   ClawBotState,
@@ -283,8 +284,6 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       continue;
     }
 
-    // AES key: aeskey 字段是 hex 格式，media.aes_key 是 base64 格式
-    // decryptAes256CbcMedia 需要 hex 格式的 key
     const aesKey = imageItem?.aeskey;
 
     try {
@@ -293,10 +292,24 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       if (!response.ok) { log.warn(`Image download failed: HTTP ${response.status}`); continue; }
       const buffer = Buffer.from(await response.arrayBuffer());
 
-      // Decrypt if AES key provided
+      // 尝试解密，失败则直接使用原始数据
       let decrypted: Buffer;
       if (aesKey) {
-        decrypted = decryptAes256CbcMedia(buffer, aesKey);
+        try {
+          decrypted = decryptAes256CbcMedia(buffer, aesKey);
+        } catch {
+          // AES-256 解密失败，尝试 AES-128 (16字节 hex key)
+          try {
+            const keyBuf = Buffer.from(aesKey, 'hex');
+            const iv = keyBuf.subarray(0, 16);
+            const decipher = createDecipheriv('aes-128-cbc', keyBuf, iv);
+            decrypted = Buffer.concat([decipher.update(buffer), decipher.final()]);
+          } catch {
+            // 都失败了，直接用原始数据
+            log.info('AES decryption failed, using raw image data');
+            decrypted = buffer;
+          }
+        }
       } else {
         decrypted = buffer;
       }
