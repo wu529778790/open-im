@@ -304,12 +304,12 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
         const aesKeyHex = imageItem?.aeskey;
         if (aesKeyHex && aesKeyHex.length === 32) {
           try {
+            // AES-128-ECB 模式（官方 SDK 实现，无需 IV）
             const keyBuf = Buffer.from(aesKeyHex, 'hex');
-            const iv = keyBuf.subarray(0, 16);
-            const decipher = createDecipheriv('aes-128-cbc', keyBuf, iv);
+            const decipher = createDecipheriv('aes-128-ecb', keyBuf, null);
             finalBuffer = Buffer.concat([decipher.update(buffer), decipher.final()]);
           } catch {
-            log.info('AES decryption failed, using raw image data');
+            log.info('AES-128-ECB decryption failed, using raw image data');
             finalBuffer = buffer;
           }
         } else {
