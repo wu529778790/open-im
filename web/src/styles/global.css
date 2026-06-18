@@ -764,8 +764,48 @@ body {
 /* platform chips */
 .wizard-chips {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+/* wizard platform card */
+.wizard-platform-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-l);
+  overflow: hidden;
+  transition: border-color var(--fast);
+}
+.wizard-platform-card.on { border-color: var(--c-accent); }
+.wizard-platform-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  gap: 8px;
+}
+.wizard-platform-head:hover { background: var(--c-surface-alt); }
+.wizard-platform-name {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wizard-platform-name .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--c-text-3);
+}
+.wizard-platform-card.on .wizard-platform-name .dot { background: var(--c-ok); }
+.wizard-platform-chevron {
+  font-size: 12px;
+  color: var(--c-text-3);
+}
+.wizard-platform-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--c-border);
 }
 .wizard-chip {
   display: flex;
