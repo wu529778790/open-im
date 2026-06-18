@@ -17,6 +17,7 @@ interface UserSession {
   activeConvId?: string;
   totalTurns?: number;
   claudeModel?: string;
+  lastActiveAt?: number;
   threads?: Record<string, { sessionIds?: ToolSessionIds; totalTurns?: number; claudeModel?: string }>;
 }
 
@@ -102,7 +103,28 @@ export class SessionManager {
   }
 
   getWorkDir(userId: string): string {
-    return this.sessions.get(userId)?.workDir ?? this.defaultWorkDir;
+    const s = this.sessions.get(userId);
+    if (s) {
+      s.lastActiveAt = Date.now();
+      return s.workDir;
+    }
+    return this.defaultWorkDir;
+  }
+
+  /**
+   * 获取最近活跃的 session 的工作目录
+   * 如果没有 session，返回默认工作目录
+   */
+  getMostRecentWorkDir(): string {
+    let mostRecent: string | undefined;
+    let latestTime = 0;
+    for (const [, session] of this.sessions) {
+      if (session.lastActiveAt && session.lastActiveAt > latestTime) {
+        latestTime = session.lastActiveAt;
+        mostRecent = session.workDir;
+      }
+    }
+    return mostRecent ?? this.defaultWorkDir;
   }
 
   hasUserSession(userId: string): boolean {

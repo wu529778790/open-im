@@ -260,19 +260,9 @@ function buildStartupMessage(
   defaultWorkDir: string,
   sessionManager: SessionManager,
 ): string {
-  let sessionDir: string | undefined;
-
-  // Telegram 私聊、企业微信当前实现里，活跃 chatId 可直接对应到 session userId。
-  if (platform === "telegram" || platform === "wework") {
-    const activeChatId = getActiveChatId(platform);
-    if (activeChatId) {
-      sessionDir = sessionManager.getWorkDir(activeChatId);
-    }
-  }
-
   const platformName = PLATFORM_DISPLAY_NAMES[platform] ?? platform;
   const toolName = getAIToolDisplayName(aiCommand);
-  const dir = escapePathForMarkdown(sessionDir || defaultWorkDir);
+  const dir = escapePathForMarkdown(sessionManager.getMostRecentWorkDir());
 
   return buildNotification({
     emoji: "✅",
