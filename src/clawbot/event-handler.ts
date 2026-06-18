@@ -40,8 +40,10 @@ export function setupClawbotHandlers(
   const stopTaskCleanup = startTaskCleanup(ctx.runningTasks);
 
   const platformSender: PlatformSender = {
-    sendThinkingMessage: async (_chatId, _replyToMessageId, _toolId) => {
-      return 'clawbot_no_thinking';
+    sendThinkingMessage: async (chatId, _replyToMessageId, _toolId) => {
+      // ClawBot 不支持 typing indicator，先发一条"思考中"消息给用户反馈
+      await sendTextReply(chatId, '🤔 正在处理...');
+      return 'clawbot_thinking';
     },
     sendTextReply: async (chatId, text) => {
       await sendTextReply(chatId, text);

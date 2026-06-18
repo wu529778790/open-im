@@ -41,17 +41,17 @@ export function setupWorkBuddyHandlers(
   // Start task cleanup
   const stopTaskCleanup = startTaskCleanup(ctx.runningTasks);
 
-  // WorkBuddy-specific sender callbacks (no thinking message needed)
+  // WorkBuddy-specific sender callbacks
   const platformSender: PlatformSender = {
-    sendThinkingMessage: async (_chatId, _replyToMessageId, _toolId) => {
-      // WorkBuddy uses incoming msgId directly; no separate thinking message
-      return 'workbuddy_no_thinking';
+    sendThinkingMessage: async (chatId, _replyToMessageId, _toolId) => {
+      // WorkBuddy 不支持 typing indicator，先发一条"思考中"消息给用户反馈
+      await sendTextReply(null, chatId, '🤔 正在处理...', '');
+      return 'workbuddy_thinking';
     },
     sendTextReply: async (chatId, text) => {
       await sendTextReply(null, chatId, text, '');
     },
     startTyping: (_chatId) => {
-      // WorkBuddy doesn't support typing indicators
       return () => {};
     },
   };
