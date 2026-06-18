@@ -134,12 +134,6 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
       const pc = config.platforms.clawbot;
       if (pc?.apiUrl && pc?.apiToken) {
         initClawBotSender(pc.apiUrl, pc.apiToken);
-        // 初始化 TTS — 从配置读取
-        const { initTTS } = await import('./shared/tts.js');
-        initTTS({
-          enabled: pc.tts?.enabled ?? false,
-          voice: pc.tts?.voice ?? 'zh',
-        });
       }
       const handle = setupClawbotHandlers(config, sessionManager);
       await initClawbot(config, handle.handleEvent);

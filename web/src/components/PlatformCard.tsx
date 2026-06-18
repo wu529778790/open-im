@@ -79,30 +79,6 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
         {sk && <p className="platform-card-hint">{t(sk)}</p>}
         {def.fields.map(field)}
 
-        {/* ClawBot TTS 配置 */}
-        {def.key === 'clawbot' && (
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--c-surface-alt)', borderRadius: 'var(--r-m)' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text)', marginBottom: 8 }}>🔊 语音回复</div>
-            <label className="toggle" style={{ marginBottom: 12 }}>
-              <input type="checkbox" className="toggle-input sr-only" checked={(values as Record<string, unknown>).ttsEnabled as boolean || false} onChange={(e) => onChange({ ttsEnabled: e.target.checked })} />
-              <span className="toggle-track" />
-              <span style={{ fontSize: 13 }}>启用语音回复</span>
-            </label>
-            {(values as Record<string, unknown>).ttsEnabled && (
-              <div className="form-group">
-                <label className="form-label">语音</label>
-                <select className="form-select" value={(values as Record<string, unknown>).ttsVoice as string || 'zh-CN-XiaoxiaoNeural'} onChange={(e) => onChange({ ttsVoice: e.target.value })}>
-                  <option value="zh-CN-XiaoxiaoNeural">晓晓（女声，温柔）</option>
-                  <option value="zh-CN-XiaoyiNeural">晓伊（女声，活泼）</option>
-                  <option value="zh-CN-YunxiNeural">云希（男声，年轻）</option>
-                  <option value="zh-CN-YunjianNeural">云健（男声，沉稳）</option>
-                  <option value="zh-CN-YunyangNeural">云扬（男声，专业）</option>
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-
         {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: html(hk) }} />}
         {(def as Record<string, unknown>).docUrl && (
           <div style={{ marginTop: 12 }}>

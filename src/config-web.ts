@@ -205,7 +205,7 @@ interface WebConfigPayload {
     wework: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; corpId: string; secret: string; allowedUserIds: string };
     dingtalk: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
     workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
-    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; apiUrl: string; apiToken: string; allowedUserIds: string; ttsEnabled: boolean; ttsVoice: string };
+    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; apiUrl: string; apiToken: string; allowedUserIds: string };
   };
   ai: {
     claudeWorkDir: string;
@@ -415,8 +415,6 @@ function buildInitialPayload(file: FileConfig): WebConfigPayload {
         apiUrl: file.platforms?.clawbot?.apiUrl ?? "http://127.0.0.1:26322",
         apiToken: maskSecret(file.platforms?.clawbot?.apiToken),
         allowedUserIds: (file.platforms?.clawbot?.allowedUserIds ?? []).join(", "),
-        ttsEnabled: file.platforms?.clawbot?.tts?.enabled ?? false,
-        ttsVoice: file.platforms?.clawbot?.tts?.voice ?? "zh-CN-XiaoxiaoNeural",
       },
     },
     ai: {
@@ -869,10 +867,6 @@ function toFileConfig(payload: WebConfigPayload, existing: FileConfig): FileConf
         apiUrl: clean(payload.platforms.clawbot.apiUrl) ?? "http://127.0.0.1:26322",
         apiToken: resolveSecret(payload.platforms.clawbot.apiToken, existing.platforms?.clawbot?.apiToken),
         allowedUserIds: splitCsv(payload.platforms.clawbot.allowedUserIds),
-        tts: {
-          enabled: payload.platforms.clawbot.ttsEnabled,
-          voice: payload.platforms.clawbot.ttsVoice || "zh-CN-XiaoxiaoNeural",
-        },
       },
     },
   };

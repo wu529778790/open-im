@@ -106,11 +106,6 @@ export interface Config {
       allowedUserIds: string[];
       apiUrl?: string;
       apiToken?: string;
-      /** TTS 配置 */
-      tts?: {
-        enabled?: boolean;
-        voice?: string;
-      };
     };
   };
 }
@@ -187,10 +182,6 @@ export interface FilePlatformClawbot {
   allowedUserIds?: string[];
   apiUrl?: string;
   apiToken?: string;
-  tts?: {
-    enabled?: boolean;
-    voice?: string;
-  };
 }
 
 export interface FileToolClaude {

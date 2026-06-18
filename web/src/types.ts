@@ -55,8 +55,6 @@ export interface WebConfigPayload {
       apiUrl: string;
       apiToken: string;
       allowedUserIds: string;
-      ttsEnabled: boolean;
-      ttsVoice: string;
     };
   };
   ai: {
