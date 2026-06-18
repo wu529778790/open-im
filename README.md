@@ -1,8 +1,8 @@
 # open-im
 
-> 你的 AI 编程助手，在每个聊天 App 里。
+> 你的 AI 编程助手，在微信里。
 
-open-im 把 Claude Code、Codex、CodeBuddy 接入 Telegram、飞书、企业微信、钉钉、QQ 机器人、微信助理、微信客服号。手机发条消息，电脑上就写好代码。
+open-im 把 Claude Code、Codex、CodeBuddy 接入微信客服号（ClawBot）、微信助理（WorkBuddy）、Telegram、飞书、企业微信、钉钉、QQ 机器人。手机发条消息，电脑上就写好代码。
 
 ## 为什么用 open-im
 
@@ -41,13 +41,13 @@ open-im start
 
 | 平台 | 流式输出 | 图片 | 交互按钮 | 接入指南 |
 |------|---------|------|---------|---------|
+| **微信客服号（ClawBot）** | ✅ | ✅ | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
+| **微信助理（WorkBuddy）** | ✅ | ❌ | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
 | Telegram | ✅ | ✅ | ✅ | [Bot 文档](https://core.telegram.org/bots#creating-a-new-bot) |
 | 飞书 | ✅ | ✅ | ✅ | [开放平台](https://open.feishu.cn/) |
 | QQ 机器人 | ✅ | ✅ | ❌ | [开放平台](https://bot.q.qq.com/) |
 | 企业微信 | ✅ | ✅ | ❌ | [管理后台](https://work.weixin.qq.com/) |
 | 钉钉机器人 | ⚠️ 部分 | ✅ | ✅ | [开放平台](https://open-dev.dingtalk.com/) |
-| 微信助理（WorkBuddy） | ✅ | ❌ | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
-| 微信客服号（ClawBot） | ✅ | ⚠️ 下载中 | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
 
 每个平台可单独配置 AI 后端（`claude` / `codex` / `codebuddy` / `opencode`），默认 `claude`。
 
