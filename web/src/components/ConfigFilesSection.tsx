@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface Props {
   configJson: string;
   setConfigJson: (v: string) => void;
@@ -27,28 +29,31 @@ function JsonCard({ title, hint, json, setJson, onSave, formatBtn, resetBtn, onF
   setMessage: (m: { text: string; type: "success" | "error" | "" }) => void;
   t: (k: string) => string;
 }) {
-  const rows = formatBtn ? 18 : 12;
+  const [open, setOpen] = useState(false);
   return (
     <div className="card config-card">
-      <div className="card-head">
+      <div className="card-head" style={{ cursor: "pointer" }} onClick={() => setOpen(!open)}>
         <span className="card-title">{title}</span>
-        <span className="form-hint" style={{ margin: 0 }}>{hint}</span>
+        <span style={{ fontSize: 12, color: "var(--c-text-3)" }}>{open ? "▾" : "▸"}</span>
       </div>
-      <div className="card-body">
-        {(formatBtn || resetBtn) && (
-          <div className="config-card-toolbar">
-            {formatBtn && <button type="button" className="btn btn-g btn-sm" onClick={onFormat}>{t("formatJson")}</button>}
-            {resetBtn && <button type="button" className="btn btn-g btn-sm" onClick={onReset}>{t("resetJson")}</button>}
+      {open && (
+        <div className="card-body">
+          <p className="form-hint">{hint}</p>
+          {(formatBtn || resetBtn) && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
+              {formatBtn && <button type="button" className="btn btn-g btn-sm" onClick={onFormat}>{t("formatJson")}</button>}
+              {resetBtn && <button type="button" className="btn btn-g btn-sm" onClick={onReset}>{t("resetJson")}</button>}
+            </div>
+          )}
+          <textarea className="form-input mono" rows={14} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} style={{ minHeight: 200, resize: "vertical", whiteSpace: "pre" }} />
+          {validation && <div className={`msg mt-4 ${validation.type === "success" ? "msg-ok" : "msg-err"}`}>{validation.text}</div>}
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="btn btn-s btn-sm" onClick={() => void (async () => { try { await onSave(); setMessage({ text: t("saveOk"), type: "success" }); } catch (e) { setMessage({ text: toMsg(e), type: "error" }); } })()}>
+              {t("saveBtn")}
+            </button>
           </div>
-        )}
-        <textarea className="form-input mono" rows={rows} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} style={{ minHeight: formatBtn ? 340 : 200, resize: "vertical", whiteSpace: "pre" }} />
-        {validation && <div className={`msg mt-4 ${validation.type === "success" ? "msg-ok" : "msg-err"}`}>{validation.text}</div>}
-        <div style={{ marginTop: 10 }}>
-          <button type="button" className="btn btn-s btn-sm" onClick={() => void (async () => { try { await onSave(); setMessage({ text: t("saveOk"), type: "success" }); } catch (e) { setMessage({ text: toMsg(e), type: "error" }); } })()}>
-            {t("saveBtn")}
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
