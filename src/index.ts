@@ -172,6 +172,63 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   clawbot: '微信 (ClawBot)',
 };
 
+/** 读取已启用的插件列表 */
+function getEnabledPlugins(): string[] {
+  try {
+    const { readFileSync, existsSync } = require("fs");
+    const { join } = require("path");
+    const { homedir } = require("os");
+    const settingsPath = join(homedir(), ".claude", "settings.json");
+    if (!existsSync(settingsPath)) return [];
+    const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    const plugins = settings.enabledPlugins ?? {};
+    return Object.entries(plugins)
+      .filter(([, v]) => v === true)
+      .map(([k]) => k.split("@")[0]);
+  } catch { return []; }
+}
+
+/**
+ * 统一通知格式模板
+ * 所有发送给 IM 的通知都使用这个格式，保持一致性
+ */
+function buildNotification(opts: {
+  emoji: string;
+  title: string;
+  platform?: string;
+  aiCommand?: string;
+  dir?: string;
+  uptime?: string;
+  extra?: string[];
+}): string {
+  const lines: string[] = [];
+
+  // 标题行
+  lines.push(`${opts.emoji} ${opts.title}`);
+
+  // 详情行
+  const details: string[] = [];
+  if (opts.platform) details.push(`📱 平台: ${opts.platform}`);
+  if (opts.aiCommand) details.push(`🤖 AI: ${opts.aiCommand}`);
+  if (opts.dir) details.push(`📁 目录: ${opts.dir}`);
+
+  const plugins = getEnabledPlugins();
+  if (plugins.length > 0) details.push(`🧩 插件: ${plugins.join(", ")}`);
+
+  if (opts.uptime) details.push(`⏱️ 运行: ${opts.uptime}`);
+
+  if (details.length > 0) {
+    lines.push("", ...details);
+  }
+
+  // 额外信息
+  if (opts.extra?.length) {
+    lines.push("", ...opts.extra);
+  }
+
+  return lines.join("\n");
+}
+
 function buildStartupMessage(
   platform: string,
   appVersion: string,
@@ -193,42 +250,22 @@ function buildStartupMessage(
   const toolName = getAIToolDisplayName(aiCommand);
   const dir = sessionDir ? escapePathForMarkdown(sessionDir) : '发送 `/pwd` 查看';
 
-  // 读取插件列表
-  const pluginLines: string[] = [];
-  try {
-    const { readFileSync, existsSync } = require("fs");
-    const { join } = require("path");
-    const { homedir } = require("os");
-    const settingsPath = join(homedir(), ".claude", "settings.json");
-    if (existsSync(settingsPath)) {
-      const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-      const plugins = settings.enabledPlugins ?? {};
-      const enabled = Object.entries(plugins)
-        .filter(([, v]) => v === true)
-        .map(([k]) => k.split("@")[0]); // 只取插件名，去掉 @scope
-      if (enabled.length > 0) {
-        pluginLines.push("", `🧩 插件: ${enabled.join(", ")}`);
-      }
-    }
-  } catch { /* ignore */ }
-
-  return [
-    `✅ open-im v${appVersion} 已就绪`,
-    "",
-    `📱 平台: ${platformName}`,
-    `🤖 AI: ${toolName}`,
-    `📁 目录: ${dir}`,
-    ...pluginLines,
-  ].join("\n\n");
+  return buildNotification({
+    emoji: "✅",
+    title: `open-im v${appVersion} 已就绪`,
+    platform: platformName,
+    aiCommand: toolName,
+    dir,
+  });
 }
 
 function buildShutdownMessage(uptimeMinutes: number): string {
-  const uptime = uptimeMinutes < 1 ? '< 1' : String(uptimeMinutes);
-  return [
-    `🛑 open-im 正在关闭`,
-    "",
-    `⏱️ 运行时长: ${uptime} 分钟`,
-  ].join("\n\n");
+  const uptimeStr = uptimeMinutes < 1 ? '< 1 分钟' : `${uptimeMinutes} 分钟`;
+  return buildNotification({
+    emoji: "🛑",
+    title: "open-im 正在关闭",
+    uptime: uptimeStr,
+  });
 }
 
 export async function main() {
