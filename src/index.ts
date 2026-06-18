@@ -397,8 +397,17 @@ export async function main() {
     process.exit(0);
   };
 
-  process.on("SIGINT", () => shutdown().catch(() => process.exit(1)));
-  process.on("SIGTERM", () => shutdown().catch(() => process.exit(1)));
+  process.on("SIGINT", () => {
+    // 优雅关闭超时：10 秒后强制退出
+    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, 10_000);
+    forceExit.unref();
+    shutdown().catch(() => process.exit(1));
+  });
+  process.on("SIGTERM", () => {
+    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, 10_000);
+    forceExit.unref();
+    shutdown().catch(() => process.exit(1));
+  });
 
   // 兜底：进程退出（含异常路径，如未捕获异常 / SIGKILL）时强制清理 CLI 子进程，
   // 避免僵尸 / 孤儿。正常 shutdown 已在 cleanupAdapters() 里清理过。
