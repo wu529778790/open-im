@@ -1,9 +1,9 @@
 /**
  * TTS (Text-to-Speech) 模块
- * 使用 gTTS（Google Text-to-Speech）生成语音
+ * 使用 Python edge-tts 生成语音（微软 Edge TTS）
  */
 
-import gTTS from 'gtts';
+import { execFile } from 'node:child_process';
 import { createLogger } from '../logger.js';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,13 +15,13 @@ const log = createLogger('TTS');
 /** TTS 配置 */
 export interface TTSConfig {
   enabled: boolean;
-  voice?: string;  // 语言代码：zh, en, ja 等
+  voice?: string;  // 微软 Edge TTS 声音名称
 }
 
 /** 默认配置 */
 const DEFAULT_TTS_CONFIG: TTSConfig = {
   enabled: false,
-  voice: 'zh',
+  voice: 'zh-CN-XiaoxiaoNeural',
 };
 
 let config: TTSConfig = DEFAULT_TTS_CONFIG;
@@ -32,7 +32,7 @@ let config: TTSConfig = DEFAULT_TTS_CONFIG;
 export function initTTS(cfg?: Partial<TTSConfig>): void {
   config = { ...DEFAULT_TTS_CONFIG, ...cfg };
   if (config.enabled) {
-    log.info(`TTS enabled, language: ${config.voice}`);
+    log.info(`TTS enabled, voice: ${config.voice}`);
   }
 }
 
@@ -73,9 +73,17 @@ export async function textToSpeech(text: string): Promise<string | null> {
     }
     const audioPath = join(audioDir, `tts-${randomBytes(8).toString('hex')}.mp3`);
 
-    // 调用 gTTS
-    const tts = new gTTS(cleanText, config.voice);
-    await tts.save(audioPath);
+    // 调用 Python edge-tts
+    await new Promise<void>((resolve, reject) => {
+      execFile('python3', ['-m', 'edge_tts', '--voice', config.voice!, '--text', cleanText, '--write-media', audioPath], { timeout: 30000 }, (error, stdout, stderr) => {
+        if (error) {
+          log.error('TTS exec failed:', error.message);
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
 
     log.info(`TTS generated: ${audioPath}`);
     return audioPath;
