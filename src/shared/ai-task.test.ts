@@ -11,18 +11,14 @@ vi.mock("../logger.js", () => ({
     error: vi.fn(),
     debug: vi.fn(),
   }),
-  emitStructuredEvent: vi.fn(),
 }));
 
 import { classifyErrorType, runAITask } from "./ai-task.js";
 import type { ToolAdapter } from "../adapters/tool-adapter.interface.js";
-import { emitStructuredEvent } from "../logger.js";
-import { hashUserId } from "../telemetry/hash-user.js";
 
 describe("runAITask", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(emitStructuredEvent).mockClear();
   });
 
   it("keeps the codex session on usage limit errors", async () => {
@@ -407,15 +403,6 @@ describe("runAITask", () => {
 
     expect(sendError).toHaveBeenCalledOnce();
     expect(sendError).toHaveBeenCalledWith("⏹️ 已取消");
-    expect(emitStructuredEvent).toHaveBeenCalledWith(
-      "AITask",
-      "ai.task.error",
-      expect.objectContaining({ errorType: "aborted", taskKey: hashUserId("u1:m1") })
-    );
-    // No emitted payload may carry the raw taskKey
-    for (const call of vi.mocked(emitStructuredEvent).mock.calls) {
-      expect((call[2] as { taskKey?: string }).taskKey).not.toBe("u1:m1");
-    }
   });
 });
 

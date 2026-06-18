@@ -41,8 +41,6 @@ import {
   initLogger,
   createLogger,
   closeLogger,
-  emitStructuredEvent,
-  shutdownLoggerTelemetry,
 } from "./logger.js";
 import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
 import { createRequire } from "node:module";
@@ -322,11 +320,6 @@ export async function main() {
   log.info("Service is running. Press Ctrl+C to stop.");
   log.info(`Successfully initialized platforms: ${successfulPlatforms.join(", ")}`);
 
-  emitStructuredEvent("Main", "service.platform.init", {
-    platforms: successfulPlatforms,
-    version: APP_VERSION,
-  });
-
   // Send notification only to successfully initialized platforms
   for (const platform of successfulPlatforms) {
     const startupMsg = buildStartupMessage(
@@ -394,7 +387,6 @@ export async function main() {
     sessionManager.destroy();
     cleanupAdapters();
     flushActiveChats();
-    await shutdownLoggerTelemetry();
     await flushSentry();
     await closeLogger();
     process.exit(0);
@@ -448,8 +440,7 @@ export async function main() {
         }
       }
     }
-    void shutdownLoggerTelemetry()
-      .then(() => closeLogger())
+    void closeLogger()
       .finally(() => process.exit(1));
   });
 }
@@ -460,8 +451,7 @@ const isEntry =
 if (isEntry) {
   main().catch((err) => {
     log.error("Fatal error:", err);
-    void shutdownLoggerTelemetry()
-      .then(() => closeLogger())
+    void closeLogger()
       .finally(() => process.exit(1));
   });
 }

@@ -15,8 +15,7 @@ import {
   getAIToolDisplayName,
   toReplyPlainText,
 } from './utils.js';
-import { createLogger, emitStructuredEvent } from '../logger.js';
-import { hashUserId } from '../telemetry/hash-user.js';
+import { createLogger } from '../logger.js';
 import { sanitize } from '../sanitize.js';
 
 const log = createLogger('AITask');
@@ -242,12 +241,6 @@ export function runAITask(
 
     const startRun = () => {
       log.info(`[AITask] Starting: userId=${ctx.userId}, initialSessionId=${currentSessionId ?? 'new'}, prompt="${prompt.slice(0, 50)}..."`);
-      emitStructuredEvent('AITask', 'ai.task.start', {
-        platform: ctx.platform,
-        taskKey: hashUserId(ctx.taskKey),
-        userKey: hashUserId(ctx.userId),
-        toolId: aiCommand,
-      });
 
       activeHandle = toolAdapter.run(
         prompt,
@@ -307,17 +300,6 @@ export function runAITask(
         onComplete: async (result) => {
           log.info(`[AITask] onComplete fired: settled=${settled}, success=${result.success}, platform=${ctx.platform}, taskKey=${ctx.taskKey}`);
           if (settled) return;
-          emitStructuredEvent('AITask', 'ai.task.complete', {
-            platform: ctx.platform,
-            taskKey: hashUserId(ctx.taskKey),
-            userKey: hashUserId(ctx.userId),
-            toolId: aiCommand,
-            durationMs: result.durationMs,
-            success: result.success,
-            numTurns: result.numTurns,
-            model: result.model,
-            toolStats: result.toolStats,
-          });
           settled = true;
           if (pendingUpdate) {
             clearTimeout(pendingUpdate);
@@ -373,15 +355,6 @@ export function runAITask(
           }
           settled = true;
           log.error(`Task error for user ${ctx.userId}: ${error}`);
-          emitStructuredEvent('AITask', 'ai.task.error', {
-            platform: ctx.platform,
-            taskKey: hashUserId(ctx.taskKey),
-            userKey: hashUserId(ctx.userId),
-            toolId: aiCommand,
-            durationMs: Date.now() - taskState.startedAt,
-            errorSnippet: sanitize(String(error).slice(0, 400)),
-            errorType: classifyErrorType(String(error)),
-          });
           if (isUsageLimitError(error)) {
             // Usage limit errors: keep session for all tools (user can retry later)
             log.warn(`Keeping ${aiCommand} session for user ${ctx.userId} after usage limit error`);
@@ -420,15 +393,6 @@ export function runAITask(
       handle: {
         abort: () => {
           if (!settled) {
-            emitStructuredEvent('AITask', 'ai.task.error', {
-              platform: ctx.platform,
-              taskKey: hashUserId(ctx.taskKey),
-              userKey: hashUserId(ctx.userId),
-              toolId: aiCommand,
-              durationMs: Date.now() - taskState.startedAt,
-              errorSnippet: 'aborted',
-              errorType: 'aborted',
-            });
             // 用户取消（/new、/resume、队列超时、stale 清理）：把「思考中…」占位卡片编辑为终态，
             // 避免卡片卡在转圈。停按钮路径会先 settle() 再 abort，settled=true 时此处跳过，不会双发。
             void platformAdapter.sendError('⏹️ 已取消').catch(() => {
@@ -444,9 +408,9 @@ export function runAITask(
       settle,
       startedAt: Date.now(),
       toolId: aiCommand,
-      taskKey: hashUserId(ctx.taskKey),
+      taskKey: ctx.taskKey,
       platform: ctx.platform,
-      userKey: hashUserId(ctx.userId),
+      userKey: ctx.userId,
     };
     try {
       startRun();
@@ -459,15 +423,6 @@ export function runAITask(
           platform: ctx.platform,
           userId: ctx.userId,
           aiCommand,
-        });
-        emitStructuredEvent('AITask', 'ai.task.error', {
-          platform: ctx.platform,
-          taskKey: hashUserId(ctx.taskKey),
-          userKey: hashUserId(ctx.userId),
-          toolId: aiCommand,
-          durationMs: 0,
-          errorSnippet: sanitize(String(err).slice(0, 400)),
-          errorType: classifyErrorType(String(err)),
         });
         platformAdapter
           .sendError(`内部错误：${err instanceof Error ? err.message : String(err)}`)

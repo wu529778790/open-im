@@ -4,7 +4,6 @@ import type { WriteStream } from 'node:fs';
 import { finished } from 'node:stream/promises';
 import { sanitize } from './sanitize.js';
 import { APP_HOME } from './constants.js';
-import { sanitizeTelemetryData } from './telemetry/telemetry-sanitize.js';
 
 const DEFAULT_LOG_DIR = join(APP_HOME, 'logs');
 const MAX_LOG_FILES = 10;
@@ -27,9 +26,7 @@ let logDir = DEFAULT_LOG_DIR;
 let minLevel: number = LOG_LEVELS.DEBUG;
 
 let logStream: WriteStream | undefined;
-let eventsStream: WriteStream | undefined;
 let auditStream: WriteStream | undefined;
-let telemetryEnabled = false;
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
@@ -96,16 +93,6 @@ export function initLogger(dirOrOpts?: string | LoggerInitOptions, level?: LogLe
   // Audit log — always enabled, separate file
   if (auditStream) { auditStream.end(); auditStream = undefined; }
   auditStream = createWriteStream(join(logDir, 'audit.log'), { flags: 'a' });
-
-  telemetryEnabled = !!tel?.enabled;
-  if (eventsStream) {
-    eventsStream.end();
-    eventsStream = undefined;
-  }
-  if (telemetryEnabled) {
-    rotateOldJsonl();
-    eventsStream = createWriteStream(join(logDir, getEventsFileName()), { flags: 'a' });
-  }
 }
 
 function write(level: keyof typeof LOG_LEVELS, tag: string, msg: string, ...args: unknown[]) {
@@ -125,8 +112,6 @@ export function createLogger(tag: string) {
     warn: (msg: string, ...args: unknown[]) => write('WARN', tag, msg, ...args),
     error: (msg: string, ...args: unknown[]) => write('ERROR', tag, msg, ...args),
     debug: (msg: string, ...args: unknown[]) => write('DEBUG', tag, msg, ...args),
-    infoEvent: (event: string, data?: Record<string, unknown>, msg?: string) =>
-      emitStructuredEvent(tag, event, data, 'INFO', msg),
   };
 }
 
@@ -150,38 +135,13 @@ export function auditLog(
   auditStream?.write(JSON.stringify(entry) + '\n');
 }
 
-export function emitStructuredEvent(
-  tag: string,
-  event: string,
-  data?: Record<string, unknown>,
-  level: LogLevel = 'INFO',
-  msg = ''
-): void {
-  if (!telemetryEnabled) return;
-  const payload = {
-    v: 1,
-    ts: new Date().toISOString(),
-    level,
-    tag,
-    event,
-    msg,
-    data: sanitizeTelemetryData(data),
-  };
-  const line = `${JSON.stringify(payload)}\n`;
-  eventsStream?.write(line);
-}
-
-export async function shutdownLoggerTelemetry(): Promise<void> {
-  // Local event logging only — no upload to clean up
-}
-
 export async function closeLogger(): Promise<void> {
-  if (eventsStream) {
-    const es = eventsStream;
-    eventsStream = undefined;
-    es.end();
+  if (auditStream) {
+    const as = auditStream;
+    auditStream = undefined;
+    as.end();
     try {
-      await finished(es);
+      await finished(as);
     } catch {
       /* ignore */
     }

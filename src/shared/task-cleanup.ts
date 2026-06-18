@@ -6,7 +6,7 @@
  */
 
 import type { TaskRunState } from './ai-task.js';
-import { createLogger, emitStructuredEvent } from '../logger.js';
+import { createLogger } from '../logger.js';
 
 const log = createLogger('TaskCleanup');
 
@@ -52,17 +52,7 @@ export function startTaskCleanup(runningTasks: Map<string, TaskRunState>): () =>
  */
 export function emitInterruptedTerminals(runningTasks: Map<string, TaskRunState>): void {
   if (runningTasks.size === 0) return;
-  const now = Date.now();
   for (const state of runningTasks.values()) {
-    emitStructuredEvent('AITask', 'ai.task.error', {
-      platform: state.platform,
-      taskKey: state.taskKey,
-      userKey: state.userKey,
-      toolId: state.toolId,
-      durationMs: now - state.startedAt,
-      errorSnippet: 'interrupted',
-      errorType: 'interrupted',
-    });
     // 标记已结算，使随后 shutdown 的 abort() 跳过重复的 aborted 事件
     state.settle();
   }

@@ -8,10 +8,8 @@ vi.mock('../logger.js', () => ({
     error: vi.fn(),
     debug: vi.fn(),
   }),
-  emitStructuredEvent: vi.fn(),
 }));
 
-import { emitStructuredEvent } from '../logger.js';
 import { startTaskCleanup, emitInterruptedTerminals } from './task-cleanup.js';
 import type { TaskRunState } from './ai-task.js';
 
@@ -103,75 +101,23 @@ describe('startTaskCleanup', () => {
 });
 
 describe('emitInterruptedTerminals', () => {
-  beforeEach(() => {
-    vi.mocked(emitStructuredEvent).mockClear();
-  });
-
-  it('emits one interrupted ai.task.error per in-flight task', () => {
+  it('settles each in-flight task', () => {
     const now = Date.now();
+    const t1Settle = vi.fn();
+    const t2Settle = vi.fn();
     const runningTasks = new Map<string, TaskRunState>([
-      ['t1', { ...makeTaskState(now - 5_000), taskKey: 't1', toolId: 'claude' }],
-      ['t2', { ...makeTaskState(now - 8_000), taskKey: 't2', toolId: 'codex' }],
+      ['t1', { ...makeTaskState(now - 5_000), taskKey: 't1', toolId: 'claude', settle: t1Settle }],
+      ['t2', { ...makeTaskState(now - 8_000), taskKey: 't2', toolId: 'codex', settle: t2Settle }],
     ]);
 
     emitInterruptedTerminals(runningTasks);
 
-    expect(emitStructuredEvent).toHaveBeenCalledTimes(2);
-    const calls = vi.mocked(emitStructuredEvent).mock.calls;
-    expect(calls.every((c) => c[0] === 'AITask' && c[1] === 'ai.task.error')).toBe(true);
-    const data = calls.map((c) => c[2]);
-    expect(data).toContainEqual(
-      expect.objectContaining({
-        taskKey: 't1',
-        toolId: 'claude',
-        errorType: 'interrupted',
-        errorSnippet: 'interrupted',
-      })
-    );
-    expect(data).toContainEqual(
-      expect.objectContaining({
-        taskKey: 't2',
-        toolId: 'codex',
-        errorType: 'interrupted',
-      })
-    );
+    expect(t1Settle).toHaveBeenCalledOnce();
+    expect(t2Settle).toHaveBeenCalledOnce();
   });
 
-  it('computes durationMs from startedAt', () => {
-    const startedAt = Date.now() - 12_000;
-    const runningTasks = new Map<string, TaskRunState>([
-      ['t1', { ...makeTaskState(startedAt), taskKey: 't1' }],
-    ]);
-
-    emitInterruptedTerminals(runningTasks);
-
-    const data = vi.mocked(emitStructuredEvent).mock.calls[0][2] as Record<string, unknown>;
-    expect(typeof data.durationMs).toBe('number');
-    expect(data.durationMs).toBeGreaterThanOrEqual(11_000);
-  });
-
-  it('emits nothing for an empty map', () => {
+  it('does nothing for an empty map', () => {
     emitInterruptedTerminals(new Map<string, TaskRunState>());
-    expect(emitStructuredEvent).not.toHaveBeenCalled();
-  });
-
-  it('passes platform and userKey through from the task state', () => {
-    const runningTasks = new Map<string, TaskRunState>([
-      [
-        't1',
-        {
-          ...makeTaskState(Date.now()),
-          taskKey: 't1',
-          platform: 'feishu',
-          userKey: 'user-hash-42',
-        },
-      ],
-    ]);
-
-    emitInterruptedTerminals(runningTasks);
-
-    const data = vi.mocked(emitStructuredEvent).mock.calls[0][2] as Record<string, unknown>;
-    expect(data.platform).toBe('feishu');
-    expect(data.userKey).toBe('user-hash-42');
+    // No error thrown
   });
 });
