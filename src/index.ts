@@ -172,6 +172,22 @@ const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   clawbot: '微信 (ClawBot)',
 };
 
+/** 随机提示列表 */
+const TIPS = [
+  '/help — 查看所有命令',
+  '/new — 开始新会话',
+  '/sessions — 浏览历史会话',
+  '/git commit — 快速提交代码',
+  '/review — 代码审查',
+  '/test — 运行测试',
+  '/explain — 解释项目结构',
+  '/plugins — 查看已安装插件',
+  '/context — 查看上下文用量',
+  '/models — 切换 AI 模型',
+  '/cd <路径> — 切换工作目录',
+  '/fork — 分支会话，保留当前上下文',
+];
+
 /** 读取已启用的插件列表 */
 function getEnabledPlugins(): string[] {
   try {
@@ -226,6 +242,12 @@ function buildNotification(opts: {
 
   if (details.length > 0) {
     lines.push("", ...details);
+  }
+
+  // 随机提示（仅启动时显示）
+  if (opts.emoji === "✅") {
+    const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
+    lines.push("", `💡 ${tip}`);
   }
 
   return lines.join("\n\n");
