@@ -13,7 +13,8 @@ import { createLogger } from '../logger.js';
 import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/reconnect.js';
 import { cacheContextToken } from './message-sender.js';
 import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
-import { downloadMediaFromUrl, decryptAes256CbcMedia, createMediaTargetPath } from '../shared/media-storage.js';
+import { downloadMediaFromUrl, createMediaTargetPath } from '../shared/media-storage.js';
+import { createDecipheriv } from 'node:crypto';
 import type { Config } from '../config.js';
 import type {
   ClawBotState,
@@ -283,8 +284,8 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       continue;
     }
 
-    // AES key: media.aes_key 是 base64 编码，decodeAesKey 会解码为 32 字节
-    const aesKey = media?.aes_key;
+    // AES key: aeskey 字段是 32 字符 hex（16 字节），需要直接用作 AES-128-CBC key
+    const aesKeyHex = imageItem?.aeskey;
 
     try {
       // Download from CDN
@@ -292,14 +293,16 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       if (!response.ok) { log.warn(`Image download failed: HTTP ${response.status}`); continue; }
       const buffer = Buffer.from(await response.arrayBuffer());
 
-      // 解密：使用 media.aes_key（base64 编码的 32 字节密钥）
+      // 解密：aeskey 是 hex 编码的 16 字节密钥，用 AES-128-CBC 解密
       let decrypted: Buffer;
-      if (aesKey) {
+      if (aesKeyHex && aesKeyHex.length === 32) {
         try {
-          decrypted = decryptAes256CbcMedia(buffer, aesKey);
+          const keyBuf = Buffer.from(aesKeyHex, 'hex');
+          const iv = keyBuf.subarray(0, 16);
+          const decipher = createDecipheriv('aes-128-cbc', keyBuf, iv);
+          decrypted = Buffer.concat([decipher.update(buffer), decipher.final()]);
         } catch {
-          // AES-256 解密失败，直接用原始数据
-          log.info('AES decryption failed, using raw image data');
+          log.info('AES-128 decryption failed, using raw image data');
           decrypted = buffer;
         }
       } else {
