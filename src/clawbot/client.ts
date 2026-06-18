@@ -283,8 +283,9 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
       continue;
     }
 
-    // AES key: 优先 media.aes_key (base64)，其次 aeskey (hex)
-    const aesKey = media?.aes_key || imageItem?.aeskey;
+    // AES key: aeskey 字段是 hex 格式，media.aes_key 是 base64 格式
+    // decryptAes256CbcMedia 需要 hex 格式的 key
+    const aesKey = imageItem?.aeskey;
 
     try {
       // Download from CDN
