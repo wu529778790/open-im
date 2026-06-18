@@ -10,6 +10,7 @@ open-im 把 Claude Code、Codex、CodeBuddy 接入 Telegram、飞书、企业微
 - **无缝接力** — 和 Claude Code CLI 共享 session，手机聊一半，电脑接着来
 - **完整能力** — 流式输出、会话管理、模型切换，全靠聊天命令
 - **一个桥接，多个平台** — 同一个 bot 支持 7 个 IM 平台
+- **交互式选择** — AI 问"选 1/2/3"时，IM 显示按钮（Telegram/飞书/钉钉）
 
 ## 快速开始
 
@@ -17,19 +18,11 @@ open-im 把 Claude Code、Codex、CodeBuddy 接入 Telegram、飞书、企业微
 # 安装
 npm install -g @wu529778790/open-im
 
-# 配置（交互式向导）
-open-im init
-
 # 启动
 open-im start
 ```
 
-或直接用 npx：
-
-```bash
-npx @wu529778790/open-im init
-npx @wu529778790/open-im start
-```
+首次启动会自动打开 Web 控制台，引导你完成配置。
 
 ### 最小配置
 
@@ -46,19 +39,21 @@ npx @wu529778790/open-im start
 
 ## 平台支持
 
-| 平台 | 流式输出 | 接入指南 |
-|------|---------|---------|
-| Telegram | ✅ | [Bot 文档](https://core.telegram.org/bots#creating-a-new-bot) |
-| 飞书 | ✅ | [开放平台](https://open.feishu.cn/) |
-| QQ 机器人 | ✅ | [开放平台](https://bot.q.qq.com/) |
-| 企业微信 | ✅ | [管理后台](https://work.weixin.qq.com/) |
-| 钉钉机器人 | ⚠️ 部分 | [开放平台](https://open-dev.dingtalk.com/) |
-| 微信助理（WorkBuddy） | ✅ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
-| 微信客服号（ClawBot） | ✅ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
+| 平台 | 流式输出 | 图片 | 交互按钮 | 接入指南 |
+|------|---------|------|---------|---------|
+| Telegram | ✅ | ✅ | ✅ | [Bot 文档](https://core.telegram.org/bots#creating-a-new-bot) |
+| 飞书 | ✅ | ✅ | ✅ | [开放平台](https://open.feishu.cn/) |
+| QQ 机器人 | ✅ | ✅ | ❌ | [开放平台](https://bot.q.qq.com/) |
+| 企业微信 | ✅ | ✅ | ❌ | [管理后台](https://work.weixin.qq.com/) |
+| 钉钉机器人 | ⚠️ 部分 | ✅ | ✅ | [开放平台](https://open-dev.dingtalk.com/) |
+| 微信助理（WorkBuddy） | ✅ | ❌ | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
+| 微信客服号（ClawBot） | ✅ | ⚠️ 下载中 | ❌ | [接入指南](https://www.codebuddy.cn/docs/workbuddy/Claw) |
 
-每个平台可单独配置 AI 后端（`claude` / `codex` / `codebuddy`），默认 `claude`。
+每个平台可单独配置 AI 后端（`claude` / `codex` / `codebuddy` / `opencode`），默认 `claude`。
 
 ## 聊天命令
+
+### 会话管理
 
 | 命令 | 说明 |
 |------|------|
@@ -70,12 +65,35 @@ npx @wu529778790/open-im start
 | `/delete <序号>` | 删除会话 |
 | `/rename <标题>` | 重命名会话 |
 | `/fork [序号]` | 分支会话 |
+
+### 信息查看
+
+| 命令 | 说明 |
+|------|------|
 | `/models` | 查看可用模型 |
 | `/context` | 查看上下文用量 |
+| `/plugins` | 查看已安装插件 |
 | `/status` | 显示状态信息 |
 | `/cd <路径>` / `/pwd` | 切换/查看工作目录 |
-| `/plugins` | 查看已安装插件 |
-| `/allow` `/y` / `/deny` `/n` | 权限确认 |
+
+### 快捷命令
+
+| 命令 | 说明 |
+|------|------|
+| `/git commit` | 提交代码 |
+| `/git push` | 推送到远程 |
+| `/git pull` | 拉取远程更新 |
+| `/test` | 运行测试 |
+| `/build` | 构建项目 |
+| `/review` | 代码审查 |
+| `/explain` | 解释项目结构 |
+
+### 权限控制
+
+| 命令 | 说明 |
+|------|------|
+| `/allow` `/y` | 允许操作 |
+| `/deny` `/n` | 拒绝操作 |
 
 ## 会话接力
 
@@ -102,6 +120,8 @@ claude -c             # 接上手机端的对话
 - 启动/停止桥接服务
 - 编辑配置文件
 - 首次运行自动弹出设置向导
+- 平台卡片支持展开/折叠
+- 一键保存并启动
 
 局域网访问：`export OPEN_IM_WEB_HOST=0.0.0.0`
 
@@ -114,6 +134,7 @@ claude -c             # 接上手机端的对话
 | `open-im stop` | 停止服务 |
 | `open-im restart` | 重启 |
 | `open-im dashboard` | 仅启动 Web 配置服务 |
+| `open-im --version` | 查看版本号 |
 
 ## 配置
 
@@ -137,37 +158,17 @@ claude -c             # 接上手机端的对话
 }
 ```
 
-### 语音回复（可选）
-
-ClawBot 支持语音回复，需要 Python 3 + edge-tts：
-
-```bash
-# 安装依赖
-pip3 install edge-tts
-
-# 启用语音
-# 在管理页面 http://127.0.0.1:39282 打开 ClawBot 的「语音回复」开关
-```
-
-支持的中文声音：
-- 晓晓（女声，温柔）
-- 晓伊（女声，活泼）
-- 云希（男声，年轻）
-- 云健（男声，沉稳）
-- 云扬（男声，专业）
-
-> 不安装 Python 也能正常使用 open-im，语音回复是可选功能。
-
 ### 环境变量
 
 - **`ANTHROPIC_*`** — Claude API 配置
 - **`TELEGRAM_BOT_TOKEN`** — Telegram Bot Token
 - **`OPEN_IM_WEB_PORT`** — Web 控制台端口（默认 39282）
 - **`OPEN_IM_WEB_HOST`** — Web 控制台监听地址
+- **`OPEN_IM_SENTRY_DSN`** — Sentry 错误追踪（可选）
 
-### 隐私
+### 错误追踪
 
-匿名运行信息用于改进稳定性（不含聊天内容）。关闭：`OPEN_IM_TELEMETRY=false`
+默认启用 Sentry 收集错误日志（不含聊天内容）。关闭：`OPEN_IM_TELEMETRY=false`
 
 ## 平台配置详情
 
