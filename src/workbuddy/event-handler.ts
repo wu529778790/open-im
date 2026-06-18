@@ -43,10 +43,8 @@ export function setupWorkBuddyHandlers(
 
   // WorkBuddy-specific sender callbacks
   const platformSender: PlatformSender = {
-    sendThinkingMessage: async (chatId, _replyToMessageId, _toolId) => {
-      // WorkBuddy 不支持 typing indicator，先发一条"思考中"消息给用户反馈
-      await sendTextReply(null, chatId, '🤔 正在处理...', '');
-      return 'workbuddy_thinking';
+    sendThinkingMessage: async (_chatId, _replyToMessageId, _toolId) => {
+      return 'workbuddy_no_thinking';
     },
     sendTextReply: async (chatId, text) => {
       await sendTextReply(null, chatId, text, '');
