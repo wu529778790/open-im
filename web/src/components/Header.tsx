@@ -1,8 +1,4 @@
-import type { Lang } from "../hooks/useI18n.js";
-
 interface Props {
-  lang: Lang;
-  toggleLang: () => void;
   toggleDark: () => void;
   serviceStatus: { running: boolean; pid?: number };
   busy: boolean;
@@ -13,7 +9,7 @@ interface Props {
 }
 
 export function Header({
-  lang, toggleLang, toggleDark,
+  toggleDark,
   serviceStatus, busy,
   onValidate, onSave, onToggleService,
   t,
@@ -25,7 +21,6 @@ export function Header({
         <div className="header-actions">
           <a href="https://github.com/wu529778790/open-im" target="_blank" rel="noreferrer" className="btn btn-g btn-sm">GitHub</a>
           <button type="button" className="dark-btn" onClick={toggleDark} aria-label={t("darkModeToggle")}>◐</button>
-          <button type="button" className="lang-btn" onClick={toggleLang}>{lang === "zh" ? "EN" : "中文"}</button>
         </div>
       </header>
       <div className="header-toolbar" role="toolbar" aria-label={t("headerToolbarAria")}>

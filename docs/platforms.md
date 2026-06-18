@@ -1,22 +1,22 @@
-# Platform Configuration
+# 平台配置
 
-Detailed setup, credentials, and troubleshooting for each IM platform.
+各 IM 平台的详细配置、凭证获取与故障排除。
 
-## Table of Contents
+## 目录
 
 - [Telegram](#telegram)
-- [Feishu (Lark)](#feishu-lark)
+- [飞书](#飞书)
 - [QQ](#qq)
-- [DingTalk](#dingtalk)
-- [WeCom (Enterprise WeChat)](#wecom-enterprise-wechat)
-- [WeChat via WorkBuddy](#wechat-via-workbuddy)
-- [WeChat via ClawBot](#wechat-via-clawbot)
+- [钉钉](#钉钉)
+- [企业微信](#企业微信)
+- [微信（WorkBuddy）](#微信workbuddy)
+- [微信（ClawBot）](#微信clawbot)
 
 ---
 
 ## Telegram
 
-**Credential:** Bot token from [@BotFather](https://t.me/BotFather)
+**凭证：** [@BotFather](https://t.me/BotFather) 获取 Bot Token
 
 ```json
 {
@@ -29,18 +29,18 @@ Detailed setup, credentials, and troubleshooting for each IM platform.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `botToken` | Bot token from BotFather |
-| `proxy` | SOCKS5/HTTP proxy (or `TELEGRAM_PROXY` env) |
+| `botToken` | BotFather 提供的 Bot Token |
+| `proxy` | SOCKS5/HTTP 代理（或 `TELEGRAM_PROXY` 环境变量） |
 
-**Troubleshooting:** Connection issues → set `proxy` or `TELEGRAM_PROXY`.
+**故障排除：** 连接问题 → 配置 `proxy` 或 `TELEGRAM_PROXY`。
 
 ---
 
-## Feishu (Lark)
+## 飞书
 
-**Credential:** [Open Platform](https://open.feishu.cn/) — create an app, enable bot capability.
+**凭证：** [开放平台](https://open.feishu.cn/) 创建应用，开启机器人能力。
 
 ```json
 {
@@ -54,19 +54,19 @@ Detailed setup, credentials, and troubleshooting for each IM platform.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `appId` | App ID from Feishu Open Platform |
+| `appId` | 飞书开放平台 App ID |
 | `appSecret` | App Secret |
-| `cardTemplateId` | Optional — for interactive AI assistant cards |
+| `cardTemplateId` | 可选 — 互动卡片模板 ID |
 
-**Troubleshooting:** Card callbacks not working → use `/mode ask` or `/mode yolo` without card callbacks.
+**故障排除：** 卡片回调不生效 → 用 `/mode ask` 或 `/mode yolo` 不走卡片回调。
 
 ---
 
 ## QQ
 
-**Credential:** [QQ Open Platform](https://bot.q.qq.com/) — create a bot, get app ID and secret.
+**凭证：** [QQ 开放平台](https://bot.q.qq.com/) 创建机器人，获取 App ID 和 Secret。
 
 ```json
 {
@@ -80,18 +80,18 @@ Detailed setup, credentials, and troubleshooting for each IM platform.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `appId` | QQ Bot App ID |
-| `appSecret` | QQ Bot App Secret |
+| `appId` | QQ 机器人 App ID |
+| `appSecret` | QQ 机器人 App Secret |
 
-**Troubleshooting:** Duplicate replies → check `appId`/`appSecret` and update version.
+**故障排除：** 重复回复 → 核对 `appId`/`appSecret`，升级版本。
 
 ---
 
-## DingTalk
+## 钉钉
 
-**Credential:** Open Platform — create an app with a bot, enable **Stream Mode**.
+**凭证：** 开放平台创建应用，添加机器人，开启 **Stream Mode**。
 
 ```json
 {
@@ -105,19 +105,19 @@ Detailed setup, credentials, and troubleshooting for each IM platform.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `appKey` | App Key |
-| `appSecret` | App Secret |
-| `cardTemplateId` | Optional — for AI assistant streaming cards |
+| `appKey` | 应用 App Key |
+| `appSecret` | 应用 App Secret |
+| `cardTemplateId` | 可选 — AI 助理流式卡片模板 |
 
-**Troubleshooting:** Must enable Stream Mode. Custom bots may be text-only (no cards).
+**故障排除：** 必须开启 Stream Mode。自定义机器人可能仅支持纯文本。
 
 ---
 
-## WeCom (Enterprise WeChat)
+## 企业微信
 
-**Credential:** [Admin console](https://work.weixin.qq.com/) — create a bot application.
+**凭证：** [管理后台](https://work.weixin.qq.com/) 创建机器人应用。
 
 ```json
 {
@@ -131,20 +131,20 @@ Detailed setup, credentials, and troubleshooting for each IM platform.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `corpId` | Corporation ID |
-| `corpSecret` | Corporation Secret |
+| `corpId` | 企业 ID |
+| `corpSecret` | 应用 Secret |
 
-**Troubleshooting:** Send the bot a message first to establish a session.
+**故障排除：** 先给机器人发一条消息建立会话。
 
 ---
 
-## WeChat via WorkBuddy
+## 微信（WorkBuddy）
 
-The easiest way to connect WeChat. Uses WorkBuddy OAuth — no QR code scanning.
+最简单的微信接入方式，使用 WorkBuddy OAuth，无需扫码。
 
-**Setup:** Run `open-im init` and follow the prompts. Tokens are saved automatically.
+**配置：** 运行 `open-im init` 按提示操作，Token 自动保存。
 
 ```json
 {
@@ -156,21 +156,21 @@ The easiest way to connect WeChat. Uses WorkBuddy OAuth — no QR code scanning.
 }
 ```
 
-| Field | Description |
+| 字段 | 说明 |
 | --- | --- |
-| `enabled` | Set to `true`; credentials are managed by OAuth flow |
+| `enabled` | 设为 `true`；凭证由 OAuth 流程管理 |
 
-**Troubleshooting:** Tokens expire → re-run `open-im init`.
+**故障排除：** Token 过期 → 重新运行 `open-im init`。
 
 ---
 
-## WeChat via ClawBot
+## 微信（ClawBot）
 
-Connects to WeChat via the official iLink Bot API (same protocol as `@tencent-weixin/openclaw-weixin`). Supports text, voice, image, file, and video messages.
+通过官方 iLink Bot API 连接微信（与 `@tencent-weixin/openclaw-weixin` 协议相同）。支持文本、语音、图片、文件和视频消息。
 
-**Setup:**
+**使用方法：**
 
-1. Enable in config:
+1. 在配置中启用：
    ```json
    {
      "platforms": {
@@ -178,24 +178,24 @@ Connects to WeChat via the official iLink Bot API (same protocol as `@tencent-we
      }
    }
    ```
-2. Open the Web dashboard → **ClawBot** section → **Scan QR code** with WeChat.
-3. After scanning, `bot_token` and `apiUrl` are saved automatically.
+2. 打开 Web 控制台 → **ClawBot** 区域 → **扫码登录**（用微信扫码）。
+3. 扫码成功后 `bot_token` 和 `apiUrl` 自动保存。
 
-| Field | Default | Description |
+| 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `apiUrl` | `https://ilinkai.weixin.qq.com` | iLink API base URL |
-| `apiToken` | — | Bot token (auto-set after QR login) |
-| `aiCommand` | `claude` | AI backend override |
+| `apiUrl` | `https://ilinkai.weixin.qq.com` | iLink API 地址 |
+| `apiToken` | — | Bot Token（扫码后自动写入） |
+| `aiCommand` | `claude` | AI 后端覆盖 |
 
-**Protocol:** POST + JSON body + Bearer token auth. Long-polling via `ilink/bot/getupdates` with `get_updates_buf` cursor.
+**协议：** POST + JSON body + Bearer token 鉴权，通过 `ilink/bot/getupdates` 长轮询 + `get_updates_buf` 游标拉取消息。
 
-**Troubleshooting:** Session expires → re-scan QR code via Web UI.
+**故障排除：** 会话过期 → Web 控制台重新扫码。
 
 ---
 
-## Per-platform AI override
+## 按平台指定 AI
 
-Set `aiCommand` per platform to use a different AI backend:
+在每个平台上设置 `aiCommand` 可使用不同的 AI 后端：
 
 ```json
 {
@@ -205,4 +205,4 @@ Set `aiCommand` per platform to use a different AI backend:
 }
 ```
 
-Values: `claude` (default), `codex`, `codebuddy`.
+可选值：`claude`（默认）、`codex`、`codebuddy`。

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE, STORAGE_KEY_LANG } from "./constants.js";
-import { useI18n, type Lang } from "./hooks/useI18n.js";
+import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE } from "./constants.js";
+import { useI18n } from "./hooks/useI18n.js";
 import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
 import { useApi } from "./context/ApiContext.js";
 import { Header } from "./components/Header.js";
@@ -39,8 +39,7 @@ function coerce(raw: WebConfigPayload): WebConfigPayload {
 
 export function Dashboard() {
   const R = useApi();
-  const [lang, setLang] = useState<Lang>(() => { const s = localStorage.getItem(STORAGE_KEY_LANG) || ""; return s.startsWith("zh") || navigator.language.startsWith("zh") ? "zh" : "en"; });
-  const { t, html } = useI18n(lang);
+  const { t, html } = useI18n("zh");
   const [pl, setPl] = useState<WebConfigPayload>(emptyP);
   const [meta, setMeta] = useState({ configPath: "" });
   const [claudeJ, setClaudeJ] = useState("");
@@ -123,7 +122,6 @@ export function Dashboard() {
   const upP = <K extends PlatformKey>(k: K, p: Partial<WebConfigPayload["platforms"][K]>) => { setPl(prev => ({ ...prev, platforms: { ...prev.platforms, [k]: { ...prev.platforms[k], ...p } } })); };
   const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
-  const toggleLang = () => { const n: Lang = lang === "zh" ? "en" : "zh"; setLang(n); localStorage.setItem(STORAGE_KEY_LANG, n); };
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
   const onWizardDone = async () => { setShowWizard(false); try { const d = (await R("/api/config")) as ConfigApiResponse; setPl(coerce(d.payload)); setMeta({ configPath: d.meta.configPath }); await Promise.all([refreshSvc(), refreshH()]); } catch {} };
 
