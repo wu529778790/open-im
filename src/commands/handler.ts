@@ -98,10 +98,13 @@ export class CommandHandler {
     chatId: string,
     userId: string,
     platform: Platform,
-    _handleClaudeRequest: ClaudeRequestHandler,
+    handleClaudeRequest: ClaudeRequestHandler,
     /** 若提供，本条消息的斜杠命令回复走此 sender（须与 handleTextFlow 的 sendTextReply 一致，如带 msgId）。 */
     senderOverride?: MessageSender,
   ): Promise<boolean> {
+    // 存储 handler 供快捷命令使用
+    this.quickCommandHandler = handleClaudeRequest;
+
     const runBody = async (): Promise<boolean> => {
       const t = normalizeSlashCommandForDispatch(text);
 
@@ -123,6 +126,15 @@ export class CommandHandler {
       if (t === '/context') return this.handleContext(chatId, userId, platform);
       if (t === '/pwd') return this.handlePwd(chatId, userId);
       if (t === '/status') return this.handleStatus(chatId, userId, platform);
+
+      // 快捷命令 — 直接发送预设 prompt 给 AI
+      if (t === '/git commit') return this.handleQuickCommand(chatId, userId, 'git commit -m "AI generated commit"', platform);
+      if (t === '/git push') return this.handleQuickCommand(chatId, userId, 'git push origin main', platform);
+      if (t === '/git pull') return this.handleQuickCommand(chatId, userId, 'git pull origin main', platform);
+      if (t === '/test') return this.handleQuickCommand(chatId, userId, 'npm test', platform);
+      if (t === '/build') return this.handleQuickCommand(chatId, userId, 'npm run build', platform);
+      if (t === '/review') return this.handleQuickCommand(chatId, userId, '请审查当前代码，找出潜在问题和改进建议', platform);
+      if (t === '/explain') return this.handleQuickCommand(chatId, userId, '请解释当前目录的项目结构和核心逻辑', platform);
 
       if (t === '/cd' || t.startsWith('/cd ')) {
         return this.handleCd(chatId, userId, t.slice(3).trim(), platform);
@@ -161,6 +173,15 @@ export class CommandHandler {
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
+      '',
+      '⚡ 快捷命令:',
+      '/git commit - 提交代码',
+      '/git push - 推送到远程',
+      '/git pull - 拉取远程更新',
+      '/test - 运行测试',
+      '/build - 构建项目',
+      '/review - 代码审查',
+      '/explain - 解释项目结构',
     ].join('\n');
     await this.replySender().sendTextReply(chatId, help);
     return true;
@@ -527,6 +548,21 @@ export class CommandHandler {
       });
     });
   }
+
+  /**
+   * 快捷命令 — 将预设 prompt 发送给 AI
+   */
+  private async handleQuickCommand(chatId: string, userId: string, prompt: string, platform: Platform): Promise<boolean> {
+    const workDir = this.deps.sessionManager.getWorkDir(userId);
+    const convId = this.deps.sessionManager.getConvId(userId);
+
+    // 使用 dispatch 传入的 handleClaudeRequest
+    await this.quickCommandHandler(userId, chatId, prompt, workDir, convId);
+    return true;
+  }
+
+  /** 临时存储 dispatch 传入的 handler */
+  private quickCommandHandler: ClaudeRequestHandler = async () => {};
 }
 
 /**
