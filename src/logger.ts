@@ -34,6 +34,7 @@ let minLevel: number = LOG_LEVELS.DEBUG;
 
 let logStream: WriteStream | undefined;
 let eventsStream: WriteStream | undefined;
+let auditStream: WriteStream | undefined;
 let telemetryEnabled = false;
 let telemetryStatsTimer: ReturnType<typeof setInterval> | null = null;
 let lastTelemetryStatsSignature = '';
@@ -101,6 +102,10 @@ export function initLogger(dirOrOpts?: string | LoggerInitOptions, level?: LogLe
   rotateOldLogs();
   logStream = createWriteStream(join(logDir, getLogFileName()), { flags: 'a' });
 
+  // Audit log — always enabled, separate file
+  if (auditStream) { auditStream.end(); auditStream = undefined; }
+  auditStream = createWriteStream(join(logDir, 'audit.log'), { flags: 'a' });
+
   telemetryEnabled = !!tel?.enabled;
   if (telemetryStatsTimer) {
     clearInterval(telemetryStatsTimer);
@@ -156,6 +161,26 @@ export function createLogger(tag: string) {
     infoEvent: (event: string, data?: Record<string, unknown>, msg?: string) =>
       emitStructuredEvent(tag, event, data, 'INFO', msg),
   };
+}
+
+/**
+ * Audit log — records user interactions for debugging and compliance.
+ * Always enabled, writes to audit.log.
+ */
+export function auditLog(
+  platform: string,
+  userId: string,
+  action: string,
+  detail?: Record<string, unknown>,
+): void {
+  const entry = {
+    ts: new Date().toISOString(),
+    platform,
+    userId,
+    action,
+    ...detail,
+  };
+  auditStream?.write(JSON.stringify(entry) + '\n');
 }
 
 export function emitStructuredEvent(

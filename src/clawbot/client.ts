@@ -13,6 +13,7 @@ import { createLogger } from '../logger.js';
 import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/reconnect.js';
 import { cacheContextToken } from './message-sender.js';
 import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
+import { downloadMediaFromUrl, decryptAes256CbcMedia, saveBufferMedia, createMediaTargetPath } from '../shared/media-storage.js';
 import type { Config } from '../config.js';
 import type {
   ClawBotState,
@@ -28,7 +29,7 @@ const BASE_INFO = { channel_version: '0.1.0' };
 
 let pollController: AbortController | null = null;
 let channelState: ClawBotState = 'disconnected';
-let messageHandler: ((chatId: string, msgId: string, content: string) => Promise<void>) | null = null;
+let messageHandler: ((chatId: string, msgId: string, content: string, imagePaths?: string[]) => Promise<void>) | null = null;
 let stateChangeHandler: ((state: ClawBotState) => void) | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let watchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -53,7 +54,7 @@ export function getChannelState(): ClawBotState {
 
 export async function initClawbot(
   config: Config,
-  eventHandler: (chatId: string, msgId: string, content: string) => Promise<void>,
+  eventHandler: (chatId: string, msgId: string, content: string, imagePaths?: string[]) => Promise<void>,
   onStateChange?: (state: ClawBotState) => void,
 ): Promise<void> {
   const pc = config.platforms?.clawbot;
@@ -138,7 +139,7 @@ function startPolling(): void {
         const messages = res.messages ?? [];
 
         // Step 1: Extract valid USER messages and cache context tokens
-        const userMessages: { chatId: string; msgId: string; content: string; contextToken?: string }[] = [];
+        const userMessages: { chatId: string; msgId: string; content: string; imagePaths?: string[] }[] = [];
         for (const msg of messages) {
           if (signal.aborted) break;
           if (msg.message_type !== 1) continue; // skip BOT messages, only process USER
@@ -160,30 +161,36 @@ function startPolling(): void {
             setClawbotContextToken(msg.context_token);
           }
 
-          userMessages.push({ chatId, msgId, content: extracted, contextToken: msg.context_token });
+          // Extract and download images from message
+          const imagePaths = await extractImages(msg);
+
+          userMessages.push({ chatId, msgId, content: extracted, imagePaths: imagePaths.length > 0 ? imagePaths : undefined });
         }
 
         // Step 2: Aggregate consecutive messages from the same user
         // ClawBot splits image+text into separate messages; combine them
-        const aggregated: { chatId: string; msgId: string; content: string }[] = [];
+        const aggregated: { chatId: string; msgId: string; content: string; imagePaths?: string[] }[] = [];
         for (const m of userMessages) {
           const last = aggregated[aggregated.length - 1];
           if (last && last.chatId === m.chatId) {
-            // Same user — merge content (image marker + text)
+            // Same user — merge content and image paths
             last.content = `${last.content}\n${m.content}`;
+            if (m.imagePaths?.length) {
+              last.imagePaths = [...(last.imagePaths ?? []), ...m.imagePaths];
+            }
           } else {
-            aggregated.push({ chatId: m.chatId, msgId: m.msgId, content: m.content });
+            aggregated.push({ chatId: m.chatId, msgId: m.msgId, content: m.content, imagePaths: m.imagePaths });
           }
         }
 
         // Step 3: Dispatch aggregated messages
         for (const m of aggregated) {
           if (signal.aborted) break;
-          log.info(`ClawBot message: chatId=${m.chatId}, msgId=${m.msgId}, content="${m.content.substring(0, 100)}"`);
+          log.info(`ClawBot message: chatId=${m.chatId}, msgId=${m.msgId}, content="${m.content.substring(0, 100)}", images=${m.imagePaths?.length ?? 0}`);
 
           if (messageHandler) {
             try {
-              await messageHandler(m.chatId, m.msgId, m.content);
+              await messageHandler(m.chatId, m.msgId, m.content, m.imagePaths);
             } catch (err) {
               log.error('Error in ClawBot message handler:', err);
             }
@@ -251,6 +258,45 @@ function startWatchdog(): void {
 
 function stopWatchdog(): void {
   if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+}
+
+/**
+ * Extract and download images from a ClawBot message's item_list.
+ * Images are encrypted with AES and hosted on CDN.
+ */
+async function extractImages(msg: ILinkMessage): Promise<string[]> {
+  if (!msg.item_list?.length) return [];
+
+  const paths: string[] = [];
+  for (const item of msg.item_list) {
+    if (item.type !== MessageItemType.IMAGE) continue;
+    const media = item.image_item?.media;
+    if (!media?.cdn_url) continue;
+
+    try {
+      // Download from CDN
+      const response = await fetch(media.cdn_url, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) { log.warn(`Image download failed: HTTP ${response.status}`); continue; }
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      // Decrypt if AES key provided
+      let decrypted: Buffer;
+      if (media.aes_key) {
+        decrypted = decryptAes256CbcMedia(buffer, media.aes_key);
+      } else {
+        decrypted = buffer;
+      }
+
+      // Save to disk
+      const targetPath = createMediaTargetPath('.jpg', `clawbot-${Date.now()}`);
+      await saveBufferMedia(decrypted, targetPath);
+      paths.push(targetPath);
+      log.info(`ClawBot image saved: ${targetPath}`);
+    } catch (err) {
+      log.warn('Failed to process ClawBot image:', err);
+    }
+  }
+  return paths;
 }
 
 /**

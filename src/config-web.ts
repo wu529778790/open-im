@@ -1209,6 +1209,22 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         return;
       }
 
+      if (request.method === "GET" && requestUrl.pathname === "/api/metrics") {
+        const file = loadFileConfig();
+        const platforms = getHealthPlatformSnapshot(file);
+        const status = getServiceStatus();
+        const uptime = process.uptime();
+        const mem = process.memoryUsage();
+        json(response, 200, {
+          uptime: Math.round(uptime),
+          memory: { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal },
+          service: { running: status.running, pid: status.pid },
+          platforms: Object.entries(platforms).map(([k, v]) => ({ name: k, configured: v.configured, enabled: v.enabled })),
+          timestamp: new Date().toISOString(),
+        }, request);
+        return;
+      }
+
       if (request.method === "POST" && requestUrl.pathname === "/api/service/start") {
         try {
           const config = loadConfig();

@@ -18,7 +18,7 @@ export interface ClawBotEventHandlerHandle {
   stop: () => void;
   runningTasks: Map<string, import('../shared/ai-task.js').TaskRunState>;
   getRunningTaskCount: () => number;
-  handleEvent: (chatId: string, msgId: string, content: string) => Promise<void>;
+  handleEvent: (chatId: string, msgId: string, content: string, imagePaths?: string[]) => Promise<void>;
 }
 
 export function setupClawbotHandlers(
@@ -51,8 +51,8 @@ export function setupClawbotHandlers(
     },
   };
 
-  async function handleEvent(chatId: string, msgId: string, content: string): Promise<void> {
-    log.info(`[handleEvent] chatId=${chatId}, msgId=${msgId}, content="${content.substring(0, 100)}"`);
+  async function handleEvent(chatId: string, msgId: string, content: string, imagePaths?: string[]): Promise<void> {
+    log.info(`[handleEvent] chatId=${chatId}, msgId=${msgId}, content="${content.substring(0, 100)}", images=${imagePaths?.length ?? 0}`);
 
     const userId = chatId;
     const text = content.trim();
@@ -83,11 +83,18 @@ export function setupClawbotHandlers(
       }),
     });
 
+    // Prepend image paths to prompt so Claude can read them with its Read tool
+    let enrichedText = text;
+    if (imagePaths?.length) {
+      const imgRefs = imagePaths.map(p => `[用户发送了图片: ${p}]`).join('\n');
+      enrichedText = `${imgRefs}\n${text}`;
+    }
+
     await handleTextFlow({
       platform: 'clawbot',
       userId,
       chatId,
-      text,
+      text: enrichedText,
       ctx,
       handleAIRequest,
       sendTextReply: (c, t) => sendTextReply(c, t),

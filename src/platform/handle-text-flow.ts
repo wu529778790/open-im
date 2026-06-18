@@ -22,7 +22,7 @@ import type { Platform } from '../config.js';
 import type { PlatformEventContext } from './create-event-context.js';
 import type { EnqueueResult } from '../queue/request-queue.js';
 import type { HandleAIRequestParams } from './handle-ai-request.js';
-import { createLogger } from '../logger.js';
+import { createLogger, auditLog } from '../logger.js';
 import { handleEnqueueResult, DEFAULT_QUEUE_FULL_MESSAGE, DEFAULT_QUEUED_MESSAGE } from '../shared/utils.js';
 import type { MessageSender } from '../commands/handler.js';
 
@@ -172,6 +172,9 @@ export async function handleTextFlow(params: HandleTextFlowParams): Promise<bool
   if (!text) {
     return true;
   }
+
+  // Audit: log user interaction
+  auditLog(platform, userId, 'message', { text: text.substring(0, 200) });
 
   // 6. Enqueue AI request
   if (customEnqueue) {

@@ -16,6 +16,7 @@ vi.mock('../logger.js', () => ({
     error: vi.fn(),
     debug: vi.fn(),
   })),
+  auditLog: vi.fn(),
 }));
 
 import { handleTextFlow, type HandleTextFlowParams } from './handle-text-flow.js';
