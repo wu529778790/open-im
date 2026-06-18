@@ -136,6 +136,9 @@ function startPolling(): void {
 
         // Process messages
         const messages = res.messages ?? [];
+
+        // Step 1: Extract valid USER messages and cache context tokens
+        const userMessages: { chatId: string; msgId: string; content: string; contextToken?: string }[] = [];
         for (const msg of messages) {
           if (signal.aborted) break;
           if (msg.message_type !== 1) continue; // skip BOT messages, only process USER
@@ -145,7 +148,6 @@ function startPolling(): void {
 
           const chatId = msg.from_user_id ?? '';
           const msgId = String(msg.message_id ?? msg.seq ?? '');
-          const content = extracted;
 
           if (!chatId) {
             log.warn('ClawBot message missing from_user_id, skipping');
@@ -158,11 +160,30 @@ function startPolling(): void {
             setClawbotContextToken(msg.context_token);
           }
 
-          log.info(`ClawBot message: chatId=${chatId}, msgId=${msgId}, content="${content.substring(0, 100)}"`);
+          userMessages.push({ chatId, msgId, content: extracted, contextToken: msg.context_token });
+        }
+
+        // Step 2: Aggregate consecutive messages from the same user
+        // ClawBot splits image+text into separate messages; combine them
+        const aggregated: { chatId: string; msgId: string; content: string }[] = [];
+        for (const m of userMessages) {
+          const last = aggregated[aggregated.length - 1];
+          if (last && last.chatId === m.chatId) {
+            // Same user — merge content (image marker + text)
+            last.content = `${last.content}\n${m.content}`;
+          } else {
+            aggregated.push({ chatId: m.chatId, msgId: m.msgId, content: m.content });
+          }
+        }
+
+        // Step 3: Dispatch aggregated messages
+        for (const m of aggregated) {
+          if (signal.aborted) break;
+          log.info(`ClawBot message: chatId=${m.chatId}, msgId=${m.msgId}, content="${m.content.substring(0, 100)}"`);
 
           if (messageHandler) {
             try {
-              await messageHandler(chatId, msgId, content);
+              await messageHandler(m.chatId, m.msgId, m.content);
             } catch (err) {
               log.error('Error in ClawBot message handler:', err);
             }
