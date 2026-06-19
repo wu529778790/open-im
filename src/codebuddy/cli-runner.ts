@@ -221,6 +221,11 @@ function extractToolUses(content: unknown): Array<{ name: string; input?: Record
 /**
  * CodeBuddy 会在工具调用前后发来多段 `assistant`：本轮内多为前缀增长的流式全文，
  * 工具后的新轮次则是独立正文。不能每次 `accumulated = text`，否则只剩开场白。
+ *
+ * 安全合并策略：
+ * - 新内容包含旧内容 → 流式增长，用新内容（不丢内容）
+ * - 旧内容包含新内容 → 可能是重复推送，但也可能是新轮次，拼接（不丢内容）
+ * - 其他情况 → 拼接（不丢内容）
  */
 export function mergeAssistantReply(previous: string, incoming: string): string {
   const a = previous.trimEnd();
@@ -228,10 +233,9 @@ export function mergeAssistantReply(previous: string, incoming: string): string 
   if (!b) return a;
   if (!a) return b;
   if (a === b) return a;
+  // 只有"新内容包含旧内容"时才替换（流式增长场景）
   if (b.startsWith(a)) return b;
-  if (a.startsWith(b)) return a;
-  if (a.includes(b)) return a;
-  if (b.includes(a)) return b;
+  // 其他情况一律拼接，绝不丢弃内容
   return `${a}\n\n${b}`;
 }
 
