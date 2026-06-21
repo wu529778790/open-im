@@ -79,8 +79,11 @@ export function setupWorkBuddyHandlers(
       runningTasks: ctx.runningTasks,
       taskKeyBuilder: (userId, _msgId) => `${userId}:${msgId}`,
       taskCallbacksFactory: ({ chatId: c }) => ({
-        streamUpdate: async () => {
-          // WorkBuddy doesn't support streaming updates via Centrifuge
+        streamUpdate: async (content: string, toolNote?: string) => {
+          // 有工具调用时，发送工具调用通知
+          if (toolNote) {
+            await sendTextReply(null, c, `⚙️ ${toolNote}`, msgId);
+          }
         },
         sendComplete: async (content) => {
           await sendTextReply(null, c, content, msgId);

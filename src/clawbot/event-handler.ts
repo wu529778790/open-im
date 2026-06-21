@@ -73,7 +73,12 @@ export function setupClawbotHandlers(
       runningTasks: ctx.runningTasks,
       taskKeyBuilder: (userId, _msgId) => `${userId}:${msgId}`,
       taskCallbacksFactory: ({ chatId: c }) => ({
-        streamUpdate: async () => {},
+        streamUpdate: async (content: string, toolNote?: string) => {
+          // 有工具调用时，发送工具调用通知
+          if (toolNote) {
+            await sendTextReply(c, `⚙️ ${toolNote}`);
+          }
+        },
         sendComplete: async (content) => {
           await sendTextReply(c, content);
         },
