@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, WebConfigPayload } from "../types.js";
+import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
 
 interface PlatformDef {
   key: string;
@@ -49,10 +50,9 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
           </>
         ) : f === "aiCommand" ? (
           <select className="form-select" value={String((values as Record<string, string>)[f] || "claude")} onChange={(e) => onChange({ aiCommand: e.target.value as AiCommand })}>
-            <option value="claude">claude</option>
-            <option value="codex">codex</option>
-            <option value="codebuddy">codebuddy</option>
-            <option value="opencode">opencode</option>
+            {AI_TOOL_DEFINITIONS.map((tool) => (
+              <option key={tool.key} value={tool.key}>{tool.label}</option>
+            ))}
           </select>
         ) : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />
