@@ -70,7 +70,7 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef }: Props) {
           )}
           {tab === "opencode" && (
             <div className="form-group">
-              <label className="form-label">{t("codexCli")}</label>
+              <label className="form-label">{t("opencodeCli")}</label>
               <input className="form-input mono" value={ai.opencodeCliPath} onChange={(e) => onUpdate({ opencodeCliPath: e.target.value })} />
             </div>
           )}

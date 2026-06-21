@@ -89,8 +89,3 @@ export function isAiCommand(value: unknown): value is AiCommand {
 export function normalizeAiCommand(value: unknown, fallback: AiCommand): AiCommand {
   return isAiCommand(value) ? value : fallback;
 }
-
-/** 仅返回需要 CLI 路径配置的工具(非 SDK) */
-export function cliToolDefinitions(): readonly ToolDefinition[] {
-  return AI_TOOLS.filter((t) => !t.isSdk);
-}

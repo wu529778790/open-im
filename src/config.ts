@@ -34,7 +34,7 @@ export type {
 } from './config/types.js';
 
 import type { Platform, AiCommand, Config, FileConfig, FilePlatformWechat } from './config/types.js';
-import { isAiCommand } from './adapters/tool-registry.js';
+import { isAiCommand, AI_TOOL_BY_ID } from './adapters/tool-registry.js';
 
 /**
  * 按平台 id 从 FileConfig.platforms 取出该平台的 aiCommand 原始值。
@@ -310,7 +310,7 @@ export function loadConfig(): Config {
   const claudeProxy = process.env.CLAUDE_PROXY ?? tc.proxy;
   const codexProxy = process.env.CODEX_PROXY ?? tcod.proxy;
   // Windows 下若 CLI 路径仍是默认名,尝试在 npm 全局目录定位 .cmd。
-  // 统一通过 cliToolDefinitions() 处理所有 CLI 工具(含 opencode,此前遗漏)。
+  // 默认可执行名从 registry 的 cliDefault 取(此前 opencode 遗漏了 Windows 解析)。
   function resolveWindowsCliPath(cliDefault: string): string {
     if (process.platform !== 'win32') return cliDefault;
     const npmPaths = [
@@ -328,10 +328,10 @@ export function loadConfig(): Config {
     return cliDefault;
   }
 
-  const codexCliPath = process.env.CODEX_CLI_PATH ?? tcod.cliPath ?? resolveWindowsCliPath('codex');
-  const codebuddyCliPath = process.env.CODEBUDDY_CLI_PATH ?? tcb.cliPath ?? resolveWindowsCliPath('codebuddy');
+  const codexCliPath = process.env.CODEX_CLI_PATH ?? tcod.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.codex.cliDefault ?? 'codex');
+  const codebuddyCliPath = process.env.CODEBUDDY_CLI_PATH ?? tcb.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.codebuddy.cliDefault ?? 'codebuddy');
   const topencode = file.tools?.opencode ?? {};
-  const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? resolveWindowsCliPath('opencode');
+  const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.opencode.cliDefault ?? 'opencode');
   const claudeWorkDir = process.env.CLAUDE_WORK_DIR ?? tc.workDir ?? process.cwd();
   const skipPermissions: boolean = process.env.OPEN_IM_SKIP_PERMISSIONS === 'false'
     ? false
