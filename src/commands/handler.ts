@@ -6,6 +6,7 @@ import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
 import { ClaudeSDKAdapter } from '../adapters/claude-sdk-adapter.js';
 import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { AI_TOOL_BY_ID, type AiCommand } from '../adapters/tool-registry.js';
 
 const log = createLogger('Commands');
 
@@ -436,7 +437,7 @@ export class CommandHandler {
 
     const workDir = this.deps.sessionManager.getWorkDir(userId);
     const convId = this.deps.sessionManager.getConvId(userId);
-    const aiCommand: 'claude' | 'codex' | 'codebuddy' | 'opencode' = 'claude';
+    const aiCommand: AiCommand = 'claude';
     const sessionId = this.deps.sessionManager.getSessionIdForConv(userId, convId, aiCommand);
 
     if (!sessionId) {
@@ -533,15 +534,14 @@ export class CommandHandler {
     return true;
   }
 
-  private getAiVersion(aiCommand: 'claude' | 'codex' | 'codebuddy' | 'opencode'): Promise<string> {
-    if (aiCommand === 'claude') {
+  private getAiVersion(aiCommand: AiCommand): Promise<string> {
+    const def = AI_TOOL_BY_ID[aiCommand];
+    if (!def || def.isSdk) {
       return Promise.resolve('SDK Mode');
     }
-    const cmd = aiCommand === 'codex'
-      ? this.deps.config.codexCliPath
-      : aiCommand === 'opencode'
-        ? this.deps.config.opencodeCliPath
-        : this.deps.config.codebuddyCliPath;
+    // 通过 registry 的 cliPathField 查 config,消除第二处 tool→cliPath 映射。
+    const cmd = def.cliPathField ? (this.deps.config as Config)[def.cliPathField] : undefined;
+    if (!cmd) return Promise.resolve('未知');
     return new Promise((resolve) => {
       execFile(cmd, ['--version'], { timeout: 5000 }, (err, stdout) => {
         resolve(err ? '未知' : (stdout?.toString().trim() || '未知'));

@@ -4,11 +4,14 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve, win32 } from 'node:path';
 import { createLogger } from '../logger.js';
 import { APP_HOME } from '../constants.js';
+import type { AiCommand } from '../adapters/tool-registry.js';
+import { AI_TOOL_IDS } from '../adapters/tool-registry.js';
 
 const log = createLogger('Session');
 const SESSIONS_FILE = join(APP_HOME, 'data', 'sessions.json');
 
-type ToolId = 'claude' | 'codex' | 'codebuddy' | 'opencode';
+// ToolId 与 AiCommand 同源;新增工具时 session 存储自动覆盖,无需改此文件。
+type ToolId = AiCommand;
 type ToolSessionIds = Partial<Record<ToolId, string>>;
 
 interface UserSession {
@@ -421,7 +424,7 @@ export class SessionManager {
   }
 
   private clearConvSessionMappings(userId: string, convId: string): void {
-    for (const toolId of ['claude', 'codex', 'codebuddy', 'opencode'] as const) {
+    for (const toolId of AI_TOOL_IDS) {
       this.convSessionMap.delete(this.getConvSessionKey(userId, convId, toolId));
     }
   }
