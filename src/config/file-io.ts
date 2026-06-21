@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { createLogger } from '../logger.js';
 import { APP_HOME } from '../constants.js';
-import type { AiCommand, FileConfig } from './types.js';
+import type { FileConfig } from './types.js';
 
 const log = createLogger('config');
 
@@ -28,7 +28,8 @@ const OLD_ROOT_KEYS = [
   'claudeModel',
 ] as const;
 
-const AI_COMMANDS: readonly AiCommand[] = ['claude', 'codex', 'codebuddy', 'opencode'];
+// AI 命令的真相源在 tool-registry;此处仅 re-export 以保持调用点兼容。
+export { normalizeAiCommand, isAiCommand } from '../adapters/tool-registry.js';
 const require = createRequire(import.meta.url);
 
 /** Claude 认证相关的环境变量 key 列表 */
@@ -240,12 +241,6 @@ export function saveClaudeSettingsEnv(env: Record<string, string>): void {
     log.error('Failed to save Claude settings:', error);
     throw new Error(`Failed to save Claude settings: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-export function normalizeAiCommand(value: unknown, fallback: AiCommand): AiCommand {
-  return typeof value === 'string' && AI_COMMANDS.includes(value as AiCommand)
-    ? (value as AiCommand)
-    : fallback;
 }
 
 export function hasCodexAuth(): boolean {

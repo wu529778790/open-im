@@ -1,8 +1,9 @@
 import type { LogLevel } from '../logger.js';
+// AiCommand 从 tool-registry 派生,消除字面量联合;新增工具只改注册表一处。
+import type { AiCommand } from '../adapters/tool-registry.js';
+export type { AiCommand };
 
 export type Platform = 'clawbot' | 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'wework' | 'workbuddy';
-
-export type AiCommand = 'claude' | 'codex' | 'codebuddy' | 'opencode';
 
 export interface Config {
   enabledPlatforms: Platform[];
