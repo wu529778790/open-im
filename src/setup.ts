@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import { APP_HOME } from "./constants.js";
 import type { Config, Platform } from "./config.js";
 import { loadConfig, getPlatformsWithCredentials } from "./config.js";
+import { normalizeAiCommand } from "./adapters/tool-registry.js";
 
 interface ExistingConfig {
   platforms?: {
@@ -36,6 +37,7 @@ interface ExistingConfig {
     claude?: { cliPath?: string; workDir?: string; model?: string; env?: Record<string, string> };
     codex?: { cliPath?: string; workDir?: string; proxy?: string };
     codebuddy?: { cliPath?: string };
+    opencode?: { cliPath?: string };
   };
 }
 
@@ -76,8 +78,8 @@ function getConfiguredPlatforms(existing: ExistingConfig | null): string[] {
     .map(({ label }) => label);
 }
 
-function defaultPlatformAi(v: unknown): "claude" | "codex" | "codebuddy" {
-  return v === "codex" || v === "codebuddy" || v === "claude" ? v : "claude";
+function defaultPlatformAi(v: unknown) {
+  return normalizeAiCommand(v, "claude");
 }
 
 function question(prompt: string): Promise<string> {
@@ -1073,6 +1075,10 @@ export async function runInteractiveSetup(): Promise<boolean> {
       codebuddy: {
         ...baseTools.codebuddy,
         cliPath: baseTools.codebuddy?.cliPath ?? "codebuddy",
+      },
+      opencode: {
+        ...baseTools.opencode,
+        cliPath: baseTools.opencode?.cliPath ?? "opencode",
       },
     },
   };

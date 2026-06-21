@@ -2,23 +2,11 @@ import { useState, useCallback, useEffect } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS } from "../constants.js";
 import { PLATFORM_FIELD_LABEL, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
+import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
+import { emptyPayload } from "../empty-payload.js";
 
 /* ─── helpers ─── */
 function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
-function emptyPayload(): WebConfigPayload {
-  return {
-    platforms: {
-      telegram:  { enabled: false, aiCommand: "claude", botToken: "", proxy: "", allowedUserIds: "" },
-      feishu:    { enabled: false, aiCommand: "claude", appId: "", appSecret: "", allowedUserIds: "" },
-      qq:        { enabled: false, aiCommand: "claude", appId: "", secret: "", allowedUserIds: "" },
-      wework:    { enabled: false, aiCommand: "claude", corpId: "", secret: "", allowedUserIds: "" },
-      dingtalk:  { enabled: false, aiCommand: "claude", clientId: "", clientSecret: "", cardTemplateId: "", allowedUserIds: "" },
-      workbuddy: { enabled: false, aiCommand: "claude", accessToken: "", refreshToken: "", userId: "", baseUrl: "", allowedUserIds: "" },
-      clawbot:   { enabled: false, aiCommand: "claude", apiUrl: "http://127.0.0.1:26322", apiToken: "", allowedUserIds: "" },
-    },
-    ai: { claudeWorkDir: "", claudeConfigPath: "", claudeProxy: "", codexCliPath: "codex", codexProxy: "", codebuddyCliPath: "codebuddy", hookPort: 0, logLevel: "default" },
-  };
-}
 
 /* ─── types ─── */
 type T    = (k: string, p?: Record<string, string | number>) => string;
@@ -150,7 +138,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
         {f === "allowedUserIds" ? (
           <><textarea className="form-textarea mono" value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} /><div className="form-hint">{t("commaSeparatedIds")}</div></>
         ) : f === "aiCommand" ? (
-          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}><option value="claude">claude</option><option value="codex">codex</option><option value="codebuddy">codebuddy</option><option value="opencode">opencode</option></select>
+          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}>{AI_TOOL_DEFINITIONS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
         ) : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} />
         )}

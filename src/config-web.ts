@@ -20,6 +20,10 @@ import {
   CODEX_AUTH_PATHS,
 } from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
+import type { AiCommand } from "./adapters/tool-registry.js";
+
+/** 前端 aiCommand 可为空字符串(未选择态);保存时经 persistedPlatformAi 规范化 */
+type WebAiCommand = AiCommand | "";
 import { getServiceStatus, startBackgroundService, stopBackgroundService } from "./service-control.js";
 import { initWeWork, stopWeWork } from "./wework/client.js";
 import { createLogger } from "./logger.js";
@@ -199,13 +203,13 @@ export interface StartedWebConfigServer {
 
 interface WebConfigPayload {
   platforms: {
-    telegram: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; botToken: string; proxy: string; allowedUserIds: string };
-    feishu: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; appId: string; appSecret: string; allowedUserIds: string };
-    qq: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; appId: string; secret: string; allowedUserIds: string };
-    wework: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; corpId: string; secret: string; allowedUserIds: string };
-    dingtalk: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
-    workbuddy: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
-    clawbot: { enabled: boolean; aiCommand: "" | "claude" | "codex" | "codebuddy" | "opencode"; apiUrl: string; apiToken: string; allowedUserIds: string };
+    telegram: { enabled: boolean; aiCommand: WebAiCommand; botToken: string; proxy: string; allowedUserIds: string };
+    feishu: { enabled: boolean; aiCommand: WebAiCommand; appId: string; appSecret: string; allowedUserIds: string };
+    qq: { enabled: boolean; aiCommand: WebAiCommand; appId: string; secret: string; allowedUserIds: string };
+    wework: { enabled: boolean; aiCommand: WebAiCommand; corpId: string; secret: string; allowedUserIds: string };
+    dingtalk: { enabled: boolean; aiCommand: WebAiCommand; clientId: string; clientSecret: string; cardTemplateId: string; allowedUserIds: string };
+    workbuddy: { enabled: boolean; aiCommand: WebAiCommand; accessToken: string; refreshToken: string; userId: string; baseUrl: string; allowedUserIds: string };
+    clawbot: { enabled: boolean; aiCommand: WebAiCommand; apiUrl: string; apiToken: string; allowedUserIds: string };
   };
   ai: {
     claudeWorkDir: string;
@@ -305,10 +309,9 @@ function clean(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function persistedPlatformAi(v: string | undefined): "claude" | "codex" | "codebuddy" {
-  const c = clean(v);
-  if (c === "codex" || c === "codebuddy" || c === "claude") return c;
-  return "claude";
+function persistedPlatformAi(v: string | undefined): AiCommand {
+  // 经 registry 规范化;此前硬编码只认 codex/codebuddy/claude,会把 opencode 降级为 claude。
+  return normalizeAiCommand(clean(v), "claude");
 }
 
 function isMasked(value: string | undefined): boolean {

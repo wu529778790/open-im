@@ -1,4 +1,5 @@
 import type { EnqueueResult } from '../queue/request-queue.js';
+import { AI_TOOLS } from '../adapters/tool-registry.js';
 
 /** 消息头部品牌后缀，用于飞书等平台展示 */
 export const OPEN_IM_BRAND_SUFFIX = ' · 通过 open-im 控制';
@@ -47,13 +48,14 @@ export function escapePathForMarkdown(path: string): string {
   return `\`${path.replace(/`/g, '\\`')}\``;
 }
 
-/** AI 工具显示名称映射（aiCommand -> 用户友好名称） */
+/**
+ * AI 工具显示名称映射（aiCommand / adapter.toolId -> 用户友好名称）。
+ * 主体从 tool-registry 的 label 派生;额外补充 adapter toolId(如 claude-sdk)的别名。
+ */
 const AI_TOOL_DISPLAY_NAMES: Record<string, string> = {
-  claude: 'Claude Code',
-  /** ClaudeSDKAdapter.toolId，与 claude 相同展示名 */
+  ...Object.fromEntries(AI_TOOLS.map((t) => [t.id, t.label])),
+  /** ClaudeSDKAdapter.toolId,与 claude 相同展示名 */
   'claude-sdk': 'Claude Code',
-  codex: 'Codex',
-  codebuddy: 'CodeBuddy',
 };
 
 /** 获取 AI 工具的显示名称 */

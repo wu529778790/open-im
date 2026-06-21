@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE } from "./constants.js";
 import { useI18n } from "./hooks/useI18n.js";
 import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
+import { isAiCommand } from "./tool-definitions.js";
+import { emptyPayload } from "./empty-payload.js";
 import { useApi } from "./context/ApiContext.js";
 import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
@@ -11,21 +13,11 @@ import { SetupWizard } from "./components/SetupWizard.js";
 
 function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
 function pretty(raw: string): string { return JSON.stringify(JSON.parse(raw), null, 2) + "\n"; }
-function normCmd(v: unknown): AiCommand { return v === "codex" || v === "codebuddy" || v === "claude" || v === "" ? (v as AiCommand) : "claude"; }
+// 经 tool-definitions 校验;此前硬编码只认 codex/codebuddy/claude,会把 opencode 降级为 claude。
+function normCmd(v: unknown): AiCommand { return v === "" || isAiCommand(v) ? (v as AiCommand) : "claude"; }
 
 function emptyP(): WebConfigPayload {
-  return {
-    platforms: {
-      telegram: { enabled: false, aiCommand: "claude", botToken: "", proxy: "", allowedUserIds: "" },
-      feishu: { enabled: false, aiCommand: "claude", appId: "", appSecret: "", allowedUserIds: "" },
-      qq: { enabled: false, aiCommand: "claude", appId: "", secret: "", allowedUserIds: "" },
-      wework: { enabled: false, aiCommand: "claude", corpId: "", secret: "", allowedUserIds: "" },
-      dingtalk: { enabled: false, aiCommand: "claude", clientId: "", clientSecret: "", cardTemplateId: "", allowedUserIds: "" },
-      workbuddy: { enabled: false, aiCommand: "claude", accessToken: "", refreshToken: "", userId: "", baseUrl: "", allowedUserIds: "" },
-      clawbot: { enabled: false, aiCommand: "claude", apiUrl: "http://127.0.0.1:26322", apiToken: "", allowedUserIds: "" },
-    },
-    ai: { claudeWorkDir: "", claudeConfigPath: "", claudeProxy: "", codexCliPath: "codex", codexProxy: "", codebuddyCliPath: "codebuddy", hookPort: 0, logLevel: "default" },
-  };
+  return emptyPayload();
 }
 
 function coerce(raw: WebConfigPayload): WebConfigPayload {

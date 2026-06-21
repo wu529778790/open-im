@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { WebConfigPayload } from "../types.js";
+import { AI_TOOL_DEFINITIONS, type AiCommand } from "../tool-definitions.js";
 
 interface Props {
   ai: WebConfigPayload["ai"];
@@ -10,7 +11,8 @@ interface Props {
 }
 
 export function AiConfigSection({ ai, onUpdate, t, html, forwardRef }: Props) {
-  const [tab, setTab] = useState<"claude" | "codex" | "codebuddy">("claude");
+  // tab 列表从注册表派生;此前只硬编码了 claude/codex/codebuddy,opencode 无配置入口。
+  const [tab, setTab] = useState<AiCommand>("claude");
 
   return (
     <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
@@ -23,9 +25,9 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef }: Props) {
       <div className="card">
         <div className="card-head">
           <div className="tabs">
-            {(["claude", "codex", "codebuddy"] as const).map((tool) => (
-              <button key={tool} type="button" className={`tab ${tab === tool ? "active" : ""}`} onClick={() => setTab(tool)}>
-                {tool}
+            {AI_TOOL_DEFINITIONS.map((tool) => (
+              <button key={tool.key} type="button" className={`tab ${tab === tool.key ? "active" : ""}`} onClick={() => setTab(tool.key)}>
+                {tool.label}
               </button>
             ))}
           </div>
@@ -64,6 +66,12 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef }: Props) {
             <div className="form-group">
               <label className="form-label">{t("codebuddyCli")}</label>
               <input className="form-input mono" value={ai.codebuddyCliPath} onChange={(e) => onUpdate({ codebuddyCliPath: e.target.value })} />
+            </div>
+          )}
+          {tab === "opencode" && (
+            <div className="form-group">
+              <label className="form-label">{t("opencodeCli")}</label>
+              <input className="form-input mono" value={ai.opencodeCliPath} onChange={(e) => onUpdate({ opencodeCliPath: e.target.value })} />
             </div>
           )}
         </div>

@@ -10,30 +10,27 @@ import { destroyAllLiveChildren } from '../shared/process-kill.js';
 const log = createLogger('Registry');
 const adapters = new Map<string, ToolAdapter>();
 
+/**
+ * 工具 id → adapter 工厂的映射。
+ * 新增工具在此加一行(id 与 tool-registry 的 id 对应)即可,无需改 initAdapters 逻辑。
+ */
+const ADAPTER_FACTORIES: Record<string, (config: Config) => ToolAdapter> = {
+  claude: () => new ClaudeSDKAdapter(),
+  codex: (c) => new CodexAdapter(c.codexCliPath),
+  codebuddy: (c) => new CodeBuddyAdapter(c.codebuddyCliPath),
+  opencode: (c) => new OpenCodeAdapter(c.opencodeCliPath),
+};
+
 export function initAdapters(config: Config): void {
   adapters.clear();
   for (const aiCommand of getConfiguredAiCommands(config)) {
-    if (aiCommand === 'claude') {
-      log.info('Claude Agent SDK adapter enabled');
-      adapters.set('claude', new ClaudeSDKAdapter());
+    const factory = ADAPTER_FACTORIES[aiCommand];
+    if (!factory) {
+      log.warn(`No adapter factory registered for: ${aiCommand}`);
       continue;
     }
-
-    if (aiCommand === 'codex') {
-      log.info('Codex CLI adapter enabled');
-      adapters.set('codex', new CodexAdapter(config.codexCliPath));
-      continue;
-    }
-
-    if (aiCommand === 'codebuddy') {
-      log.info('CodeBuddy CLI adapter enabled');
-      adapters.set('codebuddy', new CodeBuddyAdapter(config.codebuddyCliPath));
-    }
-
-    if (aiCommand === 'opencode') {
-      log.info('OpenCode CLI adapter enabled');
-      adapters.set('opencode', new OpenCodeAdapter(config.opencodeCliPath));
-    }
+    log.info(`${aiCommand} adapter enabled`);
+    adapters.set(aiCommand, factory(config));
   }
 }
 

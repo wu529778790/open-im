@@ -34,25 +34,30 @@ export type {
 } from './config/types.js';
 
 import type { Platform, AiCommand, Config, FileConfig, FilePlatformWechat } from './config/types.js';
+import { isAiCommand, AI_TOOL_BY_ID } from './adapters/tool-registry.js';
+
+/**
+ * 按平台 id 从 FileConfig.platforms 取出该平台的 aiCommand 原始值。
+ * platforms 是固定 shape 接口(每个平台一个字段),无法直接索引,这里集中映射。
+ */
+function getFilePlatformAiRaw(file: FileConfig, platform: Platform): unknown {
+  const pf = file.platforms;
+  switch (platform) {
+    case 'telegram': return pf?.telegram?.aiCommand;
+    case 'feishu': return pf?.feishu?.aiCommand;
+    case 'qq': return pf?.qq?.aiCommand;
+    case 'wework': return pf?.wework?.aiCommand;
+    case 'dingtalk': return pf?.dingtalk?.aiCommand;
+    case 'clawbot': return pf?.clawbot?.aiCommand;
+    case 'workbuddy': return pf?.workbuddy?.aiCommand;
+    default: return undefined;
+  }
+}
 
 /** 分渠道 AI 工具：未配置时使用 AI_COMMAND / 旧版根级 aiCommand / 默认 claude */
 function resolveFilePlatformAi(file: FileConfig, platform: Platform): AiCommand {
-  const pf = file.platforms;
-  const raw =
-    platform === 'telegram'
-      ? pf?.telegram?.aiCommand
-      : platform === 'feishu'
-        ? pf?.feishu?.aiCommand
-        : platform === 'qq'
-          ? pf?.qq?.aiCommand
-          : platform === 'wework'
-            ? pf?.wework?.aiCommand
-            : platform === 'dingtalk'
-              ? pf?.dingtalk?.aiCommand
-              : platform === 'clawbot'
-                ? pf?.clawbot?.aiCommand
-                : pf?.workbuddy?.aiCommand;
-  return normalizeAiCommand(raw ?? process.env.AI_COMMAND ?? file.aiCommand, 'claude');
+  const raw = getFilePlatformAiRaw(file, platform) ?? process.env.AI_COMMAND ?? file.aiCommand;
+  return normalizeAiCommand(raw, 'claude');
 }
 
 // Re-export file I/O and credential helpers from sub-modules
@@ -304,40 +309,29 @@ export function loadConfig(): Config {
 
   const claudeProxy = process.env.CLAUDE_PROXY ?? tc.proxy;
   const codexProxy = process.env.CODEX_PROXY ?? tcod.proxy;
-  let codexCliPath = process.env.CODEX_CLI_PATH ?? tcod.cliPath ?? 'codex';
-  if (process.platform === 'win32' && codexCliPath === 'codex') {
+  // Windows 下若 CLI 路径仍是默认名,尝试在 npm 全局目录定位 .cmd。
+  // 默认可执行名从 registry 的 cliDefault 取(此前 opencode 遗漏了 Windows 解析)。
+  function resolveWindowsCliPath(cliDefault: string): string {
+    if (process.platform !== 'win32') return cliDefault;
     const npmPaths = [
-      join(process.env.APPDATA || '', 'npm', 'codex.cmd'),
-      join(process.env.LOCALAPPDATA || '', 'npm', 'codex.cmd'),
+      join(process.env.APPDATA || '', 'npm', `${cliDefault}.cmd`),
+      join(process.env.LOCALAPPDATA || '', 'npm', `${cliDefault}.cmd`),
     ];
     for (const p of npmPaths) {
       try {
         accessSync(p, constants.F_OK);
-        codexCliPath = p;
-        break;
+        return p;
       } catch {
         /* 尝试下一个路径 */
       }
     }
+    return cliDefault;
   }
-  let codebuddyCliPath = process.env.CODEBUDDY_CLI_PATH ?? tcb.cliPath ?? 'codebuddy';
-  if (process.platform === 'win32' && codebuddyCliPath === 'codebuddy') {
-    const npmPaths = [
-      join(process.env.APPDATA || '', 'npm', 'codebuddy.cmd'),
-      join(process.env.LOCALAPPDATA || '', 'npm', 'codebuddy.cmd'),
-    ];
-    for (const p of npmPaths) {
-      try {
-        accessSync(p, constants.F_OK);
-        codebuddyCliPath = p;
-        break;
-      } catch {
-        /* 尝试下一个路径 */
-      }
-    }
-  }
+
+  const codexCliPath = process.env.CODEX_CLI_PATH ?? tcod.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.codex.cliDefault ?? 'codex');
+  const codebuddyCliPath = process.env.CODEBUDDY_CLI_PATH ?? tcb.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.codebuddy.cliDefault ?? 'codebuddy');
   const topencode = file.tools?.opencode ?? {};
-  const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? 'opencode';
+  const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.opencode.cliDefault ?? 'opencode');
   const claudeWorkDir = process.env.CLAUDE_WORK_DIR ?? tc.workDir ?? process.cwd();
   const skipPermissions: boolean = process.env.OPEN_IM_SKIP_PERMISSIONS === 'false'
     ? false
@@ -670,7 +664,7 @@ export function getPlatformsWithCredentials(config: Config): Platform[] {
 
 export function resolvePlatformAiCommand(config: Config, platform: Platform): AiCommand {
   const v = config.platforms[platform]?.aiCommand;
-  return v === 'claude' || v === 'codex' || v === 'codebuddy' || v === 'opencode' ? v : 'claude';
+  return isAiCommand(v) ? v : 'claude';
 }
 
 export function getConfiguredAiCommands(config: Config): AiCommand[] {
