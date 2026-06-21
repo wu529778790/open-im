@@ -64,6 +64,9 @@ export function setupClawbotHandlers(
       },
     };
 
+    // 记录已发送的工具调用通知，避免重复发送
+    let lastToolNote = '';
+
     const handleAIRequest = createPlatformAIRequestHandler({
       platform: 'clawbot',
       config,
@@ -73,9 +76,10 @@ export function setupClawbotHandlers(
       runningTasks: ctx.runningTasks,
       taskKeyBuilder: (userId, _msgId) => `${userId}:${msgId}`,
       taskCallbacksFactory: ({ chatId: c }) => ({
-        streamUpdate: async (content: string, toolNote?: string) => {
-          // 有工具调用时，发送工具调用通知
-          if (toolNote) {
+        streamUpdate: async (_content: string, toolNote?: string) => {
+          // 只在新工具调用时发送通知，避免重复
+          if (toolNote && toolNote !== lastToolNote) {
+            lastToolNote = toolNote;
             await sendTextReply(c, `⚙️ ${toolNote}`);
           }
         },
