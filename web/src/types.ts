@@ -1,4 +1,6 @@
-export type AiCommand = "" | "claude" | "codex" | "codebuddy" | "opencode";
+// AiCommand 从 tool-definitions 派生,消除字面量联合;新增工具只改注册表一处。
+import type { AiCommand } from "./tool-definitions.js";
+export type { AiCommand };
 
 export type PlatformKey = "telegram" | "feishu" | "qq" | "wework" | "dingtalk" | "workbuddy" | "clawbot";
 
@@ -65,6 +67,7 @@ export interface WebConfigPayload {
     codexProxy: string;
     codexApiKey?: string;
     codebuddyCliPath: string;
+    opencodeCliPath: string;
     hookPort: number;
     logLevel: string;
   };
