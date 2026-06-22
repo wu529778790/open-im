@@ -148,6 +148,18 @@ function startPolling(): void {
           const extracted = extractTextContent(msg);
           if (!extracted) continue;
 
+          // Skip echoed bot messages (iLink API echoes bot's own messages as USER type)
+          // 1) Messages sent by this bot have client_id starting with "open-im:"
+          if (msg.client_id?.startsWith('open-im:')) {
+            log.debug(`Skipping echoed bot message: client_id=${msg.client_id}`);
+            continue;
+          }
+          // 2) Bot lifecycle notifications and tool call notifications echoed back
+          if (isBotNotificationEcho(extracted)) {
+            log.debug(`Skipping bot notification echo: content="${extracted.substring(0, 80)}"`);
+            continue;
+          }
+
           const chatId = msg.from_user_id ?? '';
           const msgId = String(msg.message_id ?? msg.seq ?? '');
 
@@ -330,6 +342,21 @@ async function extractImages(msg: ILinkMessage): Promise<string[]> {
     }
   }
   return paths;
+}
+
+/**
+ * Check if extracted text is a bot notification being echoed back by the iLink API.
+ * Bot notifications have distinctive emoji prefixes that are unlikely in real user messages.
+ */
+function isBotNotificationEcho(text: string): boolean {
+  const firstLine = text.split('\n')[0]?.trim() ?? '';
+  // Lifecycle/AI info notifications
+  if (firstLine.startsWith('🤖 AI:')) return true;
+  // Service status notifications
+  if (firstLine.startsWith('✅ ') || firstLine.startsWith('🔄 ') || firstLine.startsWith('ℹ️ ')) return true;
+  // Tool call notifications (sent by streamUpdate in event-handler)
+  if (firstLine.startsWith('⚙️ ')) return true;
+  return false;
 }
 
 /**

@@ -87,10 +87,16 @@ export async function runOpenCodeSdk(
   let accumulatedThinking = '';
   const toolStats: Record<string, number> = {};
   let runSettled = false;
+  let sseConnected = false;
+  // 用于等待 SSE 连接就绪后再发 prompt，避免竞态
+  const sseReadyResolve = (): void => { sseConnected = true; };
 
   const subscribeEvents = async () => {
     try {
       const sse = await client.global.event({ signal: abortController.signal } as never);
+      // SSE 连接已建立，通知主流程可以开始 prompt
+      sseReadyResolve();
+      log.debug('SSE stream connected');
       for await (const raw of sse.stream as AsyncIterable<unknown>) {
         const ev = raw as {
           payload?: { type?: string; properties?: Record<string, unknown> };
@@ -108,10 +114,29 @@ export async function runOpenCodeSdk(
             }
             break;
           }
+          case 'session.next.text.ended': {
+            // text.ended 携带完整文本，作为 SSE 流的兜底
+            const fullText = payload.properties.text as string | undefined;
+            if (fullText && !accumulatedText) {
+              accumulatedText = fullText;
+              callbacks.onText(accumulatedText);
+              log.debug(`SSE text.ended fallback: got ${fullText.length} chars`);
+            }
+            break;
+          }
           case 'session.next.reasoning.delta': {
             const delta = payload.properties.delta as string | undefined;
             if (delta) {
               accumulatedThinking += delta;
+              callbacks.onThinking?.(accumulatedThinking);
+            }
+            break;
+          }
+          case 'session.next.reasoning.ended': {
+            // reasoning.ended 携带完整推理文本
+            const fullReasoning = payload.properties.text as string | undefined;
+            if (fullReasoning && !accumulatedThinking) {
+              accumulatedThinking = fullReasoning;
               callbacks.onThinking?.(accumulatedThinking);
             }
             break;
@@ -124,6 +149,9 @@ export async function runOpenCodeSdk(
             }
             break;
           }
+          default:
+            log.debug(`SSE unhandled event: ${payload.type}`);
+            break;
         }
       }
     } catch (err) {
@@ -134,6 +162,24 @@ export async function runOpenCodeSdk(
   };
 
   const background = subscribeEvents();
+
+  // 等待 SSE 连接就绪（最多 3 秒），避免 prompt 在 SSE 未连接时就开始
+  // 如果 3 秒内 SSE 未连接，仍然继续执行（SSE 可能后续连接并补收事件）
+  const sseReady = new Promise<void>((resolve) => {
+    const check = setInterval(() => {
+      if (sseConnected) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 100);
+    // 3 秒超时：SSE 可能需要重试连接，不等太久
+    setTimeout(() => {
+      clearInterval(check);
+      if (!sseConnected) log.warn('SSE not connected within 3s, proceeding with prompt anyway');
+      resolve();
+    }, 3000);
+  });
+  await sseReady;
 
   try {
     const result = await client.session.prompt({
@@ -156,6 +202,13 @@ export async function runOpenCodeSdk(
       .map(p => p.text)
       .join('\n');
     const cost = data?.info?.cost ?? 0;
+
+    log.info(
+      `SDK prompt completed: accumulatedText=${accumulatedText.length}, finalText=${finalText.length}, parts=${parts.length}, cost=${cost}`
+    );
+    if (!accumulatedText && !finalText) {
+      log.warn(`SDK prompt returned empty output — data keys: ${data ? Object.keys(data).join(',') : 'null'}, parts types: ${parts.map(p => p.type).join(',')}`);
+    }
 
     callbacks.onComplete({
       success: true,
