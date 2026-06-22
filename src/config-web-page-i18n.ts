@@ -219,6 +219,8 @@ refreshHealth: "Refresh Health Status",
           wizardAuthApiKey: "API Key",
           wizardAuthToken: "Auth Token",
           wizardLoading: "Loading...",
+          aiCommandPickerTitle: "🤖 AI Tool",
+          aiCommandPickerHint: "Messages from this channel will be replied by the AI selected above",
         },
         zh: {
           pageTitle: "open-im \u672c\u5730\u63a7\u5236\u53f0",
@@ -437,5 +439,7 @@ refreshHealth: "Refresh Health Status",
           wizardAuthApiKey: "API Key",
           wizardAuthToken: "Auth Token",
           wizardLoading: "\u52a0\u8f7d\u4e2d...",
+          aiCommandPickerTitle: "🤖 AI 工具",
+          aiCommandPickerHint: "这个渠道收到的消息会用上面的 AI 回复",
         }
       } as const;
