@@ -64,6 +64,18 @@ export interface Config {
     token?: string;
   };
 
+  /**
+   * 限流自动恢复（Autopilot）。
+   * 当 AI 工具遇到限流错误时，自动等待并在恢复后重试。
+   */
+  autopilot: {
+    enabled: boolean;
+    maxRetries: number;
+    defaultIntervalHours: number;
+    shortRetrySeconds: number;
+    autoResumePrompt: string;
+  };
+
   platforms: {
     telegram?: {
       enabled: boolean;
@@ -197,6 +209,14 @@ export interface FileToolClaude {
   proxy?: string;
   /** Claude API 配置（优先级：环境变量 > tools.claude.env > ~/.claude/settings.json） */
   env?: Record<string, string>;
+  /** 限流自动恢复配置 */
+  autopilot?: {
+    enabled?: boolean;
+    maxRetries?: number;
+    defaultIntervalHours?: number;
+    shortRetrySeconds?: number;
+    autoResumePrompt?: string;
+  };
 }
 
 export interface FileToolCodex {

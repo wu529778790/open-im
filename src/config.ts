@@ -10,6 +10,11 @@ import { join, isAbsolute } from 'node:path';
 import { createLogger, type LogLevel } from './logger.js';
 import {
   APP_HOME,
+  AUTOPILOT_ENABLED_DEFAULT,
+  AUTOPILOT_MAX_RETRIES,
+  AUTOPILOT_DEFAULT_INTERVAL_HOURS,
+  AUTOPILOT_SHORT_RETRY_SECONDS,
+  AUTOPILOT_DEFAULT_PROMPT,
 } from './constants.js';
 
 const log = createLogger('config');
@@ -306,6 +311,24 @@ export function loadConfig(): Config {
   const tc = file.tools?.claude ?? {};
   const tcod = file.tools?.codex ?? {};
   const tcb = file.tools?.codebuddy ?? {};
+
+  // Autopilot（限流自动恢复）配置
+  const autopilotFile = tc.autopilot ?? {};
+  const autopilot = {
+    enabled: process.env.OPEN_IM_AUTOPILOT !== 'false'
+      && (autopilotFile.enabled ?? AUTOPILOT_ENABLED_DEFAULT),
+    maxRetries: (() => {
+      const envVal = process.env.OPEN_IM_AUTOPILOT_MAX_RETRIES;
+      if (envVal !== undefined && envVal !== '') {
+        const n = Number.parseInt(envVal, 10);
+        if (Number.isFinite(n) && n >= 0) return n;
+      }
+      return autopilotFile.maxRetries ?? AUTOPILOT_MAX_RETRIES;
+    })(),
+    defaultIntervalHours: autopilotFile.defaultIntervalHours ?? AUTOPILOT_DEFAULT_INTERVAL_HOURS,
+    shortRetrySeconds: autopilotFile.shortRetrySeconds ?? AUTOPILOT_SHORT_RETRY_SECONDS,
+    autoResumePrompt: autopilotFile.autoResumePrompt ?? AUTOPILOT_DEFAULT_PROMPT,
+  };
 
   const claudeProxy = process.env.CLAUDE_PROXY ?? tc.proxy;
   const codexProxy = process.env.CODEX_PROXY ?? tcod.proxy;
@@ -645,6 +668,7 @@ export function loadConfig(): Config {
     telemetry: {
       enabled: telemetryEnabled,
     },
+    autopilot,
     platforms,
   };
 }

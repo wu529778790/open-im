@@ -108,6 +108,19 @@ export const MAX_CLAWBOT_MESSAGE_LENGTH = 2000;
 /** ClawBot 长轮询间隔 */
 export const CLAWBOT_POLL_INTERVAL_MS = 3000;
 
+// ─── Autopilot（限流自动恢复） ───
+
+/** Autopilot 默认开启 */
+export const AUTOPILOT_ENABLED_DEFAULT = true;
+/** 最大连续自动重试次数 */
+export const AUTOPILOT_MAX_RETRIES = 5;
+/** 无法从错误消息提取重置时间时的默认等待小时数 */
+export const AUTOPILOT_DEFAULT_INTERVAL_HOURS = 5;
+/** 529/临时限流的短延迟秒数 */
+export const AUTOPILOT_SHORT_RETRY_SECONDS = 60;
+/** 自动恢复时发送的提示词 */
+export const AUTOPILOT_DEFAULT_PROMPT = "继续";
+
 // ─── Git 共同作者 ───
 
 export const DEFAULT_OPEN_IM_COAUTHOR_ADDR = "529778790@qq.com";

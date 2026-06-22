@@ -580,6 +580,13 @@ function createProbeConfig(values: Partial<Config>): Config {
     logDir: "",
     logLevel: "INFO",
     telemetry: { enabled: true },
+    autopilot: {
+      enabled: true,
+      maxRetries: 5,
+      defaultIntervalHours: 5,
+      shortRetrySeconds: 60,
+      autoResumePrompt: "继续",
+    },
     codebuddyCliPath: "codebuddy",
     opencodeCliPath: "opencode",
     platforms: {},
