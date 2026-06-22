@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
+import { APP_HOME, SHUTDOWN_PORT, SERVICE_READY_TIMEOUT_MS, HEALTH_CHECK_TIMEOUT_MS } from "./constants.js";
 import { resolveNodeExecutable } from "./node-exec.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -113,7 +113,7 @@ export function startBackgroundService(cwd: string): { pid: number } {
 }
 
 export async function waitForBackgroundServiceReady(
-  timeoutMs = 8000,
+  timeoutMs = SERVICE_READY_TIMEOUT_MS,
   pollIntervalMs = 100,
 ): Promise<void> {
   const startedAt = Date.now();
@@ -148,7 +148,7 @@ export async function stopBackgroundService(): Promise<{ pid: number | null; sto
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/shutdown`, {
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
     });
     if (response.ok) {
       for (let index = 0; index < 50; index += 1) {

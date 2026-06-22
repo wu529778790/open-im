@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { createLogger } from "./logger.js";
+import { UPDATE_CHECK_TIMEOUT_MS } from "./constants.js";
 
 const log = createLogger("CheckUpdate");
 const require = createRequire(import.meta.url);
@@ -18,7 +19,7 @@ const REGISTRY_URL = `https://registry.npmjs.org/${encodeURIComponent(PKG_NAME)}
 async function fetchLatestVersion(): Promise<string | null> {
   try {
     const res = await fetch(`${REGISTRY_URL}?fields=dist-tags`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { "dist-tags"?: { latest?: string } };

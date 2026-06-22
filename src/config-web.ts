@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
 import type { Config } from "./config.js";
-import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
+import { WEB_CONFIG_PORT, getPublicWebDashboardUrl, PLATFORM_TEST_TIMEOUT_MS } from "./constants.js";
 import {
   CONFIG_PATH,
   getClaudeConfigHome,
@@ -31,7 +31,7 @@ import { createLogger } from "./logger.js";
 const log = createLogger("ConfigWeb");
 type WebFlowMode = "init" | "start" | "dev";
 type WebFlowResult = "saved" | "cancel";
-const TEST_TIMEOUT_MS = 10000;
+// 已移至 constants.ts;
 
 function getClaudeSettingsPath(): string {
   const home = getClaudeConfigHome();
@@ -592,7 +592,7 @@ async function probeTelegram(config: Record<string, unknown>): Promise<string> {
   if (!botToken) throw new Error("Telegram bot token is required.");
 
   const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, {
-    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PLATFORM_TEST_TIMEOUT_MS),
   });
   const body = await readJsonResponse(response);
   if (!response.ok || body.ok !== true) {
@@ -613,7 +613,7 @@ async function probeFeishu(config: Record<string, unknown>): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
-    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PLATFORM_TEST_TIMEOUT_MS),
   });
   const body = await readJsonResponse(response);
   if (!response.ok || body.code !== 0) {
@@ -632,7 +632,7 @@ async function probeQQ(config: Record<string, unknown>): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ appId, clientSecret: secret }),
-    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PLATFORM_TEST_TIMEOUT_MS),
   });
   const body = await readJsonResponse(response);
   if (!response.ok || typeof body.access_token !== "string" || body.access_token.length === 0) {
@@ -673,7 +673,7 @@ async function probeDingTalk(config: Record<string, unknown>): Promise<string> {
   const token = await Promise.race([
     client.getAccessToken(),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("DingTalk access token request timed out.")), TEST_TIMEOUT_MS),
+      setTimeout(() => reject(new Error("DingTalk access token request timed out.")), PLATFORM_TEST_TIMEOUT_MS),
     ),
   ]);
 
@@ -706,7 +706,7 @@ async function probeWorkBuddy(config: Record<string, unknown>): Promise<string> 
       workspaceName: "OpenIM Test Workspace",
       localAgentType: "ide",
     }),
-    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PLATFORM_TEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -731,7 +731,7 @@ async function probeClawBot(config: Record<string, unknown>): Promise<string> {
       'iLink-App-ClientVersion': '131588',
       'X-WECHAT-UIN': randomUUID(),
     },
-    signal: AbortSignal.timeout(TEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PLATFORM_TEST_TIMEOUT_MS),
   });
   const body = await readJsonResponse(response);
   const ok = body.ok === true || body.ret === 0 || body.ret === '0';

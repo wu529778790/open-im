@@ -42,7 +42,7 @@ import {
   createLogger,
   closeLogger,
 } from "./logger.js";
-import { APP_HOME, SHUTDOWN_PORT } from "./constants.js";
+import { APP_HOME, SHUTDOWN_PORT, SHUTDOWN_FORCE_EXIT_MS } from "./constants.js";
 import { createRequire } from "node:module";
 import { escapePathForMarkdown, getAIToolDisplayName } from "./shared/utils.js";
 import { applyOpenImGitCoauthorToProcessEnv } from "./shared/git-coauthor.js";
@@ -465,12 +465,12 @@ export async function main() {
 
   process.on("SIGINT", () => {
     // 优雅关闭超时：10 秒后强制退出
-    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, 10_000);
+    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, SHUTDOWN_FORCE_EXIT_MS);
     forceExit.unref();
     shutdown().catch(() => process.exit(1));
   });
   process.on("SIGTERM", () => {
-    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, 10_000);
+    const forceExit = setTimeout(() => { log.warn('Shutdown timeout, forcing exit'); process.exit(1); }, SHUTDOWN_FORCE_EXIT_MS);
     forceExit.unref();
     shutdown().catch(() => process.exit(1));
   });

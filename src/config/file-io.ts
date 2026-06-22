@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { createLogger } from '../logger.js';
-import { APP_HOME } from '../constants.js';
+import { APP_HOME, CLI_VERSION_CHECK_TIMEOUT_MS } from "../constants.js";
 import type { FileConfig } from './types.js';
 
 const log = createLogger('config');
@@ -345,7 +345,7 @@ export function getClaudeSdkRuntimeIssue(): string | null {
         ...process.env,
         CLAUDE_CODE_ENTRYPOINT: process.env.CLAUDE_CODE_ENTRYPOINT || 'sdk-ts',
       },
-      timeout: 5000,
+      timeout: CLI_VERSION_CHECK_TIMEOUT_MS,
       windowsHide: process.platform === 'win32',
     });
   } catch (error) {
