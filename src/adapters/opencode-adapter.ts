@@ -1,8 +1,4 @@
-/**
- * OpenCode Adapter — run tasks through OpenCode CLI (`opencode run`)
- */
-
-import { runOpenCode } from '../opencode/cli-runner.js';
+import { runOpenCodeSdk } from '../opencode/sdk-runner.js';
 import type {
   ParsedResult,
   RunCallbacks,
@@ -14,8 +10,6 @@ import type {
 export class OpenCodeAdapter implements ToolAdapter {
   readonly toolId = 'opencode';
 
-  constructor(private cliPath: string) {}
-
   run(
     prompt: string,
     sessionId: string | undefined,
@@ -23,8 +17,7 @@ export class OpenCodeAdapter implements ToolAdapter {
     callbacks: RunCallbacks,
     options?: RunOptions,
   ): RunHandle {
-    return runOpenCode(
-      this.cliPath,
+    const handle = runOpenCodeSdk(
       prompt,
       sessionId,
       workDir,
@@ -63,5 +56,11 @@ export class OpenCodeAdapter implements ToolAdapter {
         model: options?.model,
       },
     );
+
+    return {
+      abort: () => {
+        handle.then(h => h.abort());
+      },
+    };
   }
 }
