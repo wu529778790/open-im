@@ -322,6 +322,38 @@ body {
 .platform-card-body {
   padding: 16px 20px 20px;
 }
+
+/* ── AI 工具顶部区块（AiCommandPicker） ── */
+.ai-command-picker {
+  background: var(--c-surface-alt);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-m);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ai-command-picker-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.ai-command-picker-hint {
+  font-size: 12px;
+  color: var(--c-text-2);
+}
+.ai-command-picker .form-select {
+  margin-top: 2px;
+}
+
+/* ── AI 区块与下方字段之间的分隔线（Dashboard + Wizard 共用） ── */
+.platform-card-divider {
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  margin: 0 0 16px 0;
+}
 .platform-card-hint {
   font-size: 12px;
   color: var(--c-text-3);
