@@ -223,15 +223,15 @@ export function runAITask(
           clearTimeout(pendingUpdate);
           pendingUpdate = null;
         }
-        const toolNote = toolLines.length > 0 ? toolLines.slice(-3).join('\n') : undefined;
+        // 只在 force=true（工具调用）时传 toolNote，普通文本更新不传
+        const toolNote = force && toolLines.length > 0 ? toolLines.slice(-3).join('\n') : undefined;
         platformAdapter.streamUpdate(content, toolNote);
       } else if (!pendingUpdate) {
         pendingUpdate = setTimeout(() => {
           pendingUpdate = null;
           lastUpdateTime = Date.now();
           lastSentContentLength = taskState.latestContent.length;
-          const toolNote = toolLines.length > 0 ? toolLines.slice(-3).join('\n') : undefined;
-          platformAdapter.streamUpdate(taskState.latestContent, toolNote);
+          platformAdapter.streamUpdate(taskState.latestContent, undefined);
         }, platformAdapter.throttleMs - elapsed);
       }
     };
