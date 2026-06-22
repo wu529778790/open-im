@@ -286,33 +286,72 @@ body {
   box-shadow: 0 0 0 1px var(--c-accent-bdr);
 }
 .platform-card-head {
-  padding: 14px 20px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--c-border);
   gap: 12px;
   cursor: pointer;
 }
 .platform-card-head:hover { background: var(--c-surface-alt); }
+.platform-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.platform-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-m);
+  background: var(--c-surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.platform-card-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .platform-card-name {
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--c-text);
+}
+.platform-card-desc {
+  font-size: 12px;
+  color: var(--c-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.platform-card-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-shrink: 0;
 }
-.platform-card-name .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--c-text-3);
-  transition: all var(--fast);
+.platform-status-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
-.platform-card.enabled .platform-card-name .dot {
-  background: var(--c-ok);
-  box-shadow: 0 0 10px var(--c-ok);
+.platform-status-badge.on {
+  background: var(--c-ok-bg);
+  color: var(--c-ok);
+  border-color: var(--c-ok-bdr);
+}
+.platform-status-badge.off {
+  color: var(--c-text-3);
 }
 .platform-card-chevron {
   font-size: 12px;
@@ -321,6 +360,7 @@ body {
 }
 .platform-card-body {
   padding: 16px 20px 20px;
+  border-top: 1px solid var(--c-border);
 }
 
 /* ── AI 工具顶部区块（AiCommandPicker） ── */
