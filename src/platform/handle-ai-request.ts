@@ -243,7 +243,24 @@ export function createPlatformAIRequestHandler(
     // 7. Run AI task
     try {
       await runAITask(
-        { config, sessionManager },
+        {
+          config,
+          sessionManager,
+          autopilot: {
+            onAutoPilotContinue: (continuePrompt: string) => {
+              log.info(`[${platform}] Autopilot: re-enqueuing "${continuePrompt}" for user ${userId}`);
+              handleAIRequest({
+                userId,
+                chatId,
+                prompt: continuePrompt,
+                workDir,
+                convId,
+              }).catch((err: unknown) => {
+                log.error(`[${platform}] Autopilot re-enqueue failed:`, err);
+              });
+            },
+          },
+        },
         {
           userId,
           chatId,
