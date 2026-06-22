@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS } from "../constants.js";
 import { PLATFORM_FIELD_LABEL, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
-import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
+import { PLATFORM_EMOJI } from "../platform-emoji.js";
+import { AiCommandPicker } from "./AiCommandPicker.js";
 import { emptyPayload } from "../empty-payload.js";
 
 /* ─── helpers ─── */
@@ -137,9 +138,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
         <label className="form-label">{lk ? t(lk) : f}</label>
         {f === "allowedUserIds" ? (
           <><textarea className="form-textarea mono" value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} /><div className="form-hint">{t("commaSeparatedIds")}</div></>
-        ) : f === "aiCommand" ? (
-          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}>{AI_TOOL_DEFINITIONS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
-        ) : (
+        ) : f === "aiCommand" ? null : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} />
         )}
         {tk && <div className="field-tip" dangerouslySetInnerHTML={{ __html: html(tk) }} />}
@@ -230,19 +229,35 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
               return (
                 <div key={pk} className={`wizard-platform-card ${on ? "on" : ""}`}>
                   <div className="wizard-platform-head" onClick={() => setExpanded(e => ({ ...e, [pk]: !e[pk] }))}>
-                    <span className="wizard-platform-name">
-                      <span className="dot" />
-                      {def.label}
+                    <div className="wizard-platform-meta">
+                      <div className="wizard-platform-icon">{PLATFORM_EMOJI[pk]}</div>
+                      <div className="wizard-platform-title-block">
+                        <span className="wizard-platform-name">{def.label}</span>
+                        <span className="wizard-platform-desc">{t(PLATFORM_SUMMARY_KEY[pk as keyof typeof PLATFORM_SUMMARY_KEY] || "")}</span>
+                      </div>
+                    </div>
+                    <div className="wizard-platform-right">
+                      <span className={`platform-status-badge ${on ? "on" : "off"}`}>
+                        {on ? t("platformStatusOn") : t("platformStatusOff")}
+                      </span>
                       <span className="wizard-platform-chevron">{isOpen ? "▾" : "▸"}</span>
-                    </span>
-                    <label className="toggle" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" className="toggle-input sr-only" checked={on} onChange={(e) => { upP(pk, { enabled: e.target.checked }); if (e.target.checked) setExpanded(ex => ({ ...ex, [pk]: true })); }} />
-                      <span className="toggle-track" />
-                    </label>
+                      <label className="toggle" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" className="toggle-input sr-only" checked={on} onChange={(e) => { upP(pk, { enabled: e.target.checked }); if (e.target.checked) setExpanded(ex => ({ ...ex, [pk]: true })); }} />
+                        <span className="toggle-track" />
+                      </label>
+                    </div>
                   </div>
                   {isOpen && (
                     <div className="wizard-platform-body">
                       <p className="form-hint">{t(PLATFORM_SUMMARY_KEY[pk as keyof typeof PLATFORM_SUMMARY_KEY] || "")}</p>
+
+                      <AiCommandPicker
+                        value={String((payload.platforms[pk] as Record<string, string>).aiCommand || "claude") as AiCommand}
+                        onChange={(val) => upP(pk, { aiCommand: val } as Partial<WebConfigPayload["platforms"][typeof pk]>)}
+                        t={t as (k: string) => string}
+                      />
+                      <hr className="platform-card-divider" />
+
                       {def.fields.map(f => field(def, f, pk))}
                       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                         <button type="button" className="btn btn-s btn-sm" disabled={testBusy === pk} onClick={() => void testPlatform(pk)}>
