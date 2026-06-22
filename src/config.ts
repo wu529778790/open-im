@@ -332,6 +332,7 @@ export function loadConfig(): Config {
   const codebuddyCliPath = process.env.CODEBUDDY_CLI_PATH ?? tcb.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.codebuddy.cliDefault ?? 'codebuddy');
   const topencode = file.tools?.opencode ?? {};
   const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.opencode.cliDefault ?? 'opencode');
+  const opencodeModel = process.env.OPENCODE_MODEL ?? topencode.model;
   const claudeWorkDir = process.env.CLAUDE_WORK_DIR ?? tc.workDir ?? process.cwd();
   const skipPermissions: boolean = process.env.OPEN_IM_SKIP_PERMISSIONS === 'false'
     ? false
@@ -632,6 +633,7 @@ export function loadConfig(): Config {
     codexCliPath,
     codebuddyCliPath,
     opencodeCliPath,
+    opencodeModel,
     claudeProxy,
     codexProxy,
     claudeWorkDir,

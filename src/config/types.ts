@@ -35,6 +35,8 @@ export interface Config {
   codexCliPath: string;
   codebuddyCliPath: string;
   opencodeCliPath: string;
+  /** OpenCode SDK 使用的模型（格式: providerID/modelID，如 zhipuai-coding-plan/glm-5.1） */
+  opencodeModel?: string;
   /** Claude 访问 API 的代理（如 http://127.0.0.1:7890） */
   claudeProxy?: string;
   /** Codex 访问 chatgpt.com 的代理（如 http://127.0.0.1:7890） */
@@ -210,6 +212,8 @@ export interface FileToolCodeBuddy {
 
 export interface FileToolOpenCode {
   cliPath?: string;
+  /** 模型（格式: providerID/modelID） */
+  model?: string;
 }
 
 export interface FileConfig {

@@ -189,13 +189,38 @@ export async function runOpenCodeSdk(
       ...(options?.model ? { model: parseModel(options.model) } : {}),
     });
 
+    // 调试：dump SDK 返回值结构
+    log.info(`SDK prompt raw result: hasData=${!!result.data}, hasError=${!!result.error}, keys=${Object.keys(result).join(',')}`);
+    if (result.error) {
+      const errStr = result.error instanceof Error ? result.error.message : JSON.stringify(result.error).substring(0, 500);
+      log.info(`SDK prompt error detail: ${errStr}`);
+    }
+    if (result.data) {
+      const d = result.data as Record<string, unknown>;
+      log.info(`SDK prompt data keys: ${Object.keys(d).join(',')}, parts count: ${Array.isArray(d.parts) ? d.parts.length : 'N/A'}, info keys: ${d.info && typeof d.info === 'object' ? Object.keys(d.info as Record<string, unknown>).join(',') : 'N/A'}`);
+    }
+
     abortController.abort();
     await background.catch(() => {});
     runSettled = true;
 
+    // SDK 返回 { data, error } 二元组；error 存在时 data 为 undefined
+    const sdkError = result.error;
+    if (sdkError) {
+      const errMsg = sdkError instanceof Error ? sdkError.message : JSON.stringify(sdkError);
+      log.error(`SDK prompt returned error: ${errMsg}`);
+      callbacks.onError(errMsg);
+      return { abort: () => {} };
+    }
+
     const data = result.data as
       | { info?: { cost?: number }; parts?: Array<{ type: string; text?: string }> }
       | undefined;
+    if (!data) {
+      log.error(`SDK prompt returned no data and no error — result keys: ${Object.keys(result).join(',')}`);
+      callbacks.onError('SDK 返回空数据');
+      return { abort: () => {} };
+    }
     const parts = data?.parts ?? [];
     const finalText = parts
       .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
