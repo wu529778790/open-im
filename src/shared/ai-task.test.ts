@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../permission-mode/session-mode.js", () => ({
   getPermissionMode: vi.fn(() => "ask"),
@@ -13,7 +13,7 @@ vi.mock("../logger.js", () => ({
   }),
 }));
 
-import { classifyErrorType, runAITask } from "./ai-task.js";
+import { classifyErrorType, clearAutopilotState, getAutopilotPendingStatus, runAITask } from "./ai-task.js";
 import type { ToolAdapter } from "../adapters/tool-adapter.interface.js";
 
 describe("runAITask", () => {
@@ -512,5 +512,230 @@ describe("classifyErrorType", () => {
     expect(
       classifyErrorType("AI 响应异常结束（无输出），请重试")
     ).toBe("empty_output");
+  });
+});
+
+describe("autopilot interceptor", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    clearAutopilotState("u1");
+    vi.useRealTimers();
+  });
+
+  const baseConfig = {
+    platforms: {
+      telegram: { enabled: true, aiCommand: "claude" as const, allowedUserIds: [] },
+    },
+    enabledPlatforms: ["telegram"] as const,
+    claudeModel: "",
+    codexProxy: "",
+    dingtalkClientId: "",
+    dingtalkClientSecret: "",
+    qqAppId: "",
+    qqSecret: "",
+    weworkCorpId: "",
+    weworkSecret: "",
+    telegramBotToken: "",
+    autopilot: {
+      enabled: true,
+      maxRetries: 5,
+      defaultIntervalHours: 5,
+      shortRetrySeconds: 60,
+      autoResumePrompt: "继续",
+    },
+  };
+
+  const baseSessionManager = {
+    addTurnsForThread: vi.fn(() => 0),
+    addTurns: vi.fn(() => 0),
+    setSessionIdForThread: vi.fn(),
+    setSessionIdForConv: vi.fn(),
+    clearSessionForConv: vi.fn(),
+    clearActiveToolSession: vi.fn(),
+    getModel: vi.fn(() => undefined),
+    isFreshSession: vi.fn(() => false),
+  };
+
+  it("detects rate limit and notifies user with status message", async () => {
+    const onAutoPilotContinue = vi.fn();
+    const sendError = vi.fn(async () => {});
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run(_p, _s, _w, cb) {
+        cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      { config: baseConfig as never, sessionManager: baseSessionManager as never, autopilot: { onAutoPilotContinue } },
+      { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: "t1" },
+      "hello",
+      toolAdapter,
+      { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+    );
+
+    expect(sendError).toHaveBeenCalledOnce();
+    const msg = sendError.mock.calls[0][0] as string;
+    expect(msg).toContain("⏳");
+    expect(msg).toContain("会话额度限制");
+    expect(msg).toContain("自动恢复");
+
+    // pending status should be set
+    const status = getAutopilotPendingStatus("u1");
+    expect(status).toBeDefined();
+    expect(status?.type).toBe("session_limit");
+    expect(status?.retryCount).toBe(1);
+
+    // callback should NOT have been called yet (timer hasn't fired)
+    expect(onAutoPilotContinue).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger autopilot when disabled", async () => {
+    const onAutoPilotContinue = vi.fn();
+    const sendError = vi.fn(async () => {});
+    const disabledConfig = {
+      ...baseConfig,
+      autopilot: { ...baseConfig.autopilot, enabled: false },
+    };
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run(_p, _s, _w, cb) {
+        cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      { config: disabledConfig as never, sessionManager: baseSessionManager as never, autopilot: { onAutoPilotContinue } },
+      { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: "t1" },
+      "hello",
+      toolAdapter,
+      { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+    );
+
+    const msg = sendError.mock.calls[0][0] as string;
+    expect(msg).not.toContain("⏳");
+    expect(onAutoPilotContinue).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger autopilot when no callback provided", async () => {
+    const sendError = vi.fn(async () => {});
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run(_p, _s, _w, cb) {
+        cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      { config: baseConfig as never, sessionManager: baseSessionManager as never },
+      { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: "t1" },
+      "hello",
+      toolAdapter,
+      { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+    );
+
+    const msg = sendError.mock.calls[0][0] as string;
+    expect(msg).not.toContain("⏳");
+  });
+
+  it("classifies 529 overloaded as short retry", async () => {
+    const onAutoPilotContinue = vi.fn();
+    const sendError = vi.fn(async () => {});
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run(_p, _s, _w, cb) {
+        cb.onError("529 overloaded");
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      { config: baseConfig as never, sessionManager: baseSessionManager as never, autopilot: { onAutoPilotContinue } },
+      { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: "t1" },
+      "hello",
+      toolAdapter,
+      { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+    );
+
+    const msg = sendError.mock.calls[0][0] as string;
+    expect(msg).toContain("⏳");
+    expect(msg).toContain("服务器过载");
+
+    const status = getAutopilotPendingStatus("u1");
+    expect(status?.type).toBe("overloaded");
+  });
+
+  it("stops retrying after maxRetries is reached", async () => {
+    const onAutoPilotContinue = vi.fn();
+    const sendError = vi.fn(async () => {});
+    const maxedConfig = {
+      ...baseConfig,
+      autopilot: { ...baseConfig.autopilot, maxRetries: 2 },
+    };
+
+    // Simulate 2 prior retries
+    // We can't directly set the map, but we can trigger 2 rate limit errors in sequence
+    // For simplicity, just test that on the 3rd call with maxRetries=2, autopilot is skipped
+    // First, manually set the counter by running 2 tasks that trigger autopilot
+    // (This is a simplified test — full integration would require more setup)
+
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      run(_p, _s, _w, cb) {
+        cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
+        return { abort: vi.fn() };
+      },
+    };
+
+    // Run twice to increment counter to 2
+    for (let i = 0; i < 2; i++) {
+      sendError.mockClear();
+      await runAITask(
+        { config: maxedConfig as never, sessionManager: baseSessionManager as never, autopilot: { onAutoPilotContinue } },
+        { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: `t${i}` },
+        "hello",
+        toolAdapter,
+        { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+      );
+    }
+
+    // 3rd attempt should skip autopilot (maxRetries=2)
+    sendError.mockClear();
+    await runAITask(
+      { config: maxedConfig as never, sessionManager: baseSessionManager as never, autopilot: { onAutoPilotContinue } },
+      { userId: "u1", chatId: "c1", workDir: "/tmp", sessionId: "s1", platform: "telegram", taskKey: "t3" },
+      "hello",
+      toolAdapter,
+      { streamUpdate: vi.fn(), sendComplete: vi.fn(async () => {}), sendError, throttleMs: 0, onTaskReady: vi.fn() },
+    );
+
+    const msg = sendError.mock.calls[0][0] as string;
+    // Should NOT contain autopilot status — just the raw error
+    expect(msg).not.toContain("⏳");
+    expect(msg).toContain("usage limit");
+  });
+
+  it("classifies all rate limit error patterns", () => {
+    const patterns = [
+      "You've hit your usage limit. Try again at 3:00 PM.",
+      "429 rate_limit exceeded",
+      "529 overloaded",
+      "temporarily limiting requests to prevent abuse",
+      "session limit reached for this model",
+      "API rate limit exceeded for your account",
+    ];
+    for (const err of patterns) {
+      expect(classifyErrorType(err)).toBe("limit");
+    }
   });
 });

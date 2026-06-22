@@ -20,9 +20,33 @@ import { sanitize } from '../sanitize.js';
 
 const log = createLogger('AITask');
 
+/** 每用户连续 autopilot 重试计数。成功完成或遇到非限流错误时清零。 */
+const autopilotRetryCount = new Map<string, number>();
+
+/** 当前等待中的 autopilot 定时器（用于 /autopilot 状态查询）。 */
+const pendingAutopilotTimers = new Map<string, { retryAt: Date; type: string; retryCount: number }>();
+
+/** 查询指定用户的 autopilot 等待状态（供 /autopilot 命令使用）。 */
+export function getAutopilotPendingStatus(userId: string): { retryAt: Date; type: string; retryCount: number } | undefined {
+  return pendingAutopilotTimers.get(userId);
+}
+
+/** 清除指定用户的 autopilot 状态（测试用）。 */
+export function clearAutopilotState(userId: string): void {
+  autopilotRetryCount.delete(userId);
+  pendingAutopilotTimers.delete(userId);
+}
+
 export interface TaskDeps {
   config: Config;
   sessionManager: SessionManager;
+  /**
+   * Autopilot 回调：限流恢复后调用，将 autoResumePrompt 作为新消息
+   * 通过平台的请求队列重新入队。如果不提供，autopilot 不执行恢复动作。
+   */
+  autopilot?: {
+    onAutoPilotContinue: (prompt: string) => void;
+  };
 }
 
 export interface TaskContext {
@@ -70,8 +94,95 @@ export interface TaskRunState {
   userKey: string;
 }
 
+/**
+ * 判断错误是否为限流类错误（用于决定是否保留 session）。
+ * 覆盖所有已知的限流模式：429/529/session limit/overloaded/temporary throttle。
+ */
 function isUsageLimitError(error: string): boolean {
-  return /usage limit/i.test(error) || /try again at\s+\d{1,2}:\d{2}\s*(AM|PM)/i.test(error);
+  return /usage\s*limit/i.test(error)
+    || /try\s+again\s+at\s+\d{1,2}:\d{2}/i.test(error)
+    || /rate\s*limit/i.test(error)
+    || /\b429\b/.test(error)
+    || /\b529\b/.test(error)
+    || /overloaded/i.test(error)
+    || /temporarily\s+limiting/i.test(error)
+    || /session\s+limit/i.test(error)
+    || /you['\u2019]ve\s+hit\s+your/i.test(error);
+}
+
+interface RateLimitInfo {
+  detected: boolean;
+  type: 'session_limit' | 'api_rate_limit' | 'overloaded' | 'temporary' | null;
+  retryAt: Date | null;
+  isLongWait: boolean;
+}
+
+/**
+ * 从错误消息中提取限流详情。仅在 isUsageLimitError() 返回 true 后调用。
+ */
+function classifyRateLimit(error: string, config: Config): RateLimitInfo {
+  const now = Date.now();
+  const shortMs = config.autopilot.shortRetrySeconds * 1000;
+  const defaultMs = config.autopilot.defaultIntervalHours * 3600 * 1000;
+
+  // Session quota / usage limit（最常见，等待时间最长）
+  if (/session\s*limit|usage\s*limit|opus\s*limit|you['\u2019]ve\s+hit\s+your/i.test(error)) {
+    const timeMatch = error.match(/try\s+again\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+      const ampm = timeMatch[3]?.toUpperCase();
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      const retryAt = new Date();
+      retryAt.setHours(hours, minutes, 0, 0);
+      if (retryAt.getTime() <= now) retryAt.setDate(retryAt.getDate() + 1);
+      return { detected: true, type: 'session_limit', retryAt, isLongWait: true };
+    }
+    return { detected: true, type: 'session_limit', retryAt: new Date(now + defaultMs), isLongWait: true };
+  }
+
+  // 529 overloaded / temporarily limiting（短延迟）
+  if (/\b529\b|overloaded|temporarily\s+limiting/i.test(error)) {
+    return {
+      detected: true,
+      type: /overloaded/i.test(error) ? 'overloaded' : 'temporary',
+      retryAt: new Date(now + shortMs),
+      isLongWait: false,
+    };
+  }
+
+  // 429 rate limit（使用默认周期）
+  if (/\b429\b|rate\s*limit/i.test(error)) {
+    return { detected: true, type: 'api_rate_limit', retryAt: new Date(now + defaultMs), isLongWait: true };
+  }
+
+  return { detected: false, type: null, retryAt: null, isLongWait: false };
+}
+
+function rateLimitTypeLabel(type: string): string {
+  switch (type) {
+    case 'session_limit': return '会话额度限制';
+    case 'api_rate_limit': return 'API 速率限制';
+    case 'overloaded': return '服务器过载';
+    case 'temporary': return '临时限流';
+    default: return '限流';
+  }
+}
+
+function formatTimeHHMM(date: Date): string {
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+}
+
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '即将';
+  const totalSec = Math.ceil(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  if (hours > 0) return `${hours}小时${minutes > 0 ? `${minutes}分钟` : ''}`;
+  if (minutes > 0) return `${minutes}分钟${seconds > 0 ? `${seconds}秒` : ''}`;
+  return `${seconds}秒`;
 }
 
 /**
@@ -301,6 +412,8 @@ export function runAITask(
           log.info(`[AITask] onComplete fired: settled=${settled}, success=${result.success}, platform=${ctx.platform}, taskKey=${ctx.taskKey}`);
           if (settled) return;
           settled = true;
+          // 成功完成 → 清除 autopilot 重试计数
+          autopilotRetryCount.delete(ctx.userId);
           if (pendingUpdate) {
             clearTimeout(pendingUpdate);
             pendingUpdate = null;
@@ -355,6 +468,96 @@ export function runAITask(
           }
           settled = true;
           log.error(`Task error for user ${ctx.userId}: ${error}`);
+
+          // ── Autopilot 拦截 ──
+          const apConfig = config.autopilot;
+          const currentRetries = autopilotRetryCount.get(ctx.userId) ?? 0;
+
+          if (
+            apConfig?.enabled &&
+            deps.autopilot &&
+            isUsageLimitError(error) &&
+            currentRetries < apConfig.maxRetries
+          ) {
+            const rateInfo = classifyRateLimit(error, config);
+
+            if (rateInfo.detected && rateInfo.retryAt) {
+              const retryCount = currentRetries + 1;
+              autopilotRetryCount.set(ctx.userId, retryCount);
+
+              // 记录等待状态
+              pendingAutopilotTimers.set(ctx.userId, {
+                retryAt: rateInfo.retryAt,
+                type: rateInfo.type!,
+                retryCount,
+              });
+
+              // 通知用户
+              const typeLabel = rateLimitTypeLabel(rateInfo.type!);
+              const timeStr = formatTimeHHMM(rateInfo.retryAt);
+              const remaining = formatDuration(rateInfo.retryAt.getTime() - Date.now());
+              const statusMsg = `⏳ 检测到${typeLabel}，将在 ${timeStr}（${remaining}后）自动恢复 (${retryCount}/${apConfig.maxRetries})`;
+              log.info(`[Autopilot] ${statusMsg} for user ${ctx.userId}`);
+
+              try {
+                await platformAdapter.sendError(
+                  hadSessionInvalid
+                    ? '当前 Claude 会话已失效，已自动执行 /new 重置会话，请重新发送刚才的问题。'
+                    : `${error}\n\n${statusMsg}`
+                );
+              } catch (err) {
+                log.error('Failed to send autopilot status:', err);
+              }
+
+              cleanup();
+              resolve();
+
+              // 异步等待 → 恢复（不阻塞 Promise 解决）
+              const retryAt = rateInfo.retryAt;
+              const delayMs = Math.max(retryAt.getTime() - Date.now(), 0);
+              log.info(`[Autopilot] Scheduling retry in ${delayMs}ms for user ${ctx.userId}`);
+
+              // 分段定时器（setTimeout 最大 ~24.8 天）
+              const MAX_SEGMENT = 2_147_483_647; // 2^31 - 1
+              const scheduleRetry = (remaining: number) => {
+                if (remaining <= 0) {
+                  // 定时器到期 → 清除状态 → 发送恢复消息
+                  pendingAutopilotTimers.delete(ctx.userId);
+                  log.info(`[Autopilot] Timer fired for user ${ctx.userId}, sending "${apConfig.autoResumePrompt}"`);
+                  try {
+                    platformAdapter.streamUpdate('', `🔄 限额已恢复，正在自动重试... (${retryCount})`);
+                  } catch {
+                    /* ignore */
+                  }
+                  deps.autopilot!.onAutoPilotContinue(apConfig.autoResumePrompt);
+                  return;
+                }
+                const segment = Math.min(remaining, MAX_SEGMENT);
+                const timer = setTimeout(() => scheduleRetry(remaining - segment), segment);
+                if (typeof timer === 'object' && 'unref' in timer) timer.unref();
+
+                // 如果任务被 abort（/new、cancelUser），取消待执行的定时器
+                if (ctx.signal) {
+                  if (ctx.signal.aborted) {
+                    clearTimeout(timer);
+                    pendingAutopilotTimers.delete(ctx.userId);
+                    return;
+                  }
+                  ctx.signal.addEventListener('abort', () => {
+                    clearTimeout(timer);
+                    pendingAutopilotTimers.delete(ctx.userId);
+                    log.info(`[Autopilot] Timer cancelled by abort for user ${ctx.userId}`);
+                  }, { once: true });
+                }
+              };
+              scheduleRetry(delayMs);
+              return;
+            }
+          }
+
+          // ── 非限流错误或 autopilot 未启用/耗尽重试 ──
+          autopilotRetryCount.delete(ctx.userId);
+
           if (isUsageLimitError(error)) {
             // Usage limit errors: keep session for all tools (user can retry later)
             log.warn(`Keeping ${aiCommand} session for user ${ctx.userId} after usage limit error`);
@@ -364,6 +567,7 @@ export function runAITask(
             else sessionManager.clearActiveToolSession(ctx.userId, aiCommand);
             log.warn(`Session reset for user ${ctx.userId} due to ${aiCommand} task error`);
           }
+
           const friendlyError = hadSessionInvalid
             ? '当前 Claude 会话已失效，已自动执行 /new 重置会话，请重新发送刚才的问题。'
             : error;
