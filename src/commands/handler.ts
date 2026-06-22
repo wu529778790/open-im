@@ -2,6 +2,7 @@ import { resolvePlatformAiCommand, type Config, type Platform } from '../config.
 import type { SessionManager } from '../session/session-manager.js';
 import type { RequestQueue } from '../queue/request-queue.js';
 import { escapePathForMarkdown } from '../shared/utils.js';
+import { getAutopilotPendingStatus } from '../shared/ai-task.js';
 import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
 import { ClaudeSDKAdapter } from '../adapters/claude-sdk-adapter.js';
@@ -127,6 +128,7 @@ export class CommandHandler {
       if (t === '/context') return this.handleContext(chatId, userId, platform);
       if (t === '/pwd') return this.handlePwd(chatId, userId);
       if (t === '/status') return this.handleStatus(chatId, userId, platform);
+      if (t === '/autopilot') return this.handleAutopilotStatus(chatId, userId);
 
       // 快捷命令 — 直接发送预设 prompt 给 AI
       if (t === '/git commit') return this.handleQuickCommand(chatId, userId, 'git commit -m "AI generated commit"', platform);
@@ -156,6 +158,38 @@ export class CommandHandler {
     return runBody();
   }
 
+  private async handleAutopilotStatus(chatId: string, userId: string): Promise<boolean> {
+    const ap = this.deps.config.autopilot;
+    const lines: string[] = [
+      '🤖 限流自动恢复 (Autopilot)',
+      '',
+      `状态: ${ap.enabled ? '✅ 已启用' : '❌ 已禁用'}`,
+      `最大重试: ${ap.maxRetries} 次`,
+      `默认等待: ${ap.defaultIntervalHours} 小时`,
+      `短延迟: ${ap.shortRetrySeconds} 秒`,
+      `恢复提示: "${ap.autoResumePrompt}"`,
+    ];
+
+    const pending = getAutopilotPendingStatus(userId);
+    if (pending) {
+      const remaining = Math.max(pending.retryAt.getTime() - Date.now(), 0);
+      const hours = Math.floor(remaining / 3600000);
+      const minutes = Math.floor((remaining % 3600000) / 60000);
+      lines.push('');
+      lines.push('⏳ 当前等待中:');
+      lines.push(`  类型: ${pending.type}`);
+      lines.push(`  恢复时间: ${pending.retryAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`);
+      lines.push(`  剩余: ${hours > 0 ? `${hours}小时` : ''}${minutes}分钟`);
+      lines.push(`  重试次数: ${pending.retryCount}/${ap.maxRetries}`);
+    } else {
+      lines.push('');
+      lines.push('当前无等待中的限流恢复任务。');
+    }
+
+    await this.replySender().sendTextReply(chatId, lines.join('\n'));
+    return true;
+  }
+
   private async handleHelp(chatId: string): Promise<boolean> {
     const help = [
       '📋 可用命令:',
@@ -174,6 +208,7 @@ export class CommandHandler {
       '/status - 显示状态',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
+      '/autopilot - 查看限流自动恢复状态',
       '',
       '⚡ 快捷命令:',
       '/git commit - 提交代码',
