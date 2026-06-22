@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
-import type { AiCommand, WebConfigPayload } from "../types.js";
+import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
+import { PLATFORM_EMOJI } from "../platform-emoji.js";
 import { AiCommandPicker } from "./AiCommandPicker.js";
 
 interface PlatformDef {
@@ -58,16 +59,24 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
 
   return (
     <div className={`platform-card ${disabledVisual ? "disabled" : ""} ${enabled ? "enabled" : ""} ${expanded ? "expanded" : ""}`}>
-      <div className="platform-card-head" style={{ cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
-        <span className="platform-card-name">
-          <span className="dot" />
-          {def.label}
+      <div className="platform-card-head" onClick={() => setExpanded(!expanded)}>
+        <div className="platform-card-meta">
+          <div className="platform-card-icon">{PLATFORM_EMOJI[def.key as PlatformKey]}</div>
+          <div className="platform-card-title-block">
+            <div className="platform-card-name">{def.label}</div>
+            {sk && <div className="platform-card-desc">{t(sk)}</div>}
+          </div>
+        </div>
+        <div className="platform-card-right">
+          <span className={`platform-status-badge ${enabled ? "on" : "off"}`}>
+            {enabled ? t("platformStatusOn") : t("platformStatusOff")}
+          </span>
           <span className="platform-card-chevron">{expanded ? "▾" : "▸"}</span>
-        </span>
-        <label className="toggle" onClick={(e) => e.stopPropagation()}>
-          <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
-          <span className="toggle-track" />
-        </label>
+          <label className="toggle" onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
+            <span className="toggle-track" />
+          </label>
+        </div>
       </div>
       {expanded && (<div className="platform-card-body">
         {sk && <p className="platform-card-hint">{t(sk)}</p>}
