@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, WebConfigPayload } from "../types.js";
-import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
+import { AiCommandPicker } from "./AiCommandPicker.js";
 
 interface PlatformDef {
   key: string;
@@ -48,13 +48,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             <textarea className="form-textarea mono" value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />
             <div className="form-hint">{t("commaSeparatedIds")}</div>
           </>
-        ) : f === "aiCommand" ? (
-          <select className="form-select" value={String((values as Record<string, string>)[f] || "claude")} onChange={(e) => onChange({ aiCommand: e.target.value as AiCommand })}>
-            {AI_TOOL_DEFINITIONS.map((tool) => (
-              <option key={tool.key} value={tool.key}>{tool.label}</option>
-            ))}
-          </select>
-        ) : (
+        ) : f === "aiCommand" ? null : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />
         )}
         {tipK && <div className="field-tip" dangerouslySetInnerHTML={{ __html: html(tipK) }} />}
@@ -77,6 +71,14 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
       </div>
       {expanded && (<div className="platform-card-body">
         {sk && <p className="platform-card-hint">{t(sk)}</p>}
+
+        <AiCommandPicker
+          value={String((values as Record<string, string>).aiCommand || "claude") as AiCommand}
+          onChange={(v) => onChange({ aiCommand: v })}
+          t={t as (k: string) => string}
+        />
+        <hr className="platform-card-divider" />
+
         {def.fields.map(field)}
 
         {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: html(hk) }} />}
