@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS } from "../constants.js";
 import { PLATFORM_FIELD_LABEL, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
 import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
-import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
+import { AiCommandPicker } from "./AiCommandPicker.js";
 import { emptyPayload } from "../empty-payload.js";
 
 /* ─── helpers ─── */
@@ -137,9 +137,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
         <label className="form-label">{lk ? t(lk) : f}</label>
         {f === "allowedUserIds" ? (
           <><textarea className="form-textarea mono" value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} /><div className="form-hint">{t("commaSeparatedIds")}</div></>
-        ) : f === "aiCommand" ? (
-          <select className="form-select" value={String((v as Record<string, string>)[f] || "claude")} onChange={(e) => upP(pk, { aiCommand: e.target.value as AiCommand } as Partial<typeof v>)}>{AI_TOOL_DEFINITIONS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
-        ) : (
+        ) : f === "aiCommand" ? null : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} />
         )}
         {tk && <div className="field-tip" dangerouslySetInnerHTML={{ __html: html(tk) }} />}
@@ -243,6 +241,14 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
                   {isOpen && (
                     <div className="wizard-platform-body">
                       <p className="form-hint">{t(PLATFORM_SUMMARY_KEY[pk as keyof typeof PLATFORM_SUMMARY_KEY] || "")}</p>
+
+                      <AiCommandPicker
+                        value={String((payload.platforms[pk] as Record<string, string>).aiCommand || "claude") as AiCommand}
+                        onChange={(val) => upP(pk, { aiCommand: val } as Partial<WebConfigPayload["platforms"][typeof pk]>)}
+                        t={t as (k: string) => string}
+                      />
+                      <hr className="platform-card-divider" />
+
                       {def.fields.map(f => field(def, f, pk))}
                       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                         <button type="button" className="btn btn-s btn-sm" disabled={testBusy === pk} onClick={() => void testPlatform(pk)}>
