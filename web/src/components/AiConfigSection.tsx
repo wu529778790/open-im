@@ -8,20 +8,23 @@ interface Props {
   t: (k: string) => string;
   html: (k: string) => string;
   forwardRef?: React.RefObject<HTMLElement | null>;
+  hideHeading?: boolean;
 }
 
-export function AiConfigSection({ ai, onUpdate, t, html, forwardRef }: Props) {
+export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading = false }: Props) {
   // tab 列表从注册表派生;此前只硬编码了 claude/codex/codebuddy,opencode 无配置入口。
   const [tab, setTab] = useState<AiCommand>("claude");
 
   return (
     <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
-      <div className="section-head">
-        <div>
-          <h2 className="section-title">{t("aiTitle")}</h2>
-          <p className="section-desc">{t("aiHint")}</p>
+      {!hideHeading && (
+        <div className="section-head">
+          <div>
+            <h2 className="section-title">{t("aiTitle")}</h2>
+            <p className="section-desc">{t("aiHint")}</p>
+          </div>
         </div>
-      </div>
+      )}
       <div className="card">
         <div className="card-head">
           <div className="tabs">

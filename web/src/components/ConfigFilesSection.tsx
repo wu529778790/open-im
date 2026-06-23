@@ -17,6 +17,7 @@ interface Props {
   setMessage: (m: { text: string; type: "success" | "error" | "" }) => void;
   t: (k: string) => string;
   forwardRef?: React.RefObject<HTMLElement | null>;
+  hideHeading?: boolean;
 }
 
 function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
@@ -65,16 +66,18 @@ export function ConfigFilesSection({
   jsonValidation,
   onSaveConfig, onSaveClaude, onSaveCodex,
   onFormat, onReset,
-  meta, setMessage, t, forwardRef,
+  meta, setMessage, t, forwardRef, hideHeading = false,
 }: Props) {
   return (
     <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
-      <div className="section-head">
-        <div>
-          <h2 className="section-title">{t("configFilesTitle")}</h2>
-          <p className="section-desc">{t("configFilesHint")}</p>
+      {!hideHeading && (
+        <div className="section-head">
+          <div>
+            <h2 className="section-title">{t("configFilesTitle")}</h2>
+            <p className="section-desc">{t("configFilesHint")}</p>
+          </div>
         </div>
-      </div>
+      )}
       <div className="config-stack">
         <JsonCard title={t("configJson")} hint={t("openImConfigCardHint")} json={configJson} setJson={setConfigJson} onSave={onSaveConfig} formatBtn resetBtn onFormat={onFormat} onReset={onReset} validation={jsonValidation} setMessage={setMessage} t={t} />
         <JsonCard title={t("claudeSettingsLabel")} hint={t("claudeSettingsCardHint")} json={claudeSettingsJson} setJson={setClaudeSettingsJson} onSave={onSaveClaude} setMessage={setMessage} t={t} />

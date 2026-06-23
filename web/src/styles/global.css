@@ -118,53 +118,165 @@ body {
   margin: 0 auto;
 }
 
-/* ─── Header ─── */
-.header {
+/* ─── App Header ─── */
+.app-header {
   position: sticky;
   top: 0;
   z-index: 15;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
+}
+.app-header-main,
+.app-header-context {
   padding: 0 40px;
-  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
-.header-left {
+.app-header-main {
+  min-height: 56px;
+  border-bottom: 1px solid var(--c-border);
+}
+.app-header-context {
+  min-height: 64px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.app-header-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
-.header-right {
+.app-header-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-m);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-alt);
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  color: var(--c-accent);
 }
-.header-status {
-  font-size: 13px;
+.app-header-logo svg {
+  width: 16px;
+  height: 16px;
+}
+.app-header-brand-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+  letter-spacing: -.01em;
+}
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.app-nav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text-2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all var(--fast);
+}
+.app-nav-item svg {
+  width: 14px;
+  height: 14px;
+}
+.app-nav-item:hover {
+  background: var(--c-surface-alt);
+  color: var(--c-text);
+}
+.app-nav-item.active {
+  background: var(--c-accent-bg);
+  border-color: var(--c-accent-bdr);
+  color: var(--c-accent);
+}
+.app-header-spacer {
+  flex: 1;
+}
+.app-header-status {
+  font-size: 12px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 0 10px;
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-alt);
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+.app-header-status.running {
+  border-color: var(--c-ok-bdr);
+  background: var(--c-ok-bg);
+  color: var(--c-ok);
+}
+.app-header-status.idle {
   color: var(--c-text-2);
 }
-.header-status .dot {
+.app-header-status .dot {
   width: 8px; height: 8px;
   border-radius: 50%;
   display: inline-block;
 }
-.header-status .dot.running {
+.app-header-status .dot.running {
   background: var(--c-ok);
   box-shadow: 0 0 12px var(--c-ok);
   animation: pulse 2s infinite;
 }
-.header-status .dot.idle { background: var(--c-text-3); }
-.header-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--c-border);
-  margin: 0 4px;
+.app-header-status .dot.idle { background: var(--c-text-3); }
+.app-header-status-meta {
+  color: inherit;
+  opacity: .8;
+}
+.app-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.app-context-copy {
+  min-width: 0;
+}
+.app-context-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--c-text);
+  letter-spacing: -.02em;
+}
+.app-context-hint {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--c-text-3);
+  line-height: 1.5;
+  max-width: 72ch;
+}
+.app-context-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {
@@ -1269,8 +1381,33 @@ body {
 }
 @media (max-width: 768px) {
   .content { padding: 20px 16px 40px; }
-  .header { padding: 0 16px; }
-  .header-toolbar { padding: 10px 16px; }
+  .app-header-main,
+  .app-header-context { padding-left: 16px; padding-right: 16px; }
+  .app-header-main {
+    min-height: auto;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .app-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .app-header-spacer {
+    display: none;
+  }
+  .app-header-context {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .app-context-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
   .platform-grid { grid-template-columns: 1fr; }
   .platform-card-head {
     align-items: flex-start;

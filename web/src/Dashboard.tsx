@@ -9,7 +9,9 @@ import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
 import { PlatformCard } from "./components/PlatformCard.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
+import { AiConfigSection } from "./components/AiConfigSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
+import type { DashboardNavId } from "./components/dashboard-nav.js";
 
 function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
 function pretty(raw: string): string { return JSON.stringify(JSON.parse(raw), null, 2) + "\n"; }
@@ -41,6 +43,7 @@ export function Dashboard() {
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
   const [busy, setBusy] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [activeNav, setActiveNav] = useState<DashboardNavId>("overview");
   const [health, setHealth] = useState<Record<string, unknown> | null>(null);
   const [svc, setSvc] = useState<{ running: boolean; pid?: number }>({ running: false });
   const [jv, setJv] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -141,10 +144,29 @@ export function Dashboard() {
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
   const onWizardDone = async () => { setShowWizard(false); try { const d = (await R("/api/config")) as ConfigApiResponse; setPl(coerce(d.payload)); setMeta({ configPath: d.meta.configPath }); await Promise.all([refreshSvc(), refreshH()]); } catch {} };
+  const sectionMeta: Record<DashboardNavId, { title: string; hint: string; actions: boolean }> = {
+    overview: { title: t("dashboardTitle"), hint: t("dashboardSubtitleFull"), actions: false },
+    platforms: { title: t("platformsTitle"), hint: t("platformsHint"), actions: true },
+    files: { title: t("configFilesTitle"), hint: t("configFilesHint"), actions: true },
+    ai: { title: t("aiTitle"), hint: t("aiHint"), actions: true },
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--c-bg)" }}>
-      <Header toggleDark={toggleDark} serviceStatus={svc} busy={busy} onValidate={() => void onValidate()} onSave={() => void onSave()} onToggleService={() => void onToggle()} t={t} />
+      <Header
+        toggleDark={toggleDark}
+        serviceStatus={svc}
+        busy={busy}
+        onValidate={() => void onValidate()}
+        onSave={() => void onSave()}
+        onToggleService={() => void onToggle()}
+        activeNav={activeNav}
+        onNavigate={setActiveNav}
+        sectionTitle={sectionMeta[activeNav].title}
+        sectionHint={sectionMeta[activeNav].hint}
+        showPrimaryActions={sectionMeta[activeNav].actions}
+        t={t}
+      />
 
       <div className="content">
         {msg.text && <div className={`flash msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`}>{msg.text}</div>}
@@ -153,21 +175,51 @@ export function Dashboard() {
           <SetupWizard request={R} t={t} html={html} onComplete={() => void onWizardDone()} initialPayload={pl} />
         ) : (
           <>
-            <OverviewStats health={health} serviceStatus={svc} t={t} />
+            {activeNav === "overview" && (
+              <OverviewStats health={health} serviceStatus={svc} t={t} />
+            )}
 
-            <section className="section">
-              <div className="section-head">
-                <div><h2 className="section-title">{t("platformsTitle")}</h2><p className="section-desc">{t("platformsHint")}</p></div>
-              </div>
-              <div className="platform-grid">
-                {PLATFORM_DEFINITIONS.map((def) => {
-                  const pk = def.key as PlatformKey;
-                  return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={false} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
-                })}
-              </div>
-            </section>
+            {activeNav === "platforms" && (
+              <section className="section">
+                <div className="platform-grid">
+                  {PLATFORM_DEFINITIONS.map((def) => {
+                    const pk = def.key as PlatformKey;
+                    return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={false} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
+                  })}
+                </div>
+              </section>
+            )}
 
-            <ConfigFilesSection configJson={cfgJ} setConfigJson={setCfgJ} claudeSettingsJson={claudeJ} setClaudeSettingsJson={setClaudeJ} codexSettingsJson={codexJ} setCodexSettingsJson={setCodexJ} jsonValidation={jv} onSaveConfig={saveCfg} onSaveClaude={saveClaude} onSaveCodex={saveCodex} onFormat={fmtJson} onReset={resetJson} meta={meta} setMessage={setMsg} t={t} />
+            {activeNav === "files" && (
+              <ConfigFilesSection
+                configJson={cfgJ}
+                setConfigJson={setCfgJ}
+                claudeSettingsJson={claudeJ}
+                setClaudeSettingsJson={setClaudeJ}
+                codexSettingsJson={codexJ}
+                setCodexSettingsJson={setCodexJ}
+                jsonValidation={jv}
+                onSaveConfig={saveCfg}
+                onSaveClaude={saveClaude}
+                onSaveCodex={saveCodex}
+                onFormat={fmtJson}
+                onReset={resetJson}
+                meta={meta}
+                setMessage={setMsg}
+                t={t}
+                hideHeading
+              />
+            )}
+
+            {activeNav === "ai" && (
+              <AiConfigSection
+                ai={pl.ai}
+                onUpdate={(patch) => setPl((prev) => ({ ...prev, ai: { ...prev.ai, ...patch } }))}
+                t={t}
+                html={html}
+                hideHeading
+              />
+            )}
           </>
         )}
       </div>

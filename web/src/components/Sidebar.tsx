@@ -1,18 +1,11 @@
-import { IcoAi, IcoFiles, IcoLogo, IcoOverview, IcoPlatforms, IcoWizard } from "./icons.js";
+import { IcoLogo } from "./icons.js";
+import { DASHBOARD_NAV_ITEMS, type DashboardNavId } from "./dashboard-nav.js";
 
 interface Props {
   activeNav: string;
   onNavigate: (id: string) => void;
   t: (k: string) => string;
 }
-
-const NAV_ITEMS = [
-  { id: "overview",   icon: IcoOverview,  key: "dashboardTitle" },
-  { id: "wizard",     icon: IcoWizard,    key: "navSetupWizard" },
-  { id: "platforms",  icon: IcoPlatforms, key: "platformsTitle"  },
-  { id: "files",      icon: IcoFiles,     key: "navConfigFiles"  },
-  { id: "ai",         icon: IcoAi,        key: "aiTitle"         },
-] as const;
 
 export function Sidebar({ activeNav, onNavigate, t }: Props) {
   return (
@@ -23,12 +16,12 @@ export function Sidebar({ activeNav, onNavigate, t }: Props) {
       </div>
       <nav className="sidebar-nav">
         <div className="sidebar-section-label">Management</div>
-        {NAV_ITEMS.map(item => (
+        {DASHBOARD_NAV_ITEMS.map(item => (
           <button
             key={item.id}
             type="button"
             className={`nav-item ${activeNav === item.id ? "active" : ""}`}
-            onClick={() => onNavigate(item.id)}
+            onClick={() => onNavigate(item.id as DashboardNavId)}
           >
             <item.icon />
             <span>{t(item.key)}</span>
