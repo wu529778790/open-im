@@ -3,8 +3,8 @@
  */
 
 import { runCodex } from "../codex/cli-runner.js";
+import { isSessionInvalidMessage } from "../shared/session-invalid-detector.js";
 import type {
-  ParsedResult,
   RunCallbacks,
   RunHandle,
   RunOptions,
@@ -41,25 +41,10 @@ export class CodexAdapter implements ToolAdapter {
         onText: callbacks.onText,
         onThinking: callbacks.onThinking,
         onToolUse: callbacks.onToolUse,
-        onComplete: (raw) => {
-          const result: ParsedResult = {
-            success: raw.success,
-            result: raw.result,
-            accumulated: raw.accumulated,
-            cost: raw.cost,
-            durationMs: raw.durationMs,
-            model: raw.model,
-            numTurns: raw.numTurns,
-            toolStats: raw.toolStats,
-          };
-          callbacks.onComplete(result);
-        },
+        onComplete: callbacks.onComplete,
         onError: (err) => {
           const msg = typeof err === "string" ? err : String(err);
-          const friendly =
-            msg.includes("No session found") ||
-                  msg.includes("No conversation found") ||
-                  msg.includes("Unable to find session")
+          const friendly = isSessionInvalidMessage(msg)
                 ? "Codex 会话已失效，旧 session 已清理。请直接重试当前请求。"
                 : msg;
           callbacks.onError(friendly);

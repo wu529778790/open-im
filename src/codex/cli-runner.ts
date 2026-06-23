@@ -7,8 +7,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createLogger } from '../logger.js';
-import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
 import { killProcessTree, trackChild } from '../shared/process-kill.js';
+import { isSessionInvalidMessage } from '../shared/session-invalid-detector.js';
+import {
+  createStderrBuffer,
+  appendStderr,
+  reconstructStderr,
+  createFinalizeGate,
+  isFinalizeReady,
+  clearWallClockTimeout,
+  buildBaseSpawnOptions,
+} from '../shared/cli-runner-base.js';
+import type { RunCallbacks, RunHandle } from '../adapters/tool-adapter.interface.js';
 
 const log = createLogger('CodexCli');
 const windowsCodexLaunchCache = new Map<string, { command: string; args: string[] } | null>();
@@ -24,25 +34,6 @@ const SUPPORTED_IMAGE_EXTENSIONS = new Set([
   '.avif',
 ]);
 
-export interface CodexRunCallbacks {
-  onText: (accumulated: string) => void;
-  onThinking?: (accumulated: string) => void;
-  onToolUse?: (toolName: string, toolInput?: Record<string, unknown>) => void;
-  onComplete: (result: {
-    success: boolean;
-    result: string;
-    accumulated: string;
-    cost: number;
-    durationMs: number;
-    model?: string;
-    numTurns: number;
-    toolStats: Record<string, number>;
-  }) => void;
-  onError: (error: string) => void;
-  onSessionId?: (sessionId: string) => void;
-  onSessionInvalid?: () => void;
-}
-
 export interface CodexRunOptions {
   skipPermissions?: boolean;
   permissionMode?: 'default' | 'acceptEdits' | 'plan';
@@ -50,10 +41,6 @@ export interface CodexRunOptions {
   chatId?: string;
   hookPort?: number;
   proxy?: string;
-}
-
-export interface CodexRunHandle {
-  abort: () => void;
 }
 
 function parseCodexEvent(line: string): Record<string, unknown> | null {
@@ -219,25 +206,21 @@ export function runCodex(
   prompt: string,
   sessionId: string | undefined,
   workDir: string,
-  callbacks: CodexRunCallbacks,
+  callbacks: RunCallbacks,
   options?: CodexRunOptions,
-): CodexRunHandle {
+): RunHandle {
   const args = buildCodexArgs(prompt, sessionId, workDir, options);
 
-  const env = processEnvForNonClaudeCliChild();
-  if (options?.chatId) env.CC_IM_CHAT_ID = options.chatId;
-  if (options?.hookPort) env.CC_IM_HOOK_PORT = String(options.hookPort);
+  const extraEnv: Record<string, string | undefined> = {};
+  if (options?.chatId) extraEnv.CC_IM_CHAT_ID = options.chatId;
+  if (options?.hookPort) extraEnv.CC_IM_HOOK_PORT = String(options.hookPort);
   if (options?.proxy) {
-    env.HTTPS_PROXY = options.proxy;
-    env.HTTP_PROXY = options.proxy;
-    env.https_proxy = options.proxy;
-    env.http_proxy = options.proxy;
-    env.ALL_PROXY = options.proxy;
-    env.all_proxy = options.proxy;
-  }
-  if (process.platform === 'win32') {
-    env.LANG = env.LANG || 'C.UTF-8';
-    env.LC_ALL = env.LC_ALL || 'C.UTF-8';
+    extraEnv.HTTPS_PROXY = options.proxy;
+    extraEnv.HTTP_PROXY = options.proxy;
+    extraEnv.https_proxy = options.proxy;
+    extraEnv.http_proxy = options.proxy;
+    extraEnv.ALL_PROXY = options.proxy;
+    extraEnv.all_proxy = options.proxy;
   }
 
   const argsForLog = args.join(' ');
@@ -263,14 +246,7 @@ export function runCodex(
         ]
       : args;
 
-  const child = spawn(spawnCmd, spawnArgs, {
-    cwd: workDir,
-    // Unix 上放入独立进程组，使 abort/关停能用 process.kill(-pid) 杀掉整棵子树（含 MCP/shell 孙进程）
-    detached: process.platform !== 'win32',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env,
-    windowsHide: process.platform === 'win32',
-  });
+  const child = spawn(spawnCmd, spawnArgs, buildBaseSpawnOptions(workDir, ['pipe', 'pipe', 'pipe'], extraEnv));
   trackChild(child);
 
   child.stdin?.write(prompt);
@@ -284,27 +260,11 @@ export function runCodex(
 
   const rl = createInterface({ input: child.stdout! });
 
-  const MAX_STDERR_HEAD = 4 * 1024;
-  const MAX_STDERR_TAIL = 6 * 1024;
-  let stderrHead = '';
-  let stderrTail = '';
-  let stderrTotal = 0;
-  let stderrHeadFull = false;
+  const stderrBuf = createStderrBuffer();
 
   child.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
-    stderrTotal += text.length;
-    if (!stderrHeadFull) {
-      const room = MAX_STDERR_HEAD - stderrHead.length;
-      if (room > 0) {
-        stderrHead += text.slice(0, room);
-        if (stderrHead.length >= MAX_STDERR_HEAD) stderrHeadFull = true;
-      }
-    }
-    stderrTail += text;
-    if (stderrTail.length > MAX_STDERR_TAIL) {
-      stderrTail = stderrTail.slice(-MAX_STDERR_TAIL);
-    }
+    appendStderr(stderrBuf, text);
     log.debug(`[stderr] ${text.trimEnd()}`);
   });
 
@@ -407,38 +367,18 @@ export function runCodex(
   });
 
   let exitCode: number | null = null;
-  let rlClosed = false;
-  let childClosed = false;
+  const gate = createFinalizeGate();
   let cliTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   const finalize = () => {
-    if (cliTimeoutHandle) {
-      clearTimeout(cliTimeoutHandle);
-      cliTimeoutHandle = null;
-    }
-    if (!rlClosed || !childClosed) return;
+    clearWallClockTimeout(cliTimeoutHandle);
+    cliTimeoutHandle = null;
+    if (!isFinalizeReady(gate)) return;
     if (completed) return;
 
     if (exitCode !== null && exitCode !== 0) {
-      let errMsg = '';
-      if (stderrTotal > 0) {
-        if (!stderrHeadFull) {
-          errMsg = stderrHead;
-        } else if (stderrTotal <= MAX_STDERR_HEAD + MAX_STDERR_TAIL) {
-          errMsg = stderrHead + stderrTail.slice(stderrTail.length - (stderrTotal - MAX_STDERR_HEAD));
-        } else {
-          errMsg =
-            stderrHead +
-            `\n\n... (omitted ${stderrTotal - MAX_STDERR_HEAD - MAX_STDERR_TAIL} bytes) ...\n\n` +
-            stderrTail;
-        }
-      }
-      if (
-        sessionId &&
-        (errMsg.includes('No session found') ||
-          errMsg.includes('No conversation found') ||
-          errMsg.includes('Unable to find session'))
-      ) {
+      const errMsg = reconstructStderr(stderrBuf);
+      if (sessionId && isSessionInvalidMessage(errMsg)) {
         callbacks.onSessionInvalid?.();
       }
       callbacks.onError(errMsg || `Codex CLI exited with code ${exitCode}`);
@@ -459,12 +399,12 @@ export function runCodex(
   child.on('close', (code) => {
     log.info(`Codex CLI closed: exitCode=${code}, pid=${child.pid}`);
     exitCode = code;
-    childClosed = true;
+    gate.childClosed = true;
     finalize();
   });
 
   rl.on('close', () => {
-    rlClosed = true;
+    gate.rlClosed = true;
     finalize();
   });
 
@@ -475,7 +415,7 @@ export function runCodex(
       completed = true;
       callbacks.onError(`Failed to start Codex CLI: ${err.message}`);
     }
-    childClosed = true;
+    gate.childClosed = true;
     finalize();
   });
 
@@ -483,7 +423,6 @@ export function runCodex(
   const cliTimeoutMs = Number(process.env.OPEN_IM_CLI_TIMEOUT_MS) || 30 * 60 * 1000;
   cliTimeoutHandle = setTimeout(() => {
     if (completed) return;
-    log.warn(`Codex CLI 超过 ${cliTimeoutMs}ms，强制终止 (pid=${child.pid})`);
     completed = true;
     rl.close();
     killProcessTree(child);
@@ -495,10 +434,7 @@ export function runCodex(
     abort: () => {
       if (completed) return;
       completed = true;
-      if (cliTimeoutHandle) {
-        clearTimeout(cliTimeoutHandle);
-        cliTimeoutHandle = null;
-      }
+      clearWallClockTimeout(cliTimeoutHandle);
       rl.close();
       killProcessTree(child);
     },

@@ -4,40 +4,26 @@
  * OpenCode outputs plain text to stdout. Session continuation uses `-s <id>`.
  */
 
-import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { createLogger } from '../logger.js';
-import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
-import { killProcessTree, trackChild } from '../shared/process-kill.js';
+import { killProcessTree } from '../shared/process-kill.js';
+import { isSessionInvalidMessage } from '../shared/session-invalid-detector.js';
+import {
+  createStderrBuffer,
+  appendStderr,
+  reconstructStderr,
+  createFinalizeGate,
+  isFinalizeReady,
+  clearWallClockTimeout,
+  spawnCliProcess,
+} from '../shared/cli-runner-base.js';
+import type { RunCallbacks, RunHandle } from '../adapters/tool-adapter.interface.js';
 
 const log = createLogger('OpenCodeCli');
-
-export interface OpenCodeRunCallbacks {
-  onText: (accumulated: string) => void;
-  onThinking?: (accumulated: string) => void;
-  onToolUse?: (toolName: string, toolInput?: Record<string, unknown>) => void;
-  onComplete: (result: {
-    success: boolean;
-    result: string;
-    accumulated: string;
-    cost: number;
-    durationMs: number;
-    model?: string;
-    numTurns: number;
-    toolStats: Record<string, number>;
-  }) => void;
-  onError: (error: string) => void;
-  onSessionId?: (sessionId: string) => void;
-  onSessionInvalid?: () => void;
-}
 
 export interface OpenCodeRunOptions {
   skipPermissions?: boolean;
   model?: string;
-}
-
-export interface OpenCodeRunHandle {
-  abort: () => void;
 }
 
 export function buildOpenCodeArgs(
@@ -77,23 +63,14 @@ export function runOpenCode(
   prompt: string,
   sessionId: string | undefined,
   workDir: string,
-  callbacks: OpenCodeRunCallbacks,
+  callbacks: RunCallbacks,
   options?: OpenCodeRunOptions,
-): OpenCodeRunHandle {
+): RunHandle {
   const args = buildOpenCodeArgs(prompt, sessionId, workDir, options);
-
-  const env = processEnvForNonClaudeCliChild();
 
   log.info(`Spawning OpenCode: path=${cliPath}, cwd=${workDir}, session=${sessionId ?? 'new'}`);
 
-  const child = spawn(cliPath, args, {
-    cwd: workDir,
-    detached: process.platform !== 'win32',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env,
-    windowsHide: process.platform === 'win32',
-  });
-  trackChild(child);
+  const child = spawnCliProcess(cliPath, args, workDir);
 
   // Close stdin — prompt is passed as argument
   child.stdin?.end();
@@ -105,27 +82,11 @@ export function runOpenCode(
 
   const rl = createInterface({ input: child.stdout! });
 
-  const MAX_STDERR_HEAD = 4 * 1024;
-  const MAX_STDERR_TAIL = 6 * 1024;
-  let stderrHead = '';
-  let stderrTail = '';
-  let stderrTotal = 0;
-  let stderrHeadFull = false;
+  const stderrBuf = createStderrBuffer();
 
   child.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
-    stderrTotal += text.length;
-    if (!stderrHeadFull) {
-      const room = MAX_STDERR_HEAD - stderrHead.length;
-      if (room > 0) {
-        stderrHead += text.slice(0, room);
-        if (stderrHead.length >= MAX_STDERR_HEAD) stderrHeadFull = true;
-      }
-    }
-    stderrTail += text;
-    if (stderrTail.length > MAX_STDERR_TAIL) {
-      stderrTail = stderrTail.slice(-MAX_STDERR_TAIL);
-    }
+    appendStderr(stderrBuf, text);
     log.debug(`[stderr] ${text.trimEnd()}`);
   });
 
@@ -154,33 +115,18 @@ export function runOpenCode(
   });
 
   let exitCode: number | null = null;
-  let rlClosed = false;
-  let childClosed = false;
+  const gate = createFinalizeGate();
+  let cliTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   const finalize = () => {
-    if (!rlClosed || !childClosed) return;
+    clearWallClockTimeout(cliTimeoutHandle);
+    cliTimeoutHandle = null;
+    if (!isFinalizeReady(gate)) return;
     if (completed) return;
 
     if (exitCode !== null && exitCode !== 0) {
-      let errMsg = '';
-      if (stderrTotal > 0) {
-        if (!stderrHeadFull) {
-          errMsg = stderrHead;
-        } else if (stderrTotal <= MAX_STDERR_HEAD + MAX_STDERR_TAIL) {
-          errMsg = stderrHead + stderrTail.slice(stderrTail.length - (stderrTotal - MAX_STDERR_HEAD));
-        } else {
-          errMsg =
-            stderrHead +
-            `\n\n... (omitted ${stderrTotal - MAX_STDERR_HEAD - MAX_STDERR_TAIL} bytes) ...\n\n` +
-            stderrTail;
-        }
-      }
-      if (
-        sessionId &&
-        (errMsg.includes('session not found') ||
-          errMsg.includes('Session not found') ||
-          errMsg.includes('no sessions found'))
-      ) {
+      const errMsg = reconstructStderr(stderrBuf);
+      if (sessionId && isSessionInvalidMessage(errMsg)) {
         callbacks.onSessionInvalid?.();
       }
       callbacks.onError(errMsg || `OpenCode exited with code ${exitCode}`);
@@ -188,38 +134,56 @@ export function runOpenCode(
     }
 
     // Exit code 0 but no onComplete fired yet — treat accumulated text as result
-    if (!completed) {
-      completed = true;
-      callbacks.onComplete({
-        success: true,
-        result: accumulated,
-        accumulated,
-        cost: 0,
-        durationMs: Date.now() - startTime,
-        numTurns: 1,
-        toolStats,
-      });
-    }
+    completed = true;
+    callbacks.onComplete({
+      success: true,
+      result: accumulated,
+      accumulated,
+      cost: 0,
+      durationMs: Date.now() - startTime,
+      numTurns: 1,
+      toolStats,
+    });
   };
 
   rl.on('close', () => {
-    rlClosed = true;
+    gate.rlClosed = true;
     finalize();
   });
 
   child.on('close', (code) => {
     exitCode = code;
-    childClosed = true;
+    gate.childClosed = true;
     finalize();
   });
 
   child.on('error', (err) => {
     log.error('OpenCode spawn error:', err);
-    callbacks.onError(`Failed to start OpenCode: ${err.message}`);
+    if (!completed) {
+      completed = true;
+      callbacks.onError(`Failed to start OpenCode: ${err.message}`);
+    }
+    gate.childClosed = true;
+    finalize();
   });
+
+  // 墙钟超时：防止 CLI 挂死永久占用用户队列槽
+  const cliTimeoutMs = Number(process.env.OPEN_IM_CLI_TIMEOUT_MS) || 30 * 60 * 1000;
+  cliTimeoutHandle = setTimeout(() => {
+    if (completed) return;
+    completed = true;
+    rl.close();
+    killProcessTree(child);
+    callbacks.onError(`OpenCode CLI 运行超时（${Math.round(cliTimeoutMs / 1000)}s），已终止。请重试。`);
+  }, cliTimeoutMs);
+  cliTimeoutHandle.unref();
 
   return {
     abort: () => {
+      if (completed) return;
+      completed = true;
+      clearWallClockTimeout(cliTimeoutHandle);
+      rl.close();
       killProcessTree(child);
     },
   };

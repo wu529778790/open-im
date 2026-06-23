@@ -2,38 +2,17 @@ import { execFileSync, spawn } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { createLogger } from '../logger.js';
-import { processEnvForNonClaudeCliChild } from '../config/file-io.js';
 import { killProcessTree, trackChild } from '../shared/process-kill.js';
+import { isSessionInvalidMessage } from '../shared/session-invalid-detector.js';
+import { clearWallClockTimeout, buildBaseSpawnOptions } from '../shared/cli-runner-base.js';
+import type { RunCallbacks, RunHandle } from '../adapters/tool-adapter.interface.js';
 
 const log = createLogger('CodeBuddyCli');
-
-export interface CodeBuddyRunCallbacks {
-  onText: (accumulated: string) => void;
-  onThinking?: (accumulated: string) => void;
-  onToolUse?: (toolName: string, toolInput?: Record<string, unknown>) => void;
-  onComplete: (result: {
-    success: boolean;
-    result: string;
-    accumulated: string;
-    cost: number;
-    durationMs: number;
-    model?: string;
-    numTurns: number;
-    toolStats: Record<string, number>;
-  }) => void;
-  onError: (error: string) => void;
-  onSessionId?: (sessionId: string) => void;
-  onSessionInvalid?: () => void;
-}
 
 export interface CodeBuddyRunOptions {
   skipPermissions?: boolean;
   permissionMode?: 'default' | 'acceptEdits' | 'plan';
   model?: string;
-}
-
-export interface CodeBuddyRunHandle {
-  abort: () => void;
 }
 
 export function buildCodeBuddyArgs(
@@ -244,20 +223,14 @@ export function runCodeBuddy(
   prompt: string,
   sessionId: string | undefined,
   workDir: string,
-  callbacks: CodeBuddyRunCallbacks,
+  callbacks: RunCallbacks,
   options?: CodeBuddyRunOptions,
-): CodeBuddyRunHandle {
+): RunHandle {
   const normalizedCliPath = normalizeCliPath(cliPath);
   const args = buildCodeBuddyArgs(prompt, sessionId, {
     ...options,
     permissionMode: normalizePermissionMode(options?.permissionMode) as CodeBuddyRunOptions['permissionMode'],
   });
-
-  const env = processEnvForNonClaudeCliChild();
-  if (process.platform === 'win32') {
-    env.LANG = env.LANG || 'C.UTF-8';
-    env.LC_ALL = env.LC_ALL || 'C.UTF-8';
-  }
 
   const isCmd = process.platform === 'win32' && (
     /\.(cmd|bat)$/i.test(normalizedCliPath) ||
@@ -268,14 +241,7 @@ export function runCodeBuddy(
 
   log.info(`Spawning CodeBuddy CLI: path=${normalizedCliPath}, cwd=${workDir}, session=${sessionId ?? 'new'}, args=${args.join(' ')}`);
 
-  const child = spawn(spawnCmd, spawnArgs, {
-    cwd: workDir,
-    // Unix 上放入独立进程组，使 abort/关停能用 process.kill(-pid) 杀掉整棵子树（含 MCP/shell 孙进程）
-    detached: process.platform !== 'win32',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env,
-    windowsHide: process.platform === 'win32',
-  });
+  const child = spawn(spawnCmd, spawnArgs, buildBaseSpawnOptions(workDir, ['ignore', 'pipe', 'pipe']));
   trackChild(child);
 
   let cliTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -295,7 +261,7 @@ export function runCodeBuddy(
   let stderrText = '';
 
   const handleErrorText = (message: string) => {
-    if (sessionId && /No conversation found|Session not found|Invalid session|Unable to resume/i.test(message)) {
+    if (sessionId && isSessionInvalidMessage(message)) {
       callbacks.onSessionInvalid?.();
     }
     callbacks.onError(message);
@@ -403,10 +369,8 @@ export function runCodeBuddy(
   });
 
   child.on('close', (code) => {
-    if (cliTimeoutHandle) {
-      clearTimeout(cliTimeoutHandle);
-      cliTimeoutHandle = null;
-    }
+    clearWallClockTimeout(cliTimeoutHandle);
+    cliTimeoutHandle = null;
     if (completed) return;
 
     if (stdoutState.buffer.trim()) {
@@ -440,10 +404,8 @@ export function runCodeBuddy(
   });
 
   child.on('error', (err) => {
-    if (cliTimeoutHandle) {
-      clearTimeout(cliTimeoutHandle);
-      cliTimeoutHandle = null;
-    }
+    clearWallClockTimeout(cliTimeoutHandle);
+    cliTimeoutHandle = null;
     if (completed) return;
     completed = true;
     callbacks.onError(`Failed to start CodeBuddy CLI: ${err.message}`);
@@ -464,10 +426,7 @@ export function runCodeBuddy(
     abort: () => {
       if (completed) return;
       completed = true;
-      if (cliTimeoutHandle) {
-        clearTimeout(cliTimeoutHandle);
-        cliTimeoutHandle = null;
-      }
+      clearWallClockTimeout(cliTimeoutHandle);
       killProcessTree(child);
     },
   };

@@ -1,35 +1,14 @@
 import type { OpencodeClient } from '@opencode-ai/sdk/v2/client';
 import { startOpencode } from './sdk-manager.js';
 import { createLogger } from '../logger.js';
+import { isSessionInvalidMessage } from '../shared/session-invalid-detector.js';
+import type { RunCallbacks, RunHandle } from '../adapters/tool-adapter.interface.js';
 
 const log = createLogger('OpenCodeSDKRunner');
-
-export interface OpenCodeSdkRunCallbacks {
-  onText: (accumulated: string) => void;
-  onThinking?: (accumulated: string) => void;
-  onToolUse?: (toolName: string, toolInput?: Record<string, unknown>) => void;
-  onComplete: (result: {
-    success: boolean;
-    result: string;
-    accumulated: string;
-    cost: number;
-    durationMs: number;
-    model?: string;
-    numTurns: number;
-    toolStats: Record<string, number>;
-  }) => void;
-  onError: (error: string) => void;
-  onSessionId?: (sessionId: string) => void;
-  onSessionInvalid?: () => void;
-}
 
 export interface OpenCodeSdkRunOptions {
   skipPermissions?: boolean;
   model?: string;
-}
-
-export interface OpenCodeSdkRunHandle {
-  abort: () => void;
 }
 
 const sessionCache = new Map<string, string>();
@@ -46,9 +25,9 @@ export async function runOpenCodeSdk(
   prompt: string,
   sessionId: string | undefined,
   workDir: string,
-  callbacks: OpenCodeSdkRunCallbacks,
+  callbacks: RunCallbacks,
   options?: OpenCodeSdkRunOptions,
-): Promise<OpenCodeSdkRunHandle> {
+): Promise<RunHandle> {
   const client = await startOpencode();
   const abortController = new AbortController();
   const startTime = Date.now();
@@ -252,7 +231,7 @@ export async function runOpenCodeSdk(
     const msg = (err instanceof Error ? err.message : String(err));
     log.error('OpenCode SDK error:', msg);
 
-    if (/session\s*(not found|expired|corrupt)|no\s*session/i.test(msg)) {
+    if (isSessionInvalidMessage(msg)) {
       sessionCache.delete(workDir);
       callbacks.onSessionInvalid?.();
     }
