@@ -54,13 +54,37 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             <span className={`platform-status-badge ${bound ? "on" : "off"}`}>
               {bound ? t("platformBound") : t("platformUnbound")}
             </span>
-            <button
-              type="button"
-              className="btn btn-p btn-sm"
-              onClick={() => setQrOpen(true)}
-            >
-              {bound ? t("rebind") : t("configure")}
-            </button>
+            {!bound && (
+              <button
+                type="button"
+                className="btn btn-p btn-sm"
+                onClick={() => setQrOpen(true)}
+              >
+                {t("configure")}
+              </button>
+            )}
+            {bound && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-s btn-sm"
+                  onClick={() => setQrOpen(true)}
+                >
+                  编辑配置
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    if (!window.confirm("确定移除该平台的绑定配置吗？")) return;
+                    const patch: Record<string, unknown> = { [def.bindField as string]: "", enabled: false };
+                    onChange(patch);
+                  }}
+                >
+                  移除配置
+                </button>
+              </>
+            )}
           </div>
         </div>
         {request && (
