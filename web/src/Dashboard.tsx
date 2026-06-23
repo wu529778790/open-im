@@ -79,6 +79,13 @@ export function Dashboard() {
 
   useEffect(() => { const id = window.setInterval(() => { void refreshSvc(); void refreshH(); }, POLLING_INTERVAL_MS); return () => window.clearInterval(id); }, [refreshH, refreshSvc]);
 
+  useEffect(() => {
+    if (!msg.text) return;
+    const timeoutMs = msg.type === "error" ? 5200 : 3200;
+    const timer = window.setTimeout(() => setMsg({ text: "", type: "" }), timeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [msg]);
+
   const validateJson = useCallback(() => { try { JSON.parse(cfgJ); setJv({ text: t("jsonValid"), type: "success" }); } catch (e) { setJv({ text: t("jsonInvalid", { error: e instanceof Error ? e.message : String(e) }), type: "error" }); } }, [cfgJ, t]);
   useEffect(() => { validateJson(); }, [cfgJ, validateJson]);
 
@@ -169,7 +176,24 @@ export function Dashboard() {
       />
 
       <div className="content">
-        {msg.text && <div className={`flash msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`}>{msg.text}</div>}
+        {msg.text && (
+          <div className="toast-stack" aria-live="polite" aria-atomic="true">
+            <div
+              className={`toast-msg msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`}
+              role={msg.type === "error" ? "alert" : "status"}
+            >
+              <div className="toast-msg-body">{msg.text}</div>
+              <button
+                type="button"
+                className="toast-close"
+                aria-label="关闭通知"
+                onClick={() => setMsg({ text: "", type: "" })}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {showWizard ? (
           <SetupWizard request={R} t={t} html={html} onComplete={() => void onWizardDone()} initialPayload={pl} />
