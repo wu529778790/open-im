@@ -225,9 +225,17 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
         <QrBindModal
           open={qrOpen}
           onClose={() => setQrOpen(false)}
+          platform={def.key}
           onSuccess={(r) => {
-            const patch: Record<string, unknown> = { [def.bindField as string]: r.botToken, enabled: true };
-            if (r.baseUrl) patch.apiUrl = r.baseUrl;
+            const patch: Record<string, unknown> = { enabled: true };
+            if (def.key === "clawbot") {
+              if (r.botToken) patch.apiToken = r.botToken;
+              if (r.baseUrl) patch.apiUrl = r.baseUrl;
+            } else if (def.key === "workbuddy") {
+              if (r.accessToken) patch.accessToken = r.accessToken;
+              if (r.refreshToken) patch.refreshToken = r.refreshToken;
+              if (r.userId) patch.userId = r.userId;
+            }
             onChange(patch);
             onPersist?.(patch);
           }}

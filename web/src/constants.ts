@@ -79,6 +79,8 @@ export const PLATFORM_DEFINITIONS = [
     sensitiveFields: ["accessToken", "refreshToken"] as const,
     docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
     docLabel: "微信助理接入指南",
+    qrLogin: true as const,
+    bindField: "accessToken" as const,
   },
   {
     key: "clawbot" as const,

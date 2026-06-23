@@ -427,6 +427,33 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         return;
       }
 
+      if (request.method === "POST" && requestUrl.pathname === "/api/workbuddy/qr-login/start") {
+        try {
+          const { WorkBuddyOAuth } = await import("./workbuddy/oauth.js");
+          const QRCode = (await import("qrcode")).default;
+          const oauth = new WorkBuddyOAuth();
+          const { authUrl, state } = await oauth.fetchAuthState();
+          const qrcodeImage = await QRCode.toDataURL(authUrl, { width: 280, margin: 1 });
+          json(response, 200, { success: true, qrcodeImage, state, authUrl }, request);
+        } catch (error) {
+          json(response, 500, { success: false, error: toErrorMessage(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/workbuddy/qr-login/wait") {
+        try {
+          const body = await readJson<{ state: string }>(request);
+          const { WorkBuddyOAuth } = await import("./workbuddy/oauth.js");
+          const oauth = new WorkBuddyOAuth();
+          const result = await oauth.pollToken(body.state);
+          json(response, 200, { success: true, accessToken: result.accessToken, refreshToken: result.refreshToken, userId: result.userId }, request);
+        } catch (error) {
+          json(response, 500, { success: false, error: toErrorMessage(error) }, request);
+        }
+        return;
+      }
+
       if (request.method === "GET" && tryServeDashboardStatic(requestUrl, request, response, mergeCors)) {
         return;
       }

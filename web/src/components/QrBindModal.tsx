@@ -9,19 +9,19 @@ interface Props {
   onClose: () => void;
   onSuccess: (result: QrLoginResult) => void;
   request: JsonRequest;
+  platform: string;
   t: T;
 }
 
 /**
- * 扫码绑定模态框。打开时自动开始 ClawBot QR 登录流程；
+ * 扫码绑定模态框。打开时自动开始 QR 登录流程；
  * 成功后短暂展示「绑定成功」再回调 onClose；失败/过期展示「重新扫码」。
  *
- * 后端把 iLink 返回的 qrcodeUrl（HTML 中转页）编码成 base64 PNG，
- * 前端直接 <img src="data:image/png;base64,..."> 显示，无跨域问题。
+ * 后端把登录 URL 编码成 base64 PNG，前端直接 <img src> 显示，无跨域问题。
  */
-export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
+export function QrBindModal({ open, onClose, onSuccess, request, platform, t }: Props) {
   const lastResultRef = useRef<QrLoginResult | null>(null);
-  const { state, qrImg, message, start, reset } = useQrLogin(request, (r) => {
+  const { state, qrImg, message, start, reset } = useQrLogin(request, platform, (r) => {
     lastResultRef.current = r;
   });
 

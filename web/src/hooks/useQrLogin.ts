@@ -3,10 +3,8 @@ import type { JsonRequest } from "../api.js";
 
 export type QrLoginState = "idle" | "loading" | "scanning" | "success" | "error";
 
-export interface QrLoginResult {
-  botToken: string;
-  baseUrl?: string;
-}
+/** 扫码成功后的凭据，由调用方按平台自行取字段 */
+export type QrLoginResult = Record<string, string>;
 
 export interface UseQrLogin {
   state: QrLoginState;
@@ -21,14 +19,18 @@ function toMsg(e: unknown): string {
 }
 
 /**
- * ClawBot 扫码登录状态机。封装 /api/clawbot/qr-login/start + /wait。
+ * 扫码登录状态机。封装 /api/${platform}/qr-login/start + /wait。
  *
  * - start() 触发新一轮：loading → scanning → success/error
  * - reset() 中断进行中的请求并回到 idle
  * - 组件卸载时自动 abort 进行中的 /wait 长轮询
+ *
+ * start 响应取 qrcodeImage 显示；整个 start 响应原样作为 wait 请求 body
+ * 发送（后端自己取需要的字段）。wait 响应透传给 onSuccess。
  */
 export function useQrLogin(
   request: JsonRequest,
+  platform: string,
   onSuccess: (result: QrLoginResult) => void,
 ): UseQrLogin {
   const [state, setState] = useState<QrLoginState>("idle");
@@ -61,48 +63,36 @@ export function useQrLogin(
 
     (async () => {
       try {
-        const s = (await request("/api/clawbot/qr-login/start", {
+        const s = (await request(`/api/${platform}/qr-login/start`, {
           method: "POST",
-        })) as {
-          success?: boolean;
-          qrcodeImage?: string;
-          qrcodeUrl?: string;
-          qrcode?: string;
-          sessionKey?: string;
-          error?: string;
-        };
+        })) as Record<string, unknown>;
         if (runId !== runIdRef.current) return;
-        if (!s.success || !s.qrcodeImage || !s.sessionKey || !s.qrcode) {
+        if (!s.success || !s.qrcodeImage) {
           setState("error");
-          setMessage(s.error || "qrLoginFailed");
+          setMessage(String(s.error || "qrLoginFailed"));
           return;
         }
-        setQrImg(s.qrcodeImage);
+        setQrImg(String(s.qrcodeImage));
         setState("scanning");
 
-        const w = (await request("/api/clawbot/qr-login/wait", {
+        const w = (await request(`/api/${platform}/qr-login/wait`, {
           method: "POST",
-          body: JSON.stringify({
-            sessionKey: s.sessionKey,
-            qrcode: s.qrcode,
-            qrcodeUrl: s.qrcodeUrl,
-          }),
+          body: JSON.stringify(s),
           signal: controller.signal,
-        })) as {
-          success?: boolean;
-          botToken?: string;
-          baseUrl?: string;
-          message?: string;
-          error?: string;
-        };
+        })) as Record<string, unknown>;
         if (runId !== runIdRef.current) return;
-        if (w.success && w.botToken) {
+        if (w.success) {
           setState("success");
           setMessage("");
-          onSuccessRef.current({ botToken: w.botToken, baseUrl: w.baseUrl });
+          // 透传整个响应，由调用方取字段
+          const result: QrLoginResult = {};
+          for (const [k, v] of Object.entries(w)) {
+            if (typeof v === "string") result[k] = v;
+          }
+          onSuccessRef.current(result);
         } else {
           setState("error");
-          setMessage(w.message || w.error || "qrLoginFailed");
+          setMessage(String(w.message || w.error || "qrLoginFailed"));
         }
       } catch (e) {
         if (runId !== runIdRef.current) return;
@@ -111,7 +101,7 @@ export function useQrLogin(
         setMessage(toMsg(e));
       }
     })();
-  }, [request]);
+  }, [request, platform]);
 
   useEffect(() => {
     return () => {
