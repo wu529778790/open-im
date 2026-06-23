@@ -119,10 +119,24 @@ export function Dashboard() {
     try {
       await R("/api/config/save", { method: "POST", body: JSON.stringify(payload) });
       setMsg({ text: t("saveOk"), type: "success" });
+      // 配置已写盘，但运行中的 bridge 仍用旧配置。询问用户是否重启以立即生效。
+      if (svc.running && window.confirm("配置已保存。需要立即重启 bridge 以使更改生效吗？")) {
+        setBusy(true);
+        try {
+          await R("/api/service/stop", { method: "POST" });
+          await R("/api/service/start", { method: "POST" });
+          await refreshSvc();
+          setMsg({ text: "配置已保存，bridge 已重启。", type: "success" });
+        } catch (x) {
+          setMsg({ text: toMsg(x), type: "error" });
+        } finally {
+          setBusy(false);
+        }
+      }
     } catch (x) {
       setMsg({ text: toMsg(x), type: "error" });
     }
-  }, [pl, R, t]);
+  }, [pl, R, t, svc, refreshSvc]);
   const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
