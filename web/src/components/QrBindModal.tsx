@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import QRCode from "qrcode";
 import type { JsonRequest } from "../api.js";
 import { useQrLogin, type QrLoginResult } from "../hooks/useQrLogin.js";
 
@@ -15,9 +16,15 @@ interface Props {
 /**
  * 扫码绑定模态框。打开时自动开始 ClawBot QR 登录流程；
  * 成功后短暂展示「绑定成功」再回调 onClose；失败/过期展示「重新扫码」。
+ *
+ * iLink 返回的 qrcodeUrl 是一个 HTML 中转页 URL（带 X-Frame-Options，
+ * 且 Content-Type 是 text/html），既不能用 <img> 也不能 iframe。
+ * 因此用 qrcode 库把这个 URL 本身渲染成 canvas 二维码——
+ * 用户扫码后微信会打开该中转页完成绑定确认。
  */
 export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
   const lastResultRef = useRef<QrLoginResult | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { state, qrUrl, message, start, reset } = useQrLogin(request, (r) => {
     lastResultRef.current = r;
   });
@@ -31,6 +38,20 @@ export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
       reset();
     }
   }, [open, start, reset]);
+
+  // 把 qrcodeUrl 渲染成 canvas 二维码
+  useEffect(() => {
+    if (state !== "scanning" || !qrUrl || !canvasRef.current) return;
+    QRCode.toCanvas(canvasRef.current, qrUrl, { width: 220, margin: 1 }, (err) => {
+      if (err) {
+        // 渲染失败时清空 canvas
+        const ctx = canvasRef.current?.getContext("2d");
+        if (ctx && canvasRef.current) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+      }
+    });
+  }, [state, qrUrl]);
 
   // 成功后延迟回调 + 关闭
   useEffect(() => {
@@ -53,12 +74,6 @@ export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
   }, [open, onClose]);
 
   if (!open) return null;
-
-  const imgSrc = qrUrl
-    ? qrUrl.startsWith("data:") || qrUrl.startsWith("http")
-      ? qrUrl
-      : `data:image/png;base64,${qrUrl}`
-    : "";
 
   return (
     <div
@@ -85,11 +100,7 @@ export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
         {state === "scanning" && (
           <>
             <div className="qr-modal-img-wrap">
-              {imgSrc ? (
-                <img className="qr-modal-img" src={imgSrc} alt="QR" />
-              ) : (
-                <div className="qr-modal-status">{t("qrModalGenerating")}</div>
-              )}
+              <canvas ref={canvasRef} className="qr-modal-img" />
             </div>
             <div className="qr-modal-hint">{t("qrModalHint")}</div>
             <div className="qr-modal-status muted">{t("qrModalScanning")}</div>
