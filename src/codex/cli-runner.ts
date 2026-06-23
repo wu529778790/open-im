@@ -272,24 +272,29 @@ export function runCodex(
     const event = parseCodexEvent(line);
     if (!event) return;
 
-    const type = event.type as string;
-    log.debug(`[Codex event] type=${type}`);
+    // Codex CLI JSONL 格式是嵌套的：顶层 type 为 "event_msg" / "response_item"，
+    // 真正的子类型在 payload.type 里。旧版扁平格式也兼容。
+    const topType = event.type as string;
+    const payload = (event.payload as Record<string, unknown> | undefined) ?? event;
+    const type = (payload.type as string) ?? topType;
+    log.debug(`[Codex event] topType=${topType} type=${type}`);
 
-    if (type === 'thread.started') {
-      const threadId = (event.thread_id as string) ?? '';
+    // thread.started / session_meta → 拿 session ID
+    if (type === 'thread.started' || type === 'session_meta') {
+      const threadId = (payload.thread_id as string) ?? (payload.session_id as string) ?? (event.thread_id as string) ?? '';
       if (threadId) callbacks.onSessionId?.(threadId);
       return;
     }
 
     if (type === 'turn.failed') {
       completed = true;
-      const err = event.error as { message?: string } | undefined;
+      const err = (payload.error as { message?: string } | undefined) ?? (event.error as { message?: string } | undefined);
       callbacks.onError(err?.message ?? 'Codex turn failed');
       return;
     }
 
     if (type === 'error') {
-      const msg = event.message as string | undefined;
+      const msg = (payload.message as string | undefined) ?? (event.message as string | undefined);
       if (msg?.includes('Reconnecting')) {
         return;
       }
@@ -298,13 +303,13 @@ export function runCodex(
       return;
     }
 
-    if (type === 'item.started' || type === 'item.updated' || type === 'item.completed') {
-      const item = event.item as Record<string, unknown> | undefined;
-      if (!item) return;
+    // item 事件：payload 里可能有 item 字段，或者 payload 本身就是 item
+    if (topType === 'response_item' || type === 'item.started' || type === 'item.updated' || type === 'item.completed') {
+      const item = (payload.item as Record<string, unknown> | undefined) ?? payload;
+      const itemType = (item.type as string) ?? type;
 
-      const itemType = item.type as string;
-
-      if (itemType === 'reasoning' && type === 'item.completed') {
+      if (itemType === 'reasoning') {
+        // Codex 的 reasoning 可能是 encrypted_content（不可读），只在有 text 时累加
         const text = item.text as string | undefined;
         if (text) {
           accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + text;
@@ -313,25 +318,45 @@ export function runCodex(
         return;
       }
 
+      // function_call（Codex 新格式：response_item.type=function_call）
+      if (itemType === 'function_call') {
+        const name = (item.name as string | undefined) ?? 'unknown';
+        const args = item.arguments as string | undefined;
+        const toolName = name === 'exec_command' ? 'Bash' : name === 'apply_patch' ? 'Edit' : name;
+        toolStats[toolName] = (toolStats[toolName] || 0) + 1;
+        callbacks.onToolUse?.(toolName, args ? { arguments: args } : {});
+        return;
+      }
+
+      // custom_tool_call（apply_patch 等）
+      if (itemType === 'custom_tool_call') {
+        const name = (item.name as string | undefined) ?? 'unknown';
+        const toolName = name === 'apply_patch' ? 'Edit' : name;
+        toolStats[toolName] = (toolStats[toolName] || 0) + 1;
+        callbacks.onToolUse?.(toolName, { input: item.input });
+        return;
+      }
+
+      // command_execution（旧格式）
       if (itemType === 'command_execution') {
         const cmd = item.command as string | undefined;
-        if (cmd && type === 'item.started') {
-          const toolName = 'Bash';
-          toolStats[toolName] = (toolStats[toolName] || 0) + 1;
-          callbacks.onToolUse?.(toolName, { command: cmd });
+        if (cmd) {
+          toolStats['Bash'] = (toolStats['Bash'] || 0) + 1;
+          callbacks.onToolUse?.('Bash', { command: cmd });
         }
         return;
       }
 
-      if (itemType === 'file_change' && type === 'item.completed') {
+      // file_change（旧格式）
+      if (itemType === 'file_change') {
         const changes = item.changes as Array<{ path?: string; kind?: string }> | undefined;
-        const toolName = 'Edit';
-        toolStats[toolName] = (toolStats[toolName] || 0) + 1;
-        callbacks.onToolUse?.(toolName, { changes });
+        toolStats['Edit'] = (toolStats['Edit'] || 0) + 1;
+        callbacks.onToolUse?.('Edit', { changes });
         return;
       }
 
-      if (itemType === 'mcp_tool_call' && type === 'item.started') {
+      // mcp_tool_call（旧格式）
+      if (itemType === 'mcp_tool_call') {
         const tool = item.tool as string | undefined;
         const server = item.server as string | undefined;
         if (tool) {
@@ -342,9 +367,26 @@ export function runCodex(
         return;
       }
 
-      if (itemType === 'agent_message' && type === 'item.completed') {
-        const text = item.text as string | undefined;
+      // agent_message / message — 最终回复文本
+      // Codex 新格式：event_msg.payload.type=agent_message, payload.message=文本
+      //              response_item.payload.type=message, payload.content=[{type:output_text,text:...}]
+      if (itemType === 'agent_message' || itemType === 'message') {
+        let text: string | undefined;
+        if (itemType === 'agent_message') {
+          text = (item.message as string | undefined) ?? (item.text as string | undefined);
+        } else {
+          // message 类型，content 是数组
+          const content = item.content as Array<{ type?: string; text?: string }> | undefined;
+          if (Array.isArray(content)) {
+            text = content
+              .filter((c) => c.type === 'output_text' && c.text)
+              .map((c) => c.text as string)
+              .join('\n');
+          }
+        }
         if (text) {
+          // 只累加 final_answer 或 commentary，避免重复
+          const phase = (item.phase as string | undefined) ?? (payload.phase as string | undefined);
           accumulated += (accumulated ? '\n\n' : '') + text;
           callbacks.onText(accumulated);
         }
@@ -352,7 +394,14 @@ export function runCodex(
       }
     }
 
-    if (type === 'turn.completed') {
+    // task_complete / turn.completed
+    if (type === 'task_complete' || type === 'turn.completed') {
+      // task_complete 里可能有 last_agent_message
+      const lastMsg = (payload.last_agent_message as string | undefined);
+      if (lastMsg && !accumulated) {
+        accumulated = lastMsg;
+        callbacks.onText(accumulated);
+      }
       completed = true;
       callbacks.onComplete({
         success: true,
