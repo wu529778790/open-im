@@ -89,5 +89,7 @@ export const PLATFORM_DEFINITIONS = [
     sensitiveFields: ["apiToken"] as const,
     docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
     docLabel: "微信客服号接入指南",
+    qrLogin: true as const,
+    bindField: "apiToken" as const,
   },
 ];

@@ -1,9 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS } from "../constants.js";
-import { PLATFORM_FIELD_LABEL, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
-import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
-import { PLATFORM_EMOJI } from "../platform-emoji.js";
-import { AiCommandPicker } from "./AiCommandPicker.js";
+import type { PlatformKey, WebConfigPayload } from "../types.js";
+import { PlatformCard } from "./PlatformCard.js";
 import { emptyPayload } from "../empty-payload.js";
 
 /* ─── helpers ─── */
@@ -37,14 +35,6 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
   const [baseUrl, setBaseUrl]       = useState("");
   const [model, setModel]           = useState("");
   const [claudeLoading, setClaudeLoading] = useState(true);
-
-  /* ── Platform expanded state ── */
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  /* ── QR state ── */
-  const [qr, setQr]         = useState<"idle"|"loading"|"scanning"|"success"|"error">("idle");
-  const [qrUrl, setQrUrl]   = useState("");
-  const [qrMsg, setQrMsg]   = useState("");
 
   /* ── Test state ── */
   const [testBusy, setTestBusy] = useState<PlatformKey | null>(null);
@@ -90,19 +80,6 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
     await request("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: JSON.stringify({ ...existing, env }, null, 2) }) });
   };
 
-  /* ── QR login ── */
-  const qrLogin = async () => {
-    setQr("loading"); setQrMsg(""); setQrUrl("");
-    try {
-      const s = (await request("/api/clawbot/qr-login/start", { method: "POST" })) as { success?: boolean; qrcodeUrl?: string; sessionKey?: string; error?: string };
-      if (!s.success || !s.qrcodeUrl || !s.sessionKey) { setQr("error"); setQrMsg(s.error || t("qrLoginFailed")); return; }
-      setQrUrl(s.qrcodeUrl); setQr("scanning");
-      const w = (await request("/api/clawbot/qr-login/wait", { method: "POST", body: JSON.stringify({ sessionKey: s.sessionKey, qrcode: s.sessionKey, qrcodeUrl: s.qrcodeUrl }) })) as { success?: boolean; botToken?: string; baseUrl?: string; message?: string; error?: string };
-      if (w.success && w.botToken) { setQr("success"); setQrMsg(t("qrLoginSuccess")); upP("clawbot", { apiToken: w.botToken, ...(w.baseUrl ? { apiUrl: w.baseUrl } : {}), enabled: true }); }
-      else { setQr("error"); setQrMsg(w.message || w.error || t("qrLoginFailed")); }
-    } catch (e) { setQr("error"); setQrMsg(toMsg(e)); }
-  };
-
   /* ── test platform ── */
   const testPlatform = async (pk: PlatformKey) => {
     const def = PLATFORM_DEFINITIONS.find(d => d.key === pk); if (!def) return;
@@ -124,26 +101,6 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
       await request("/api/service/start", { method: "POST" });
       setSuccess(true);
     } catch (e) { setError(toMsg(e)); } finally { setBusy(false); }
-  };
-
-  /* ── field renderer ── */
-  const field = (def: typeof PLATFORM_DEFINITIONS[number], f: string, pk: PlatformKey) => {
-    const v = payload.platforms[pk];
-    const labels = PLATFORM_FIELD_LABEL[pk as keyof typeof PLATFORM_FIELD_LABEL];
-    const lk = labels ? (labels as Record<string, string | undefined>)[f] : undefined;
-    const tk = (INLINE_TIP_KEY as Record<string, string | undefined>)[`${pk}-${f}`];
-    const isPwd = def.sensitiveFields.includes(f);
-    return (
-      <div className="form-group" key={f}>
-        <label className="form-label">{lk ? t(lk) : f}</label>
-        {f === "allowedUserIds" ? (
-          <><textarea className="form-textarea mono" value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} /><div className="form-hint">{t("commaSeparatedIds")}</div></>
-        ) : f === "aiCommand" ? null : (
-          <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((v as Record<string, string>)[f] ?? "")} onChange={(e) => upP(pk, { [f]: e.target.value } as Partial<typeof v>)} />
-        )}
-        {tk && <div className="field-tip" dangerouslySetInnerHTML={{ __html: html(tk) }} />}
-      </div>
-    );
   };
 
   /* ═══════════════════════════════════════════════════════ */
@@ -217,68 +174,26 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
           )}
         </div>
 
-        {/* ── Platforms Grid ── */}
+        {/* ── Platforms Desk Grid ── */}
         <div style={{ padding: "0 32px 24px" }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{t("platformsTitle")}</h3>
-          <div className="wizard-chips">
+          <div className="platform-grid">
             {PLATFORM_DEFINITIONS.map((def) => {
               const pk = def.key as PlatformKey;
-              const on = payload.platforms[pk].enabled;
-              const isOpen = expanded[pk];
-              const tm = testMsg[pk];
               return (
-                <div key={pk} className={`wizard-platform-card ${on ? "on" : ""}`}>
-                  <div className="wizard-platform-head" onClick={() => setExpanded(e => ({ ...e, [pk]: !e[pk] }))}>
-                    <div className="wizard-platform-meta">
-                      <div className="wizard-platform-icon">{PLATFORM_EMOJI[pk]}</div>
-                      <div className="wizard-platform-title-block">
-                        <span className="wizard-platform-name">{def.label}</span>
-                        <span className="wizard-platform-desc">{t(PLATFORM_SUMMARY_KEY[pk as keyof typeof PLATFORM_SUMMARY_KEY] || "")}</span>
-                      </div>
-                    </div>
-                    <div className="wizard-platform-right">
-                      <span className={`platform-status-badge ${on ? "on" : "off"}`}>
-                        {on ? t("platformStatusOn") : t("platformStatusOff")}
-                      </span>
-                      <span className="wizard-platform-chevron">{isOpen ? "▾" : "▸"}</span>
-                      <label className="toggle" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" className="toggle-input sr-only" checked={on} onChange={(e) => { upP(pk, { enabled: e.target.checked }); if (e.target.checked) setExpanded(ex => ({ ...ex, [pk]: true })); }} />
-                        <span className="toggle-track" />
-                      </label>
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div className="wizard-platform-body">
-                      <p className="form-hint">{t(PLATFORM_SUMMARY_KEY[pk as keyof typeof PLATFORM_SUMMARY_KEY] || "")}</p>
-
-                      <AiCommandPicker
-                        value={String((payload.platforms[pk] as Record<string, string>).aiCommand || "claude") as AiCommand}
-                        onChange={(val) => upP(pk, { aiCommand: val } as Partial<WebConfigPayload["platforms"][typeof pk]>)}
-                        t={t as (k: string) => string}
-                      />
-                      <hr className="platform-card-divider" />
-
-                      {def.fields.map(f => field(def, f, pk))}
-                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                        <button type="button" className="btn btn-s btn-sm" disabled={testBusy === pk} onClick={() => void testPlatform(pk)}>
-                          {testBusy === pk ? t("testing") : t("test")}
-                        </button>
-                        {pk === "clawbot" && (
-                          <button type="button" className="btn btn-p btn-sm" disabled={qr === "loading" || qr === "scanning"} onClick={() => void qrLogin()}>
-                            {qr === "loading" ? "..." : qr === "scanning" ? t("qrLoginScanning") : t("qrLoginBtn")}
-                          </button>
-                        )}
-                      </div>
-                      {tm?.text && <div className={`msg mt-4 ${tm.ok ? "msg-ok" : "msg-err"}`}>{tm.text}</div>}
-                      {pk === "clawbot" && qrUrl && qr === "scanning" && (
-                        <div style={{ marginTop: 12, textAlign: "center" }}>
-                          <img src={qrUrl.startsWith("data:") ? qrUrl : `data:image/png;base64,${qrUrl}`} alt="QR" style={{ width: 160, height: 160, border: "1px solid var(--c-border)", borderRadius: 8 }} />
-                        </div>
-                      )}
-                      {pk === "clawbot" && qrMsg && <div className={`msg mt-4 ${qr === "success" ? "msg-ok" : "msg-err"}`}>{qrMsg}</div>}
-                    </div>
-                  )}
-                </div>
+                <PlatformCard
+                  key={pk}
+                  def={def}
+                  values={payload.platforms[pk]}
+                  t={t}
+                  html={html}
+                  disabledVisual={!payload.platforms[pk].enabled}
+                  request={request}
+                  onChange={(p) => upP(pk, p as Partial<WebConfigPayload["platforms"][typeof pk]>)}
+                  onTest={() => void testPlatform(pk)}
+                  testing={testBusy === pk}
+                  testResult={testMsg[pk]}
+                />
               );
             })}
           </div>

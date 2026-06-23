@@ -416,6 +416,85 @@ body {
   margin-top: 16px;
 }
 
+/* ─── QR Bind Modal ─── */
+.qr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.qr-modal {
+  position: relative;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-l);
+  box-shadow: var(--shadow-l, 0 12px 40px rgba(0, 0, 0, 0.2));
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+.qr-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: transparent;
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--c-text-3);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-m);
+}
+.qr-modal-close:hover {
+  background: var(--c-surface-alt);
+  color: var(--c-text);
+}
+.qr-modal-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 16px;
+}
+.qr-modal-img-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.qr-modal-img {
+  width: 220px;
+  height: 220px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-m);
+}
+.qr-modal-hint {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.qr-modal-status {
+  font-size: 13px;
+  color: var(--c-text-2);
+  line-height: 1.5;
+}
+.qr-modal-status.muted { color: var(--c-text-3); }
+.qr-modal-status.ok { color: var(--c-ok); font-weight: 600; }
+.qr-modal-status.err { color: var(--c-err, var(--c-text)); font-weight: 500; word-break: break-word; }
+.qr-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 /* ─── Forms ─── */
 .form-group { margin-bottom: 14px; }
 .form-group:last-child { margin-bottom: 0; }

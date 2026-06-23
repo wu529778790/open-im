@@ -3,6 +3,8 @@ import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_T
 import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
 import { PLATFORM_EMOJI } from "../platform-emoji.js";
 import { AiCommandPicker } from "./AiCommandPicker.js";
+import { QrBindModal } from "./QrBindModal.js";
+import type { JsonRequest } from "../api.js";
 
 interface PlatformDef {
   key: string;
@@ -11,6 +13,8 @@ interface PlatformDef {
   testFields: readonly string[];
   requiredFields: readonly string[];
   sensitiveFields: readonly string[];
+  qrLogin?: boolean;
+  bindField?: string;
 }
 
 interface Props {
@@ -23,18 +27,60 @@ interface Props {
   onTest: () => void;
   testing: boolean;
   testResult?: { text: string; ok: boolean };
-  qrState?: "idle" | "loading" | "scanning" | "success" | "error";
-  qrCodeUrl?: string;
-  qrMessage?: string;
-  onQrLogin?: () => void;
+  request?: JsonRequest;
 }
 
-export function PlatformCard({ def, values, t, html, disabledVisual, onChange, onTest, testing, testResult, qrState, qrCodeUrl, qrMessage, onQrLogin }: Props) {
+export function PlatformCard({ def, values, t, html, disabledVisual, onChange, onTest, testing, testResult, request }: Props) {
   const sk = PLATFORM_SUMMARY_KEY[def.key as keyof typeof PLATFORM_SUMMARY_KEY];
   const hk = PLATFORM_HELP_KEY[def.key as keyof typeof PLATFORM_HELP_KEY];
   const enabled = (values as { enabled?: boolean }).enabled ?? false;
   const [expanded, setExpanded] = useState(enabled);
+  const [qrOpen, setQrOpen] = useState(false);
 
+  /* ── 扫码绑定平台：单按钮卡片，不暴露任何凭据字段 ── */
+  if (def.qrLogin && def.bindField) {
+    const bound = String((values as Record<string, unknown>)[def.bindField] ?? "").trim() !== "";
+    return (
+      <div className={`platform-card ${bound ? "enabled" : ""}`}>
+        <div className="platform-card-head">
+          <div className="platform-card-meta">
+            <div className="platform-card-icon">{PLATFORM_EMOJI[def.key as PlatformKey]}</div>
+            <div className="platform-card-title-block">
+              <div className="platform-card-name">{def.label}</div>
+              {sk && <div className="platform-card-desc">{t(sk)}</div>}
+            </div>
+          </div>
+          <div className="platform-card-right">
+            <span className={`platform-status-badge ${bound ? "on" : "off"}`}>
+              {bound ? t("platformBound") : t("platformUnbound")}
+            </span>
+            <button
+              type="button"
+              className="btn btn-p btn-sm"
+              onClick={() => setQrOpen(true)}
+            >
+              {bound ? t("rebind") : t("configure")}
+            </button>
+          </div>
+        </div>
+        {request && (
+          <QrBindModal
+            open={qrOpen}
+            onClose={() => setQrOpen(false)}
+            onSuccess={(r) => {
+              const patch: Record<string, unknown> = { [def.bindField as string]: r.botToken, enabled: true };
+              if (r.baseUrl) patch.apiUrl = r.baseUrl;
+              onChange(patch);
+            }}
+            request={request}
+            t={t}
+          />
+        )}
+      </div>
+    );
+  }
+
+  /* ── 普通平台：保持原字段表单 ── */
   const field = (f: string): ReactNode => {
     const labels = PLATFORM_FIELD_LABEL[def.key as keyof typeof PLATFORM_FIELD_LABEL];
     const lk = labels ? (labels as Record<string, string | undefined>)[f] : undefined;
@@ -104,22 +150,6 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
           </button>
         </div>
         {testResult?.text && <div className={`msg mt-4 ${testResult.ok ? "msg-ok" : "msg-err"}`}>{testResult.text}</div>}
-        {onQrLogin && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-p btn-sm" disabled={qrState === "loading" || qrState === "scanning"} onClick={onQrLogin}>
-                {qrState === "loading" ? "..." : qrState === "scanning" ? t("qrLoginScanning") : t("qrLoginBtn")}
-              </button>
-              {qrState === "scanning" && <span className="form-hint">{t("qrScanHint")}</span>}
-            </div>
-            {qrCodeUrl && qrState === "scanning" && (
-              <div style={{ marginTop: 12, textAlign: "center" }}>
-                <img src={qrCodeUrl.startsWith("data:") ? qrCodeUrl : `data:image/png;base64,${qrCodeUrl}`} alt="QR" style={{ width: 180, height: 180, border: "1px solid var(--c-border)", borderRadius: 8 }} />
-              </div>
-            )}
-            {qrMessage && <div className={`msg mt-4 ${qrState === "success" ? "msg-ok" : "msg-err"}`}>{qrMessage}</div>}
-          </div>
-        )}
       </div>)}
     </div>
   );

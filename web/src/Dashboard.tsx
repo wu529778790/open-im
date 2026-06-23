@@ -137,7 +137,7 @@ export function Dashboard() {
               <div className="platform-grid">
                 {PLATFORM_DEFINITIONS.map((def) => {
                   const pk = def.key as PlatformKey;
-                  return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={!pl.platforms[pk].enabled} onChange={(p) => upP(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
+                  return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={!pl.platforms[pk].enabled} request={R} onChange={(p) => upP(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
                 })}
               </div>
             </section>
