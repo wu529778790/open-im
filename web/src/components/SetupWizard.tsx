@@ -187,7 +187,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
                   values={payload.platforms[pk]}
                   t={t}
                   html={html}
-                  disabledVisual={!payload.platforms[pk].enabled}
+                  disabledVisual={false}
                   request={request}
                   onChange={(p) => upP(pk, p as Partial<WebConfigPayload["platforms"][typeof pk]>)}
                   onTest={() => void testPlatform(pk)}

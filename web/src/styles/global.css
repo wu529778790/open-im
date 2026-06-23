@@ -280,7 +280,7 @@ body {
   box-shadow: var(--shadow-m);
   border-color: var(--c-border-foc);
 }
-.platform-card.disabled { opacity: .55; }
+.platform-card.disabled { opacity: .85; }
 .platform-card.enabled {
   border-color: var(--c-accent-bdr);
   box-shadow: 0 0 0 1px var(--c-accent-bdr);
