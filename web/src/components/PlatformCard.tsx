@@ -190,11 +190,21 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             )}
           </div>
 
-          {/* enable toggle */}
-          <label className="toggle" onClick={(e) => e.stopPropagation()}>
-            <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
-            <span className="toggle-track" />
-          </label>
+          {/* 已配置：显示开关；未配置：显示「去配置」按钮 */}
+          {hasConfig ? (
+            <label className="toggle" onClick={(e) => e.stopPropagation()}>
+              <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
+              <span className="toggle-track" />
+            </label>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-p btn-sm"
+              onClick={onEdit}
+            >
+              去配置
+            </button>
+          )}
         </div>
       </div>
 
