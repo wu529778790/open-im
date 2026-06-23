@@ -66,11 +66,12 @@ export function useQrLogin(
         })) as {
           success?: boolean;
           qrcodeUrl?: string;
+          qrcode?: string;
           sessionKey?: string;
           error?: string;
         };
         if (runId !== runIdRef.current) return;
-        if (!s.success || !s.qrcodeUrl || !s.sessionKey) {
+        if (!s.success || !s.qrcodeUrl || !s.sessionKey || !s.qrcode) {
           setState("error");
           setMessage(s.error || "qrLoginFailed");
           return;
@@ -82,7 +83,7 @@ export function useQrLogin(
           method: "POST",
           body: JSON.stringify({
             sessionKey: s.sessionKey,
-            qrcode: s.sessionKey,
+            qrcode: s.qrcode,
             qrcodeUrl: s.qrcodeUrl,
           }),
           signal: controller.signal,
