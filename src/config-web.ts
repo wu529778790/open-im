@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { URL } from "node:url";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -26,6 +25,13 @@ import {
 import { corsHeadersFor, mergeCors } from "./config-web-cors.js";
 export { getHealthPlatformSnapshot } from "./config-web-health.js";
 import { getHealthPlatformSnapshot } from "./config-web-health.js";
+import { readJson, jsonResponse as json } from "./config-web-http.js";
+import {
+  openBrowser,
+  getWebConfigPort,
+  getWebConfigUrl,
+} from "./config-web-browser.js";
+export { getWebConfigUrl } from "./config-web-browser.js";
 import {
   type WebConfigPayload,
   buildInitialPayload,
@@ -58,87 +64,6 @@ export interface StartedWebConfigServer {
   loginUrl?: string;
 }
 
-const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
-
-function readJson<T>(request: IncomingMessage): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    request.on("data", (chunk) => {
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_REQUEST_BODY_BYTES) {
-        reject(new Error("Request body too large (max 1 MB)"));
-        request.destroy();
-        return;
-      }
-      chunks.push(Buffer.from(chunk));
-    });
-    request.on("end", () => {
-      try {
-        const raw = Buffer.concat(chunks).toString("utf-8");
-        resolve((raw ? JSON.parse(raw) : {}) as T);
-      } catch (error) {
-        reject(error);
-      }
-    });
-    request.on("error", reject);
-  });
-}
-
-function json(response: ServerResponse, statusCode: number, body: unknown, request: IncomingMessage): void {
-  response.writeHead(statusCode, mergeCors(request, { "content-type": "application/json; charset=utf-8" }));
-  response.end(JSON.stringify(body));
-}
-
-function openBrowser(url: string): void {
-  // 显式关闭自动打开浏览器（服务器环境推荐设置）
-  if (process.env.OPEN_IM_NO_BROWSER === "1") {
-    return;
-  }
-
-  // 在无 TTY 且无图形环境（常见于服务器）时直接跳过，避免无意义的 xdg-open 调用
-  if (!process.stdout.isTTY && !process.env.DISPLAY) {
-    log.info(`Skipping browser launch for URL ${url} (no TTY/DISPLAY detected).`);
-    return;
-  }
-
-  const safeSpawn = (command: string, args: string[]): void => {
-    try {
-      const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: process.platform === "win32" });
-      // 防止 ENOENT 之类的错误变成未捕获异常
-      child.on("error", (error: NodeJS.ErrnoException) => {
-        log.warn(`Failed to launch browser command "${command}": ${error.code ?? error.message}`);
-      });
-      child.unref();
-    } catch (error) {
-      log.warn(`Failed to spawn browser command "${command}": ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
-  if (process.platform === "win32") {
-    safeSpawn("cmd", ["/c", "start", "", url]);
-    return;
-  }
-  if (process.platform === "darwin") {
-    safeSpawn("open", [url]);
-    return;
-  }
-  // linux / 其他 UNIX 平台：优先尝试 xdg-open，失败时仅记录日志，不抛出
-  safeSpawn("xdg-open", [url]);
-}
-
-export function getWebConfigPort(): number {
-  const fromEnv = process.env.OPEN_IM_WEB_PORT ? parseInt(process.env.OPEN_IM_WEB_PORT, 10) : NaN;
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : WEB_CONFIG_PORT;
-}
-
-export function getWebConfigUrl(): string {
-  return `http://127.0.0.1:${getWebConfigPort()}`;
-}
-
-function openWebConfigUrl(): void {
-  openBrowser(getPublicWebDashboardUrl());
-}
 
 
 export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: string; persistent?: boolean }): Promise<StartedWebConfigServer> {
