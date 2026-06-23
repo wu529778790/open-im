@@ -273,7 +273,7 @@ body {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--r-l);
-  overflow: hidden;
+  overflow: visible;
   transition: all var(--norm);
 }
 .platform-card:hover {
@@ -292,6 +292,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
+  border-radius: var(--r-l) var(--r-l) 0 0;
 }
 .platform-card-head:hover { background: var(--c-surface-alt); }
 .platform-card-meta {
@@ -361,6 +362,7 @@ body {
 .platform-card-body {
   padding: 16px 20px 20px;
   border-top: 1px solid var(--c-border);
+  border-radius: 0 0 var(--r-l) var(--r-l);
 }
 
 /* ── AI 工具顶部区块（AiCommandPicker） ── */
