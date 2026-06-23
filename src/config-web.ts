@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
-import { createServer, type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
-import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { DWClient } from "dingtalk-stream";
@@ -20,6 +19,18 @@ import {
   CODEX_AUTH_PATHS,
 } from "./config.js";
 import { getWebDistDir, tryServeDashboardStatic } from "./config-web-static.js";
+import {
+  getWebConfigHost,
+  allowRemoteApiWithoutAuth,
+  consumeLoginToken,
+  createSession,
+  isSessionValid,
+  buildSessionCookie,
+  generateLoginUrl,
+} from "./config-web-auth.js";
+import { splitCsv, corsHeadersFor, mergeCors } from "./config-web-cors.js";
+export { getHealthPlatformSnapshot } from "./config-web-health.js";
+import { getHealthPlatformSnapshot } from "./config-web-health.js";
 import type { AiCommand } from "./adapters/tool-registry.js";
 
 /** 前端 aiCommand 可为空字符串(未选择态);保存时经 persistedPlatformAi 规范化 */
@@ -33,165 +44,11 @@ type WebFlowMode = "init" | "start" | "dev";
 type WebFlowResult = "saved" | "cancel";
 // 已移至 constants.ts;
 
+// getClaudeSettingsPath is used by /api/claude/settings handler
 function getClaudeSettingsPath(): string {
   const home = getClaudeConfigHome();
   const baseDir = join(home, ".claude");
   return join(baseDir, "settings.json");
-}
-
-// --- Web config auth: one-time login token + in-memory session ---
-
-interface LoginTokenInfo {
-  expiresAt: number;
-}
-
-interface SessionInfo {
-  expiresAt: number;
-  remoteAddr?: string;
-  userAgent?: string;
-}
-
-const pendingLogins = new Map<string, LoginTokenInfo>();
-const activeSessions = new Map<string, SessionInfo>();
-
-function getWebConfigHost(): string {
-  const envHost = process.env.OPEN_IM_WEB_HOST?.trim();
-  if (envHost) return envHost;
-  return "127.0.0.1";
-}
-
-/** 设为 true 时，非本机绑定的 Web 配置服务跳过登录 Cookie 校验（仅适用于受信网络；生产建议配合 HTTPS 反向代理） */
-function allowRemoteApiWithoutAuth(): boolean {
-  return process.env.OPEN_IM_ALLOW_REMOTE_API === "true";
-}
-
-/** 是否允许该浏览器 Origin（与 getPublicWebDashboardUrl() 同源时始终允许，便于反代 / 自定义 OPEN_IM_PUBLIC_WEB_URL） */
-function isCorsOriginAllowed(origin: string): boolean {
-  const publicWeb = getPublicWebDashboardUrl();
-  try {
-    if (origin === new URL(publicWeb).origin) return true;
-  } catch {
-    if (origin === publicWeb) return true;
-  }
-
-  const allowlist = splitCsv(process.env.OPEN_IM_CORS_ORIGINS);
-  if (allowlist.length === 0) return true;
-  return allowlist.includes(origin);
-}
-
-/** 有 Origin 时返回 CORS 响应头；无 Origin（如本地 file:// 或同源内置页）不返回，行为与原来一致 */
-function corsHeadersFor(request: IncomingMessage): Record<string, string> | undefined {
-  const originRaw = request.headers.origin;
-  if (!originRaw || typeof originRaw !== "string") return undefined;
-
-  if (!isCorsOriginAllowed(originRaw)) return undefined;
-
-  const requestedHeaders = request.headers["access-control-request-headers"];
-  const allowHeaders =
-    typeof requestedHeaders === "string" && requestedHeaders.trim()
-      ? requestedHeaders
-      : "Content-Type, Authorization";
-
-  return {
-    "Access-Control-Allow-Origin": originRaw,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": allowHeaders,
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "86400",
-  };
-}
-
-function mergeCors(request: IncomingMessage, headers: OutgoingHttpHeaders): OutgoingHttpHeaders {
-  const cors = corsHeadersFor(request);
-  if (!cors) return headers;
-  return { ...headers, ...cors };
-}
-
-function generateRandomToken(bytes = 32): string {
-  return randomBytes(bytes).toString("base64url");
-}
-
-function cleanupExpiredAuth(now: number): void {
-  for (const [token, info] of pendingLogins) {
-    if (info.expiresAt <= now) pendingLogins.delete(token);
-  }
-  for (const [sessionId, info] of activeSessions) {
-    if (info.expiresAt <= now) activeSessions.delete(sessionId);
-  }
-}
-
-function createLoginToken(ttlMs: number): string {
-  const now = Date.now();
-  cleanupExpiredAuth(now);
-  const token = generateRandomToken(32);
-  pendingLogins.set(token, { expiresAt: now + ttlMs });
-  return token;
-}
-
-function createSession(request: IncomingMessage, ttlMs: number): string {
-  const now = Date.now();
-  cleanupExpiredAuth(now);
-  const sessionId = generateRandomToken(32);
-  const remoteAddr = (request.socket as { remoteAddress?: string }).remoteAddress;
-  const userAgent = typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : undefined;
-  activeSessions.set(sessionId, {
-    expiresAt: now + ttlMs,
-    remoteAddr,
-    userAgent,
-  });
-  return sessionId;
-}
-
-function parseCookies(request: IncomingMessage): Record<string, string> {
-  const header = request.headers.cookie;
-  if (!header) return {};
-  const cookies: Record<string, string> = {};
-  const parts = header.split(";");
-  for (const part of parts) {
-    const [rawKey, ...rest] = part.split("=");
-    const key = rawKey.trim();
-    if (!key) continue;
-    const value = rest.join("=").trim();
-    cookies[key] = decodeURIComponent(value);
-  }
-  return cookies;
-}
-
-function getSessionIdFromRequest(request: IncomingMessage): string | null {
-  const cookies = parseCookies(request);
-  const sessionId = cookies.openim_session;
-  return sessionId && typeof sessionId === "string" && sessionId.length > 0 ? sessionId : null;
-}
-
-function isSessionValid(request: IncomingMessage): boolean {
-  const sessionId = getSessionIdFromRequest(request);
-  if (!sessionId) return false;
-  const info = activeSessions.get(sessionId);
-  if (!info) return false;
-  const now = Date.now();
-  if (info.expiresAt <= now) {
-    activeSessions.delete(sessionId);
-    return false;
-  }
-  // Optional: tie session to basic client fingerprint (remote address)
-  const remoteAddr = (request.socket as { remoteAddress?: string }).remoteAddress;
-  if (info.remoteAddr && remoteAddr && remoteAddr !== info.remoteAddr) {
-    return false;
-  }
-  return true;
-}
-
-function buildSessionCookie(sessionId: string, ttlMs: number): string {
-  const maxAgeSec = Math.floor(ttlMs / 1000);
-  const parts = [
-    `openim_session=${encodeURIComponent(sessionId)}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAgeSec}`,
-  ];
-  // 不设置 Secure，方便本地 http 使用；如果放在 https 反代后，可以在代理层加 Secure
-  return parts.join("; ");
 }
 
 export interface StartedWebConfigServer {
@@ -226,81 +83,6 @@ interface WebConfigPayload {
     logDir?: string;
     logLevel: "default" | "DEBUG" | "INFO" | "WARN" | "ERROR";
   };
-}
-
-export function getHealthPlatformSnapshot(
-  file: FileConfig,
-  env: NodeJS.ProcessEnv = process.env,
-): Record<string, { configured: boolean; enabled: boolean; healthy: boolean; message?: string }> {
-  const fileTelegram = file.platforms?.telegram;
-  const fileFeishu = file.platforms?.feishu;
-  const fileQQ = file.platforms?.qq;
-  const fileWework = file.platforms?.wework;
-  const fileDingtalk = file.platforms?.dingtalk;
-  const fileWorkbuddy = file.platforms?.workbuddy;
-  const fileClawbot = file.platforms?.clawbot;
-  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? fileTelegram?.botToken ?? file.telegramBotToken;
-  const feishuAppId = env.FEISHU_APP_ID ?? fileFeishu?.appId ?? file.feishuAppId;
-  const feishuAppSecret = env.FEISHU_APP_SECRET ?? fileFeishu?.appSecret ?? file.feishuAppSecret;
-  const qqAppId = env.QQ_BOT_APPID ?? env.QQ_APP_ID ?? fileQQ?.appId;
-  const qqSecret = env.QQ_BOT_SECRET ?? env.QQ_SECRET ?? fileQQ?.secret;
-  const weworkCorpId = env.WEWORK_CORP_ID ?? fileWework?.corpId;
-  const weworkSecret = env.WEWORK_SECRET ?? fileWework?.secret;
-  const dingtalkClientId = env.DINGTALK_CLIENT_ID ?? fileDingtalk?.clientId;
-  const dingtalkClientSecret = env.DINGTALK_CLIENT_SECRET ?? fileDingtalk?.clientSecret;
-  const workbuddyAccessToken = fileWorkbuddy?.accessToken;
-  const workbuddyRefreshToken = fileWorkbuddy?.refreshToken;
-  const workbuddyUserId = fileWorkbuddy?.userId;
-
-  return {
-    telegram: {
-      configured: !!telegramBotToken,
-      enabled: !!telegramBotToken && fileTelegram?.enabled !== false,
-      healthy: !!telegramBotToken,
-      message: telegramBotToken ? "Token configured" : "Token not configured",
-    },
-    feishu: {
-      configured: !!(feishuAppId && feishuAppSecret),
-      enabled: !!(feishuAppId && feishuAppSecret) && fileFeishu?.enabled !== false,
-      healthy: !!(feishuAppId && feishuAppSecret),
-      message: feishuAppId && feishuAppSecret ? "App ID and Secret configured" : "Missing credentials",
-    },
-    qq: {
-      configured: !!(qqAppId && qqSecret),
-      enabled: !!(qqAppId && qqSecret) && fileQQ?.enabled !== false,
-      healthy: !!(qqAppId && qqSecret),
-      message: qqAppId && qqSecret ? "App ID and Secret configured" : "Missing credentials",
-    },
-    wework: {
-      configured: !!(weworkCorpId && weworkSecret),
-      enabled: !!(weworkCorpId && weworkSecret) && fileWework?.enabled !== false,
-      healthy: !!(weworkCorpId && weworkSecret),
-      message: weworkCorpId && weworkSecret ? "Corp ID and Secret configured" : "Missing credentials",
-    },
-    dingtalk: {
-      configured: !!(dingtalkClientId && dingtalkClientSecret),
-      enabled: !!(dingtalkClientId && dingtalkClientSecret) && fileDingtalk?.enabled !== false,
-      healthy: !!(dingtalkClientId && dingtalkClientSecret),
-      message: dingtalkClientId && dingtalkClientSecret ? "Client ID and Secret configured" : "Missing credentials",
-    },
-    workbuddy: {
-      configured: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId),
-      enabled: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId) && fileWorkbuddy?.enabled !== false,
-      healthy: !!(workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId),
-      message: workbuddyAccessToken && workbuddyRefreshToken && workbuddyUserId ? "OAuth credentials configured" : "Missing credentials",
-    },
-    clawbot: {
-      configured: !!fileClawbot?.apiToken,
-      enabled: !!fileClawbot?.apiToken && fileClawbot?.enabled !== false,
-      healthy: !!fileClawbot?.apiToken,
-      message: fileClawbot?.apiToken ? "API Token configured" : "Missing API Token",
-    },
-  };
-}
-
-function splitCsv(value: string | undefined): string[] {
-  if (!value) return [];
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function clean(value: string | undefined): string | undefined {
@@ -972,11 +754,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
       if (shouldRequireAuth) {
         const loginToken = requestUrl.searchParams.get("login_token");
         if (loginToken) {
-          const info = pendingLogins.get(loginToken);
-          const now = Date.now();
-          if (info && info.expiresAt > now) {
+          const info = consumeLoginToken(loginToken);
+          if (info) {
             // 有效的一次性登录 token：创建会话，设置 Cookie，并重定向到去掉 login_token 的 URL
-            pendingLogins.delete(loginToken);
             const sessionTtlMs = 24 * 60 * 60 * 1000; // 24 小时
             const sessionId = createSession(request, sessionTtlMs);
             const cookie = buildSessionCookie(sessionId, sessionTtlMs);
@@ -1342,11 +1122,8 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
   // 当绑定到非 127.0.0.1（例如 0.0.0.0）时，为远程访问生成一次性登录链接
   if (host !== "127.0.0.1") {
     const loginTtlMs = 15 * 60 * 1000; // 15 分钟内有效
-    const loginToken = createLoginToken(loginTtlMs);
-    const displayHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-    const baseUrl = `http://${displayHost}:${port}`;
-    const loginUrl = `${baseUrl}/?login_token=${encodeURIComponent(loginToken)}`;
-    loginUrlForReturn = loginUrl;
+    loginUrlForReturn = generateLoginUrl(host, port, loginTtlMs);
+    const loginUrl = loginUrlForReturn;
 
     log.info("━━━━━━━━ Web Config Login ━━━━━━━━");
     log.info(`Host binding : ${host}`);
