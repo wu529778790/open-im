@@ -11,7 +11,8 @@
 import { WebSocket } from 'ws';
 import { randomBytes } from 'node:crypto';
 import { createLogger } from '../logger.js';
-import { jitteredDelay, SLOW_PROBE_MS, isFatalReconnectError } from '../shared/reconnect.js';
+import { isFatalReconnectError } from '../shared/reconnect.js';
+import { ReconnectManager, HeartbeatMonitor, StateManager } from '../shared/connection-manager.js';
 import type { Config } from '../config.js';
 import {
   WeWorkConnectionState,
@@ -26,21 +27,16 @@ const log = createLogger('WeWork');
 const DEFAULT_WS_URL = 'wss://openws.work.weixin.qq.com';
 const HEARTBEAT_INTERVAL = 30000; // 30秒
 const PONG_TIMEOUT = HEARTBEAT_INTERVAL * 3; // 90秒无任何服务端响应则判定连接死亡
-const MAX_RECONNECT_ATTEMPTS = 100;
 
-// Global state
+// Connection infrastructure (shared managers replace raw timers/counters)
 let ws: WebSocket | null = null;
-let connectionState: WeWorkConnectionState = 'disconnected';
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectAttempts = 0;
+const stateManager = new StateManager<WeWorkConnectionState>('disconnected');
+const heartbeatMonitor = new HeartbeatMonitor();
 let shouldReconnect = false;
 let isStopping = false;
-let lastServerResponseTime = 0; // 上次收到服务端消息的时间
 
 // Event handlers
 let messageHandler: ((data: WeWorkCallbackMessage) => Promise<void>) | null = null;
-let stateChangeHandler: ((state: WeWorkConnectionState) => void) | null = null;
 
 // Configuration
 let config: {
@@ -48,6 +44,27 @@ let config: {
   secret: string;
   websocketUrl: string;
 } | null = null;
+
+// Reconnect manager: exponential backoff 5s → 7.5s → 11s → ... max 60s
+const reconnectManager = new ReconnectManager({
+  name: 'WeWork',
+  backoff: { mode: 'exponential', baseMs: 5000, maxMs: 60000, cap: 5 },
+  maxAttempts: 100,
+  onReconnect: async () => {
+    log.info('Reconnecting...');
+    try {
+      await connectWebSocket();
+      reconnectManager.setFatal(false); // 连上后恢复正常退避
+    } catch (err) {
+      if (isFatalReconnectError(err)) {
+        reconnectManager.setFatal(true);
+        log.warn('WeWork 致命错误（鉴权失败），转慢探测:', err);
+      } else {
+        log.error('Reconnection failed:', err);
+      }
+    }
+  },
+});
 
 /**
  * Generate unique request ID
@@ -60,7 +77,7 @@ function generateReqId(): string {
  * Get current connection state
  */
 export function getConnectionState(): WeWorkConnectionState {
-  return connectionState;
+  return stateManager.current;
 }
 
 /**
@@ -69,7 +86,7 @@ export function getConnectionState(): WeWorkConnectionState {
  * 注意：需用户曾与机器人对话后，才能向该会话主动推送
  */
 export function sendProactiveMessage(chatId: string, content: string): void {
-  if (!ws || connectionState !== 'connected') {
+  if (!ws || stateManager.current !== 'connected') {
     throw new Error('Cannot send proactive message: WebSocket not connected');
   }
   if (!chatId) {
@@ -99,7 +116,7 @@ export function sendProactiveMessage(chatId: string, content: string): void {
  * 长连接模式下必须用此方式回复，透传 req_id
  */
 export function sendWebSocketReply(reqId: string, body: WeWorkHttpResponseBody): void {
-  if (!ws || connectionState !== 'connected') {
+  if (!ws || stateManager.current !== 'connected') {
     throw new Error('Cannot send reply: WebSocket not connected');
   }
   if (!reqId) {
@@ -138,12 +155,14 @@ export async function initWeWork(
   };
 
   messageHandler = eventHandler;
-  stateChangeHandler = onStateChange ?? null;
+  stateManager.setOnChange(onStateChange);
   isStopping = false;
   shouldReconnect = false;
+  reconnectManager.reset();
+  reconnectManager.resume();
 
   log.info('Initializing WeWork client');
-  // 首次连接支持重试：单独启用企微时偶发 TLS 连接失败，加飞书后因初始化顺序有“预热”效果则稳定
+  // 首次连接支持重试：单独启用企微时偶发 TLS 连接失败，加飞书后因初始化顺序有"预热"效果则稳定
   const maxAttempts = 3;
   const retryDelayMs = 1500;
   let lastErr: Error | null = null;
@@ -166,7 +185,7 @@ export async function initWeWork(
  * Connect to WeWork WebSocket server
  */
 async function connectWebSocket(): Promise<void> {
-  if (connectionState === 'connecting') {
+  if (stateManager.current === 'connecting') {
     log.warn('WebSocket connection already in progress');
     return;
   }
@@ -186,7 +205,7 @@ async function connectWebSocket(): Promise<void> {
     ws = null;
   }
 
-  updateState('connecting');
+  stateManager.set('connecting');
 
   const websocketUrl = config.websocketUrl || DEFAULT_WS_URL;
 
@@ -196,9 +215,9 @@ async function connectWebSocket(): Promise<void> {
 
       ws.on('open', async () => {
         log.info('WeWork WebSocket connected');
-        reconnectAttempts = 0;
-        updateState('connected');
-        startHeartbeat();
+        reconnectManager.reset();
+        stateManager.set('connected');
+        heartbeatMonitor.start(HEARTBEAT_INTERVAL, heartbeatTick);
 
         // 发送认证订阅消息，并等待服务端确认（否则 aibot_send_msg 会报 846609 not subscribed）
         try {
@@ -212,7 +231,7 @@ async function connectWebSocket(): Promise<void> {
       });
 
       ws.on('message', async (data: Buffer) => {
-        lastServerResponseTime = Date.now();
+        heartbeatMonitor.recordResponse();
         try {
           const message = JSON.parse(data.toString()) as WeWorkCallbackMessage | WeWorkResponse;
           await handleMessage(message);
@@ -223,21 +242,21 @@ async function connectWebSocket(): Promise<void> {
 
       ws.on('error', (err) => {
         log.error('WeWork WebSocket error:', err);
-        updateState('error');
+        stateManager.set('error');
         reject(err);
       });
 
       ws.on('close', () => {
         log.info('WeWork WebSocket closed');
-        stopHeartbeat();
-        updateState('disconnected');
+        heartbeatMonitor.stop();
+        stateManager.set('disconnected');
         if (!isStopping && shouldReconnect) {
-          scheduleReconnect();
+          reconnectManager.schedule();
         }
       });
     } catch (err) {
       log.error('Error creating WebSocket connection:', err);
-      updateState('error');
+      stateManager.set('error');
       reject(err);
     }
   });
@@ -324,7 +343,7 @@ async function handleMessage(message: WeWorkCallbackMessage | WeWorkResponse): P
  * Send message to WeWork
  */
 export function sendMessage(message: WeWorkResponseMessage): void {
-  if (!ws || connectionState !== 'connected') {
+  if (!ws || stateManager.current !== 'connected') {
     log.warn('Cannot send message: WebSocket not connected');
     return;
   }
@@ -374,113 +393,42 @@ export function sendStreamWithItems(
 }
 
 /**
- * Update connection state and notify listeners
- */
-function updateState(state: WeWorkConnectionState): void {
-  connectionState = state;
-  if (stateChangeHandler) {
-    stateChangeHandler(state);
-  }
-  log.debug('Connection state:', state);
-}
-
-/**
- * Start heartbeat to keep connection alive
+ * Heartbeat tick: send ping and detect stale connections.
  * 同时检测服务端是否响应，超时无响应则主动断开触发重连
  */
-function startHeartbeat(): void {
-  stopHeartbeat();
-  lastServerResponseTime = Date.now();
-  heartbeatTimer = setInterval(() => {
-    if (connectionState === 'connected' && ws) {
-      // 检测连接是否已死：长时间未收到任何服务端响应
-      const elapsed = Date.now() - lastServerResponseTime;
-      if (lastServerResponseTime > 0 && elapsed > PONG_TIMEOUT) {
-        log.warn(`No server response for ${Math.round(elapsed / 1000)}s, forcing reconnect`);
-        stopHeartbeat();
-        try {
-          ws.removeAllListeners();
-          ws.close();
-        } catch {
-          /* ignore */
-        }
-        ws = null;
-        updateState('disconnected');
-        scheduleReconnect();
-        return;
-      }
+function heartbeatTick(): void {
+  if (stateManager.current !== 'connected' || !ws) return;
 
-      const pingMessage = {
-        cmd: WeWorkCommand.PING,
-        headers: {
-          req_id: generateReqId(),
-        },
-        body: {},
-      };
-      try {
-        ws.send(JSON.stringify(pingMessage));
-        log.debug('Sent ping');
-      } catch (err) {
-        log.error('Error sending ping:', err);
-      }
-    }
-  }, HEARTBEAT_INTERVAL);
-}
-
-/**
- * Stop heartbeat
- */
-function stopHeartbeat(): void {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-}
-
-/**
- * Schedule reconnection attempt
- * 超过 MAX_RECONNECT_ATTEMPTS 后自动重置计数器继续重试，避免永久断连
- */
-/** 致命（鉴权）错误后转慢探测，避免紧密 hammer 网关 */
-let fatalSlowProbe = false;
-
-function scheduleReconnect(): void {
-  if (isStopping || !shouldReconnect) {
-    return;
-  }
-
-  if (reconnectTimer) {
-    return;
-  }
-
-  // 超过最大重试次数后重置计数器，降低频率继续重试
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    log.warn(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, resetting counter and retrying at lower frequency`);
-    reconnectAttempts = 0;
-  }
-
-  // 逐步增加间隔，5s → 7.5s → 11s → ... 最大 60s；致命（鉴权）错误转慢探测
-  const backoff = fatalSlowProbe
-    ? SLOW_PROBE_MS
-    : Math.min(5000 * Math.pow(1.5, Math.floor(reconnectAttempts / 5)), 60000);
-  const interval = jitteredDelay(Math.round(backoff));
-
-  reconnectTimer = setTimeout(async () => {
-    reconnectTimer = null;
-    reconnectAttempts++;
-    log.info(`Reconnecting... Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} (interval: ${interval}ms${fatalSlowProbe ? ', slow-probe' : ''})`);
+  // 检测连接是否已死：长时间未收到任何服务端响应
+  if (heartbeatMonitor.isStale(PONG_TIMEOUT)) {
+    const elapsed = Date.now() - heartbeatMonitor.lastResponseTime;
+    log.warn(`No server response for ${Math.round(elapsed / 1000)}s, forcing reconnect`);
+    heartbeatMonitor.stop();
     try {
-      await connectWebSocket();
-      fatalSlowProbe = false; // 连上后恢复正常退避
-    } catch (err) {
-      if (isFatalReconnectError(err)) {
-        fatalSlowProbe = true;
-        log.warn('WeWork 致命错误（鉴权失败），转慢探测:', err);
-      } else {
-        log.error('Reconnection failed:', err);
-      }
+      ws.removeAllListeners();
+      ws.close();
+    } catch {
+      /* ignore */
     }
-  }, interval);
+    ws = null;
+    stateManager.set('disconnected');
+    reconnectManager.schedule();
+    return;
+  }
+
+  const pingMessage = {
+    cmd: WeWorkCommand.PING,
+    headers: {
+      req_id: generateReqId(),
+    },
+    body: {},
+  };
+  try {
+    ws.send(JSON.stringify(pingMessage));
+    log.debug('Sent ping');
+  } catch (err) {
+    log.error('Error sending ping:', err);
+  }
 }
 
 /**
@@ -489,15 +437,12 @@ function scheduleReconnect(): void {
 export function stopWeWork(): void {
   isStopping = true;
   shouldReconnect = false;
-  stopHeartbeat();
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
+  heartbeatMonitor.stop();
+  reconnectManager.stop();
   if (ws) {
     ws.close();
     ws = null;
   }
-  updateState('disconnected');
+  stateManager.set('disconnected');
   log.info('WeWork client stopped');
 }

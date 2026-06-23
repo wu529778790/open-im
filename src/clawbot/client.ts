@@ -10,7 +10,8 @@
 
 import { randomBytes } from 'node:crypto';
 import { createLogger } from '../logger.js';
-import { jitteredDelay, isFatalReconnectError, SLOW_PROBE_MS } from '../shared/reconnect.js';
+import { isFatalReconnectError } from '../shared/reconnect.js';
+import { ReconnectManager, HeartbeatMonitor, StateManager } from '../shared/connection-manager.js';
 import { cacheContextToken } from './message-sender.js';
 import { setClawbotContextToken, clearClawbotContextToken } from '../shared/active-chats.js';
 import { downloadMediaFromUrl, createMediaTargetPath } from '../shared/media-storage.js';
@@ -29,28 +30,32 @@ const RECONNECT_DELAYS_MS = [3000, 5000, 10000, 20000, 30000];
 const BASE_INFO = { channel_version: '0.1.0' };
 
 let pollController: AbortController | null = null;
-let channelState: ClawBotState = 'disconnected';
 let messageHandler: ((chatId: string, msgId: string, content: string, imagePaths?: string[]) => Promise<void>) | null = null;
-let stateChangeHandler: ((state: ClawBotState) => void) | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let watchdogTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectAttempt = 0;
-let fatal = false;
 let stopped = false;
 let apiUrl = 'https://ilinkai.weixin.qq.com';
 let apiToken = '';
 /** Opaque cursor for getupdates pagination (replaces numeric offset) */
 let getUpdatesBuf = '';
-/** Timestamp of last successful poll response (for watchdog) */
-let lastResponseAt = 0;
 /** Per-request timeout for long-polling (ms) */
 const POLL_REQUEST_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 /** Watchdog interval: force reconnect if no response for this long (ms) */
 const WATCHDOG_INTERVAL_MS = 60_000; // check every 60s
 const WATCHDOG_STALE_MS = 5 * 60 * 1000; // 5 minutes without response = stale
 
+// Connection infrastructure (shared managers replace raw timers/counters)
+const stateManager = new StateManager<ClawBotState>('disconnected');
+const heartbeatMonitor = new HeartbeatMonitor();
+const reconnectManager = new ReconnectManager({
+  name: 'ClawBot',
+  backoff: { mode: 'stepped', delays: RECONNECT_DELAYS_MS },
+  onReconnect: () => {
+    stateManager.set('connected');
+    startPolling();
+  },
+});
+
 export function getChannelState(): ClawBotState {
-  return channelState;
+  return stateManager.current;
 }
 
 export async function initClawbot(
@@ -69,15 +74,15 @@ export async function initClawbot(
   apiUrl = pc.apiUrl ?? 'https://ilinkai.weixin.qq.com';
   apiToken = pc.apiToken;
   messageHandler = eventHandler;
-  stateChangeHandler = onStateChange ?? null;
+  stateManager.setOnChange(onStateChange);
   stopped = false;
-  reconnectAttempt = 0;
-  fatal = false;
+  reconnectManager.reset();
+  reconnectManager.resume();
   getUpdatesBuf = '';
 
   // Start polling directly — no blocking connectivity check.
   // The polling loop handles errors and reconnection internally.
-  updateState('connected');
+  stateManager.set('connected');
   startPolling();
   log.info('ClawBot client initialized');
 }
@@ -104,7 +109,7 @@ function startPolling(): void {
         }, combinedSignal);
 
         // Record successful response time for watchdog
-        lastResponseAt = Date.now();
+        heartbeatMonitor.recordResponse();
 
         if (signal.aborted) break;
 
@@ -112,11 +117,11 @@ function startPolling(): void {
           // Detect fatal errors (e.g. errcode -14 "session timeout") — retrying won't help
           if (res.errcode === -14 || isFatalReconnectError(res.error)) {
             log.warn(`ClawBot fatal error (errcode=${res.errcode}), entering slow-probe mode`);
-            fatal = true;
+            reconnectManager.setFatal(true);
             getUpdatesBuf = '';   // session expired, cursor is stale
             clearClawbotContextToken(); // session expired, token is stale
-            updateState('error');
-            scheduleReconnect();
+            stateManager.set('error');
+            reconnectManager.schedule();
             return;
           }
           log.warn(`ClawBot getupdates error: ${res.error ?? 'unknown'}`);
@@ -125,10 +130,9 @@ function startPolling(): void {
         }
 
         // Successful response — clear fatal mode and reset backoff
-        if (fatal || reconnectAttempt > 0) {
+        if (reconnectManager.fatal || reconnectManager.attemptCount > 0) {
           log.info('ClawBot connection recovered');
-          fatal = false;
-          reconnectAttempt = 0;
+          reconnectManager.reset();
         }
 
         // Update cursor for next poll
@@ -217,39 +221,12 @@ function startPolling(): void {
         if (err instanceof Error && err.name === 'AbortError') break;
 
         log.error('ClawBot polling error:', err);
-        updateState('error');
-        scheduleReconnect();
+        stateManager.set('error');
+        reconnectManager.schedule();
         return;
       }
     }
   })();
-}
-
-function scheduleReconnect(): void {
-  if (stopped) return;
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-
-  const baseDelay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
-  const delay = fatal ? jitteredDelay(SLOW_PROBE_MS) : jitteredDelay(baseDelay);
-  reconnectAttempt++;
-  if (fatal) {
-    log.warn(`ClawBot fatal error, slow-probe in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempt})...`);
-  } else {
-    log.info(`ClawBot reconnecting in ${delay}ms (attempt ${reconnectAttempt})...`);
-  }
-
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    if (stopped) return;
-    updateState('connected');
-    startPolling();
-  }, delay);
-}
-
-function updateState(state: ClawBotState): void {
-  channelState = state;
-  stateChangeHandler?.(state);
-  log.debug(`ClawBot state: ${state}`);
 }
 
 /**
@@ -258,22 +235,20 @@ function updateState(state: ClawBotState): void {
  * If no successful response for WATCHDOG_STALE_MS, force a reconnect.
  */
 function startWatchdog(): void {
-  stopWatchdog();
-  lastResponseAt = Date.now();
-  watchdogTimer = setInterval(() => {
-    if (stopped) return;
-    const elapsed = Date.now() - lastResponseAt;
-    if (elapsed > WATCHDOG_STALE_MS) {
-      log.warn(`ClawBot watchdog: no response for ${Math.round(elapsed / 1000)}s, forcing reconnect`);
-      if (pollController) { pollController.abort(); pollController = null; }
-      updateState('error');
-      scheduleReconnect();
-    }
-  }, WATCHDOG_INTERVAL_MS);
+  heartbeatMonitor.recordResponse();
+  heartbeatMonitor.start(WATCHDOG_INTERVAL_MS, watchdogTick);
 }
 
-function stopWatchdog(): void {
-  if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+function watchdogTick(): void {
+  if (stopped) return;
+  if (heartbeatMonitor.isStale(WATCHDOG_STALE_MS)) {
+    const elapsed = Date.now() - heartbeatMonitor.lastResponseTime;
+    log.warn(`ClawBot watchdog: no response for ${Math.round(elapsed / 1000)}s, forcing reconnect`);
+    heartbeatMonitor.stop();
+    if (pollController) { pollController.abort(); pollController = null; }
+    stateManager.set('error');
+    reconnectManager.schedule();
+  }
 }
 
 /**
@@ -461,10 +436,10 @@ export function stopClawbot(): void {
   log.info('Stopping ClawBot client...');
   stopped = true;
   if (pollController) { pollController.abort(); pollController = null; }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  stopWatchdog();
+  reconnectManager.stop();
+  heartbeatMonitor.stop();
   messageHandler = null;
   // Don't clear context_token here — it's persisted for startup notifications
-  updateState('disconnected');
+  stateManager.set('disconnected');
   log.info('ClawBot client stopped');
 }
