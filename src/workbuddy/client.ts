@@ -10,7 +10,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { hostname, homedir } from 'node:os';
 import { createLogger } from '../logger.js';
-import { jitteredDelay, SLOW_PROBE_MS, isFatalReconnectError } from '../shared/reconnect.js';
+import { isFatalReconnectError } from '../shared/reconnect.js';
+import { ReconnectManager, HeartbeatMonitor, StateManager } from '../shared/connection-manager.js';
 import type { Config } from '../config.js';
 import { WorkBuddyOAuth } from './oauth.js';
 import { WorkBuddyCentrifugeClient } from './centrifuge-client.js';
@@ -24,20 +25,30 @@ const CHANNEL_HEARTBEAT_MS = 30_000;
 // Global state
 let oauthClient: WorkBuddyOAuth | null = null;
 let centrifugeClient: WorkBuddyCentrifugeClient | null = null;
-let channelState: WorkBuddyState = 'disconnected';
 let messageHandler: ((chatId: string, msgId: string, content: string) => Promise<void>) | null = null;
-let stateChangeHandler: ((state: WorkBuddyState) => void) | null = null;
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
-let fatalSlowProbe = false;
 let stopped = false;
 let platformConfig: NonNullable<NonNullable<Config['platforms']>['workbuddy']> | null = null;
 /** 单飞刷新 token 的在途 Promise，避免并发 401 重复刷新 */
 let refreshInFlight: Promise<void> | null = null;
 
+// Connection infrastructure (shared managers replace raw timers/counters)
+const stateManager = new StateManager<WorkBuddyState>('disconnected');
+const heartbeatMonitor = new HeartbeatMonitor();
+const reconnectManager = new ReconnectManager({
+  name: 'WorkBuddy',
+  backoff: { mode: 'stepped', delays: RECONNECT_DELAYS_MS },
+  onReconnect: async () => {
+    try {
+      await connect();
+    } catch (err) {
+      log.error('Reconnect attempt failed:', err);
+      reconnectManager.schedule();
+    }
+  },
+});
+
 function getChannelState(): WorkBuddyState {
-  return channelState;
+  return stateManager.current;
 }
 
 export async function initWorkBuddy(
@@ -55,9 +66,10 @@ export async function initWorkBuddy(
 
   platformConfig = pc;
   messageHandler = eventHandler;
-  stateChangeHandler = onStateChange ?? null;
+  stateManager.setOnChange(onStateChange);
   stopped = false;
-  reconnectAttempt = 0;
+  reconnectManager.reset();
+  reconnectManager.resume();
 
   const baseDir = config.logDir ?? join(process.env.HOME ?? '', '.open-im');
   const dataDir = join(baseDir, 'data');
@@ -99,10 +111,10 @@ async function connect(): Promise<void> {
   } catch (err) {
     log.error('Host workspace registration failed:', err);
     if (isFatalReconnectError(err)) {
-      fatalSlowProbe = true;
+      reconnectManager.setFatal(true);
       log.warn('WorkBuddy 致命错误（鉴权失败），转慢探测（token 可能已过期）:', err);
     }
-    scheduleReconnect();
+    reconnectManager.schedule();
     return;
   }
 
@@ -162,9 +174,8 @@ async function connect(): Promise<void> {
       onConnected: () => {
         log.info('WorkBuddy Centrifuge connected');
         log.info(`WeChat KF sessionId: ${workspaceSessionId}`);
-        reconnectAttempt = 0;
-        fatalSlowProbe = false;
-        updateState('connected');
+        reconnectManager.reset();
+        stateManager.set('connected');
 
         // Step 2: Register Claw workspace to get WeChat KF routing channel + sessionId
         oauth.registerWorkspace({
@@ -180,7 +191,7 @@ async function connect(): Promise<void> {
           centrifugeClient?.subscribeChannel(clawParams.channel, clawParams.subscriptionToken);
 
           const doRegister = () => {
-            if (stopped || channelState !== 'connected') return;
+            if (stopped || stateManager.current !== 'connected') return;
             if (replyLock) {
               log.debug('Heartbeat skipped (reply in progress)');
               return;
@@ -196,13 +207,12 @@ async function connect(): Promise<void> {
           };
 
           doRegister();
-          if (heartbeatTimer) clearInterval(heartbeatTimer);
-          heartbeatTimer = setInterval(doRegister, CHANNEL_HEARTBEAT_MS);
+          heartbeatMonitor.start(CHANNEL_HEARTBEAT_MS, doRegister);
         }).catch((err: unknown) => {
           log.error('Claw workspace registration failed:', err);
           // Fallback: register with host sessionId
           const doRegister = () => {
-            if (stopped || channelState !== 'connected') return;
+            if (stopped || stateManager.current !== 'connected') return;
             if (replyLock) {
               log.debug('Heartbeat skipped (reply in progress, fallback path)');
               return;
@@ -217,15 +227,14 @@ async function connect(): Promise<void> {
               .catch((e: unknown) => log.warn(`registerChannel failed: ${String(e)}`));
           };
           doRegister();
-          if (heartbeatTimer) clearInterval(heartbeatTimer);
-          heartbeatTimer = setInterval(doRegister, CHANNEL_HEARTBEAT_MS);
+          heartbeatMonitor.start(CHANNEL_HEARTBEAT_MS, doRegister);
         });
       },
       onDisconnected: (reason) => {
         log.info(`WorkBuddy Centrifuge disconnected: ${reason}`);
-        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-        updateState('disconnected');
-        scheduleReconnect();
+        heartbeatMonitor.stop();
+        stateManager.set('disconnected');
+        reconnectManager.schedule();
       },
       onError: (error) => {
         const msg = error instanceof Error ? error.message : JSON.stringify(error);
@@ -235,13 +244,13 @@ async function connect(): Promise<void> {
         } else {
           log.error(`WorkBuddy Centrifuge error: ${msg}`);
         }
-        updateState('error');
+        stateManager.set('error');
       },
       onPersistentFailure: () => {
         log.warn('WorkBuddy Centrifuge persistent failure detected — doing full re-registration');
-        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-        updateState('disconnected');
-        scheduleReconnect();
+        heartbeatMonitor.stop();
+        stateManager.set('disconnected');
+        reconnectManager.schedule();
       },
       onMessage: async (chatId, msgId, content) => {
         if (messageHandler) {
@@ -253,31 +262,6 @@ async function connect(): Promise<void> {
   );
 
   centrifugeClient.start();
-}
-
-function scheduleReconnect(): void {
-  if (stopped) return;
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  const baseDelay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
-  const delay = fatalSlowProbe ? jitteredDelay(SLOW_PROBE_MS) : jitteredDelay(baseDelay);
-  reconnectAttempt++;
-  log.info(`Reconnecting in ${delay}ms (attempt ${reconnectAttempt})${fatalSlowProbe ? ' [slow-probe]' : ''}...`);
-  reconnectTimer = setTimeout(async () => {
-    reconnectTimer = null;
-    if (stopped) return;
-    try {
-      await connect();
-    } catch (err) {
-      log.error('Reconnect attempt failed:', err);
-      scheduleReconnect();
-    }
-  }, delay);
-}
-
-function updateState(state: WorkBuddyState): void {
-  channelState = state;
-  stateChangeHandler?.(state);
-  log.debug(`WorkBuddy state: ${state}`);
 }
 
 export function getCentrifugeClient(): WorkBuddyCentrifugeClient | null {
@@ -313,11 +297,11 @@ async function refreshWorkBuddyToken(): Promise<void> {
 export function stopWorkBuddy(): void {
   log.info('Stopping WorkBuddy client...');
   stopped = true;
-  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  heartbeatMonitor.stop();
+  reconnectManager.stop();
   if (centrifugeClient) { centrifugeClient.stop(); centrifugeClient = null; }
   oauthClient = null;
   platformConfig = null;
-  updateState('disconnected');
+  stateManager.set('disconnected');
   log.info('WorkBuddy client stopped');
 }

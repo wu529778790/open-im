@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import type { Config } from "../config.js";
 import { createLogger } from "../logger.js";
-import { jitteredDelay, SLOW_PROBE_MS } from "../shared/reconnect.js";
+import { ReconnectManager, HeartbeatMonitor } from "../shared/connection-manager.js";
 import type { QQAttachment, QQMessageEvent } from "./types.js";
 
 const log = createLogger("QQ");
@@ -35,26 +35,25 @@ interface QQClient {
 
 let client: QQClient | null = null;
 let ws: WebSocket | null = null;
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
 let seq: number | null = null;
 let sessionId: string | null = null;
-let reconnectAttempt = 0;
 let connecting = false; // 防止并发 connectWebSocket
 let currentConfig: Config | null = null;
 let currentHandler: ((event: QQMessageEvent) => Promise<void>) | null = null;
 let tokenState: TokenState | null = null;
-let lastServerResponseTime = 0;
 
-function clearTimers(): void {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+// Connection infrastructure (shared managers replace raw timers/counters)
+const heartbeatMonitor = new HeartbeatMonitor();
+const reconnectManager = new ReconnectManager({
+  name: 'QQ',
+  backoff: { mode: 'stepped', delays: RECONNECT_DELAYS_MS },
+  onReconnect: () => reconnectFn(),
+});
+
+async function reconnectFn(): Promise<void> {
+  if (currentConfig && currentHandler) {
+    await connectWebSocket(currentConfig, currentHandler);
   }
 }
 
@@ -196,27 +195,29 @@ function normalizeInboundEvent(payload: GatewayPayload): QQMessageEvent | null {
   return null;
 }
 
-function startHeartbeat(intervalMs: number): void {
-  lastServerResponseTime = Date.now();
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+/**
+ * Heartbeat tick: send ping and detect stale connections.
+ * The heartbeat interval is dynamic (from QQ gateway HELLO message).
+ */
+let heartbeatIntervalMs = 30000;
 
-    const elapsed = Date.now() - lastServerResponseTime;
-    if (lastServerResponseTime > 0 && elapsed > intervalMs * 3) {
-      log.warn(`QQ dead connection: no response for ${Math.round(elapsed / 1000)}s, reconnecting`);
-      clearTimers();
-      ws?.terminate();
-      connectWebSocket(currentConfig!, currentHandler!);
-      return;
-    }
+function heartbeatTick(): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    try {
-      ws.send(JSON.stringify({ op: 1, d: seq }));
-    } catch (err) {
-      log.warn('QQ heartbeat send failed:', err);
-    }
-  }, intervalMs);
+  if (heartbeatMonitor.isStale(heartbeatIntervalMs * 3)) {
+    const elapsed = Date.now() - heartbeatMonitor.lastResponseTime;
+    log.warn(`QQ dead connection: no response for ${Math.round(elapsed / 1000)}s, reconnecting`);
+    heartbeatMonitor.stop();
+    ws?.terminate();
+    reconnectFn().catch((err) => log.error('QQ reconnect from heartbeat failed:', err));
+    return;
+  }
+
+  try {
+    ws.send(JSON.stringify({ op: 1, d: seq }));
+  } catch (err) {
+    log.warn('QQ heartbeat send failed:', err);
+  }
 }
 
 async function connectWebSocket(config: Config, handler: (event: QQMessageEvent) => Promise<void>): Promise<void> {
@@ -252,18 +253,18 @@ async function connectWebSocket(config: Config, handler: (event: QQMessageEvent)
 
       socket.on("open", () => {
         log.info("QQ gateway connected");
-        reconnectAttempt = 0;
+        reconnectManager.reset();
       });
 
       socket.on("message", async (raw) => {
-        lastServerResponseTime = Date.now();
+        heartbeatMonitor.recordResponse();
         try {
           const payload = JSON.parse(raw.toString()) as GatewayPayload;
           if (typeof payload.s === "number") seq = payload.s;
 
           if (payload.op === 10) {
-            const heartbeatInterval = Number((payload.d as { heartbeat_interval?: number })?.heartbeat_interval ?? 30000);
-            startHeartbeat(heartbeatInterval);
+            heartbeatIntervalMs = Number((payload.d as { heartbeat_interval?: number })?.heartbeat_interval ?? 30000);
+            heartbeatMonitor.start(heartbeatIntervalMs, heartbeatTick);
             socket.send(
               JSON.stringify({
                 op: sessionId ? 6 : 2,
@@ -317,7 +318,7 @@ async function connectWebSocket(config: Config, handler: (event: QQMessageEvent)
 
       socket.on("close", (code, reason) => {
         settle(() => {}); // 清理 ready timeout
-        clearTimers();
+        heartbeatMonitor.stop();
         ws = null;
         const reasonStr = reason.toString();
         if (code === 4009) {
@@ -335,19 +336,11 @@ async function connectWebSocket(config: Config, handler: (event: QQMessageEvent)
           seq = null;
         }
         const isFatalClose = code === 4004 || code === 4006 || code === 4007;
-        const baseDelay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
-        const delay = isFatalClose ? jitteredDelay(SLOW_PROBE_MS) : jitteredDelay(baseDelay);
         if (isFatalClose) {
-          log.warn(`QQ 致命关闭码 ${code}（鉴权失败），转慢探测（每 ${Math.round(SLOW_PROBE_MS / 1000)}s 一次）`);
+          reconnectManager.setFatal(true);
+          log.warn(`QQ 致命关闭码 ${code}（鉴权失败），转慢探测（每 ${Math.round(5 * 60)}s 一次）`);
         }
-        reconnectAttempt += 1;
-        reconnectTimer = setTimeout(() => {
-          if (currentConfig && currentHandler) {
-            connectWebSocket(currentConfig, currentHandler).catch((err) => {
-              log.error("QQ reconnect failed:", err);
-            });
-          }
-        }, delay);
+        reconnectManager.schedule();
       });
     });
   } finally {
@@ -373,6 +366,8 @@ export async function initQQ(
   stopped = false;
   currentConfig = config;
   currentHandler = eventHandler;
+  reconnectManager.reset();
+  reconnectManager.resume();
   client = {
     sendPrivateMessage: async (openid, content, replyToMessageId) => {
       const res = await apiRequest<QQApiMessageResponse>(
@@ -407,7 +402,8 @@ export async function initQQ(
 
 export async function stopQQ(): Promise<void> {
   stopped = true;
-  clearTimers();
+  heartbeatMonitor.stop();
+  reconnectManager.stop();
   if (ws) {
     ws.close(1000);
     ws = null;
@@ -418,5 +414,4 @@ export async function stopQQ(): Promise<void> {
   tokenState = null;
   sessionId = null;
   seq = null;
-  lastServerResponseTime = 0;
 }
