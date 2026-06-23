@@ -10,16 +10,40 @@ export const DEFAULT_SERVER_URL = "http://127.0.0.1:39282";
 export const POLLING_INTERVAL_MS = 10_000;
 
 export const PLATFORM_KEYS: PlatformKey[] = [
+  "clawbot",
+  "workbuddy",
   "telegram",
   "feishu",
   "qq",
   "wework",
   "dingtalk",
-  "workbuddy",
-  "clawbot",
 ];
 
 export const PLATFORM_DEFINITIONS = [
+  {
+    key: "clawbot" as const,
+    label: "微信客服号（ClawBot）",
+    fields: ["aiCommand", "apiUrl", "apiToken", "allowedUserIds"] as const,
+    testFields: ["apiUrl", "apiToken"] as const,
+    requiredFields: ["apiToken"] as const,
+    sensitiveFields: ["apiToken"] as const,
+    docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
+    docLabel: "微信客服号接入指南",
+    qrLogin: true as const,
+    bindField: "apiToken" as const,
+  },
+  {
+    key: "workbuddy" as const,
+    label: "微信助理（WorkBuddy）",
+    fields: ["aiCommand", "accessToken", "refreshToken", "userId", "baseUrl", "allowedUserIds"] as const,
+    testFields: ["accessToken", "refreshToken", "userId"] as const,
+    requiredFields: ["accessToken", "refreshToken", "userId"] as const,
+    sensitiveFields: ["accessToken", "refreshToken"] as const,
+    docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
+    docLabel: "微信助理接入指南",
+    qrLogin: true as const,
+    bindField: "accessToken" as const,
+  },
   {
     key: "telegram" as const,
     label: "Telegram",
@@ -69,29 +93,5 @@ export const PLATFORM_DEFINITIONS = [
     sensitiveFields: ["clientSecret"] as const,
     docUrl: "https://open-dev.dingtalk.com/",
     docLabel: "钉钉机器人接入指南",
-  },
-  {
-    key: "workbuddy" as const,
-    label: "微信助理（WorkBuddy）",
-    fields: ["aiCommand", "accessToken", "refreshToken", "userId", "baseUrl", "allowedUserIds"] as const,
-    testFields: ["accessToken", "refreshToken", "userId"] as const,
-    requiredFields: ["accessToken", "refreshToken", "userId"] as const,
-    sensitiveFields: ["accessToken", "refreshToken"] as const,
-    docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
-    docLabel: "微信助理接入指南",
-    qrLogin: true as const,
-    bindField: "accessToken" as const,
-  },
-  {
-    key: "clawbot" as const,
-    label: "微信客服号（ClawBot）",
-    fields: ["aiCommand", "apiUrl", "apiToken", "allowedUserIds"] as const,
-    testFields: ["apiUrl", "apiToken"] as const,
-    requiredFields: ["apiToken"] as const,
-    sensitiveFields: ["apiToken"] as const,
-    docUrl: "https://www.codebuddy.cn/docs/workbuddy/Claw",
-    docLabel: "微信客服号接入指南",
-    qrLogin: true as const,
-    bindField: "apiToken" as const,
   },
 ];
