@@ -28,9 +28,11 @@ interface Props {
   testing: boolean;
   testResult?: { text: string; ok: boolean };
   request?: JsonRequest;
+  /** 绑定/移除后立即持久化到磁盘（Dashboard 用，SetupWizard 不传则最后统一保存） */
+  onPersist?: (patch: Record<string, unknown>) => void;
 }
 
-export function PlatformCard({ def, values, t, html, disabledVisual, onChange, onTest, testing, testResult, request }: Props) {
+export function PlatformCard({ def, values, t, html, disabledVisual, onChange, onTest, testing, testResult, request, onPersist }: Props) {
   const sk = PLATFORM_SUMMARY_KEY[def.key as keyof typeof PLATFORM_SUMMARY_KEY];
   const hk = PLATFORM_HELP_KEY[def.key as keyof typeof PLATFORM_HELP_KEY];
   const enabled = (values as { enabled?: boolean }).enabled ?? false;
@@ -79,6 +81,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
                     if (!window.confirm("确定移除该平台的绑定配置吗？")) return;
                     const patch: Record<string, unknown> = { [def.bindField as string]: "", enabled: false };
                     onChange(patch);
+                    onPersist?.(patch);
                   }}
                 >
                   移除配置
@@ -95,6 +98,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
               const patch: Record<string, unknown> = { [def.bindField as string]: r.botToken, enabled: true };
               if (r.baseUrl) patch.apiUrl = r.baseUrl;
               onChange(patch);
+              onPersist?.(patch);
             }}
             request={request}
             t={t}

@@ -112,6 +112,17 @@ export function Dashboard() {
   };
 
   const upP = <K extends PlatformKey>(k: K, p: Partial<WebConfigPayload["platforms"][K]>) => { setPl(prev => ({ ...prev, platforms: { ...prev.platforms, [k]: { ...prev.platforms[k], ...p } } })); };
+  const persistPatch = useCallback(async (pk: PlatformKey, patch: Record<string, unknown>) => {
+    const newPl: WebConfigPayload = { ...pl, platforms: { ...pl.platforms, [pk]: { ...pl.platforms[pk], ...patch } } };
+    setPl(newPl);
+    const payload = { ...newPl, ai: { ...newPl.ai, hookPort: Number(newPl.ai.hookPort) || 0 } };
+    try {
+      await R("/api/config/save", { method: "POST", body: JSON.stringify(payload) });
+      setMsg({ text: t("saveOk"), type: "success" });
+    } catch (x) {
+      setMsg({ text: toMsg(x), type: "error" });
+    }
+  }, [pl, R, t]);
   const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
@@ -137,7 +148,7 @@ export function Dashboard() {
               <div className="platform-grid">
                 {PLATFORM_DEFINITIONS.map((def) => {
                   const pk = def.key as PlatformKey;
-                  return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={!pl.platforms[pk].enabled} request={R} onChange={(p) => upP(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
+                  return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={!pl.platforms[pk].enabled} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
                 })}
               </div>
             </section>

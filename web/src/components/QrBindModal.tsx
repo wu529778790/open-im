@@ -55,7 +55,7 @@ export function QrBindModal({ open, onClose, onSuccess, request, t }: Props) {
   if (!open) return null;
 
   const imgSrc = qrUrl
-    ? qrUrl.startsWith("data:")
+    ? qrUrl.startsWith("data:") || qrUrl.startsWith("http")
       ? qrUrl
       : `data:image/png;base64,${qrUrl}`
     : "";
