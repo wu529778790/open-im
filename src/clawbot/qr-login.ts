@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import QRCode from 'qrcode';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('ClawBotQR');
@@ -20,6 +21,7 @@ export interface QRLoginSession {
   sessionKey: string;
   qrcode: string;
   qrcodeUrl: string;
+  qrcodeImage?: string; // base64 PNG data URL（仅 /start 返回，/wait 不需要）
   startedAt: number;
 }
 
@@ -100,10 +102,18 @@ export async function startQRLogin(): Promise<QRLoginSession> {
   log.info('Starting ClawBot QR login...');
   const { qrcode, qrcodeUrl } = await fetchQRCode();
   log.info(`QR code received, url=${qrcodeUrl}`);
+
+  // iLink 返回的 qrcodeUrl 是一个 HTML 中转页（X-Frame-Options: SAMEORIGIN，
+  // Content-Type: text/html），前端无法用 <img> 或 iframe 直接展示。
+  // 把这个 URL 本身编码成二维码 PNG——用户扫码后微信打开中转页完成绑定。
+  const qrcodeImage = await QRCode.toDataURL(qrcodeUrl, { width: 280, margin: 1 });
+  log.info('QR code PNG generated (base64)');
+
   return {
     sessionKey: randomUUID(),
     qrcode,
     qrcodeUrl,
+    qrcodeImage,
     startedAt: Date.now(),
   };
 }

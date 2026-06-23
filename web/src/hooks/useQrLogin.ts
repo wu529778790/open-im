@@ -10,7 +10,7 @@ export interface QrLoginResult {
 
 export interface UseQrLogin {
   state: QrLoginState;
-  qrUrl: string;
+  qrImg: string;
   message: string;
   start: () => void;
   reset: () => void;
@@ -32,7 +32,7 @@ export function useQrLogin(
   onSuccess: (result: QrLoginResult) => void,
 ): UseQrLogin {
   const [state, setState] = useState<QrLoginState>("idle");
-  const [qrUrl, setQrUrl] = useState("");
+  const [qrImg, setQrImg] = useState("");
   const [message, setMessage] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
@@ -45,7 +45,7 @@ export function useQrLogin(
     abortRef.current = null;
     runIdRef.current += 1;
     setState("idle");
-    setQrUrl("");
+    setQrImg("");
     setMessage("");
   }, []);
 
@@ -56,7 +56,7 @@ export function useQrLogin(
     abortRef.current = controller;
 
     setState("loading");
-    setQrUrl("");
+    setQrImg("");
     setMessage("");
 
     (async () => {
@@ -65,18 +65,19 @@ export function useQrLogin(
           method: "POST",
         })) as {
           success?: boolean;
+          qrcodeImage?: string;
           qrcodeUrl?: string;
           qrcode?: string;
           sessionKey?: string;
           error?: string;
         };
         if (runId !== runIdRef.current) return;
-        if (!s.success || !s.qrcodeUrl || !s.sessionKey || !s.qrcode) {
+        if (!s.success || !s.qrcodeImage || !s.sessionKey || !s.qrcode) {
           setState("error");
           setMessage(s.error || "qrLoginFailed");
           return;
         }
-        setQrUrl(s.qrcodeUrl);
+        setQrImg(s.qrcodeImage);
         setState("scanning");
 
         const w = (await request("/api/clawbot/qr-login/wait", {
@@ -120,5 +121,5 @@ export function useQrLogin(
     };
   }, []);
 
-  return { state, qrUrl, message, start, reset };
+  return { state, qrImg, message, start, reset };
 }

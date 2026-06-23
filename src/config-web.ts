@@ -407,7 +407,7 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         try {
           const { startQRLogin } = await import("./clawbot/qr-login.js");
           const session = await startQRLogin();
-          json(response, 200, { success: true, qrcodeUrl: session.qrcodeUrl, qrcode: session.qrcode, sessionKey: session.sessionKey }, request);
+          json(response, 200, { success: true, qrcodeUrl: session.qrcodeUrl, qrcodeImage: session.qrcodeImage, qrcode: session.qrcode, sessionKey: session.sessionKey }, request);
         } catch (error) {
           json(response, 500, { success: false, error: toErrorMessage(error) }, request);
         }
