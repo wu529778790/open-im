@@ -131,80 +131,88 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
         </div>
         <div className="platform-card-right">
           {/* AI 标签 */}
-          <div className="platform-card-menu" ref={aiRef}>
-            <button
-              type="button"
-              className="platform-card-ai-tag"
-              onClick={() => setAiOpen((v) => !v)}
-              title="选择 AI 工具"
-            >
-              {aiLabel} ▾
-            </button>
-            {aiOpen && (
-              <div className="platform-card-ai-dropdown">
-                {AI_TOOL_DEFINITIONS.map((tool) => (
-                  <button
-                    key={tool.key}
-                    type="button"
-                    className={`platform-card-ai-option ${tool.key === aiCommand ? "active" : ""}`}
-                    onClick={() => onPickAi(tool.key as AiCommand)}
-                  >
-                    {tool.label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="platform-card-control platform-card-control-ai">
+            <div className="platform-card-menu" ref={aiRef}>
+              <button
+                type="button"
+                className="platform-card-ai-tag"
+                onClick={() => setAiOpen((v) => !v)}
+                title="选择 AI 工具"
+              >
+                {aiLabel} ▾
+              </button>
+              {aiOpen && (
+                <div className="platform-card-ai-dropdown">
+                  {AI_TOOL_DEFINITIONS.map((tool) => (
+                    <button
+                      key={tool.key}
+                      type="button"
+                      className={`platform-card-ai-option ${tool.key === aiCommand ? "active" : ""}`}
+                      onClick={() => onPickAi(tool.key as AiCommand)}
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 状态徽章 */}
-          <span className={`platform-status-badge ${bound ? "on" : "off"}`}>
-            {isQr
-              ? (bound ? t("platformBound") : t("platformUnbound"))
-              : (enabled ? t("platformStatusOn") : t("platformStatusOff"))}
-          </span>
-
-          {/* 三点菜单 */}
-          <div className="platform-card-menu" ref={menuRef}>
-            <button
-              type="button"
-              className="platform-card-menu-btn"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="更多操作"
-            >
-              ⋯
-            </button>
-            {menuOpen && (
-              <div className="platform-card-menu-dropdown">
-                <button type="button" className="platform-card-menu-item" onClick={onEdit}>
-                  编辑配置
-                </button>
-                <button
-                  type="button"
-                  className="platform-card-menu-item danger"
-                  onClick={onRemove}
-                  disabled={!hasConfig}
-                >
-                  移除配置
-                </button>
-              </div>
-            )}
+          <div className="platform-card-control platform-card-control-status">
+            <span className={`platform-status-badge ${bound ? "on" : "off"}`}>
+              {isQr
+                ? (bound ? t("platformBound") : t("platformUnbound"))
+                : (enabled ? t("platformStatusOn") : t("platformStatusOff"))}
+            </span>
           </div>
 
-          {/* 已配置：显示开关；未配置：显示「去配置」按钮 */}
-          {hasConfig ? (
-            <label className="toggle" onClick={(e) => e.stopPropagation()}>
-              <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
-              <span className="toggle-track" />
-            </label>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-p btn-sm"
-              onClick={onEdit}
-            >
-              去配置
-            </button>
-          )}
+          {/* 三点菜单 */}
+          <div className="platform-card-control platform-card-control-menu">
+            <div className="platform-card-menu" ref={menuRef}>
+              <button
+                type="button"
+                className="platform-card-menu-btn"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="更多操作"
+              >
+                ⋯
+              </button>
+              {menuOpen && (
+                <div className="platform-card-menu-dropdown">
+                  <button type="button" className="platform-card-menu-item" onClick={onEdit}>
+                    编辑配置
+                  </button>
+                  <button
+                    type="button"
+                    className="platform-card-menu-item danger"
+                    onClick={onRemove}
+                    disabled={!hasConfig}
+                  >
+                    移除配置
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 已配置：显示开关；未配置：显示「配置」按钮 */}
+          <div className="platform-card-control platform-card-control-action">
+            {hasConfig ? (
+              <label className="toggle" onClick={(e) => e.stopPropagation()}>
+                <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
+                <span className="toggle-track" />
+              </label>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-p btn-sm platform-card-config-btn"
+                onClick={onEdit}
+              >
+                配置
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

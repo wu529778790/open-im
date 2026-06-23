@@ -333,21 +333,27 @@ body {
   text-overflow: ellipsis;
 }
 .platform-card-right {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(104px, 116px) minmax(72px, 84px) 40px minmax(72px, 84px);
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
 }
-.platform-card-ai-tag {
-  min-width: 96px;
-  text-align: center;
+.platform-card-control {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  min-width: 0;
+}
+.platform-card-control-menu {
+  width: 40px;
 }
 .platform-status-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 64px;
+  width: 100%;
+  min-width: 0;
   text-align: center;
   font-size: 11px;
   font-weight: 500;
@@ -434,7 +440,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 96px;
+  width: 100%;
+  min-width: 0;
   font-size: 11px;
   font-weight: 500;
   padding: 3px 10px;
@@ -487,9 +494,11 @@ body {
   flex-shrink: 0;
 }
 .platform-card-menu-btn {
+  width: 32px;
+  height: 32px;
   background: transparent;
   border: 0;
-  padding: 4px 8px;
+  padding: 0;
   font-size: 18px;
   line-height: 1;
   color: var(--c-text-3);
@@ -537,6 +546,13 @@ body {
 .platform-card-menu-item:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.platform-card-config-btn {
+  min-width: 72px;
+}
+.platform-card-right .toggle {
+  justify-content: center;
+  width: 100%;
 }
 
 /* ─── QR Bind Modal ─── */
@@ -1256,5 +1272,19 @@ body {
   .header { padding: 0 16px; }
   .header-toolbar { padding: 10px 16px; }
   .platform-grid { grid-template-columns: 1fr; }
+  .platform-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .platform-card-right {
+    width: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .platform-card-control-menu {
+    width: 100%;
+  }
+  .platform-card-menu-btn {
+    width: 100%;
+  }
   .wizard-chips { grid-template-columns: 1fr; }
 }
