@@ -406,7 +406,9 @@ export function runAITask(
           const notification = formatToolCallNotification(toolName, toolInput);
           toolLines.push(notification);
           if (toolLines.length > 5) toolLines.shift();
-          throttledUpdate(taskState.latestContent, true);
+          // 不强制发送（force=false），让节流机制合并短时间内的多次工具调用，
+          // 避免突发大量消息触发平台频率限制（如 ClawBot ret=-2）。
+          throttledUpdate(taskState.latestContent, false);
         },
         onComplete: async (result) => {
           log.info(`[AITask] onComplete fired: settled=${settled}, success=${result.success}, platform=${ctx.platform}, taskKey=${ctx.taskKey}`);
