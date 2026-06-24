@@ -35,7 +35,7 @@ export function ConfigFilesSection({ files, forwardRef, hideHeading = false }: P
   const active = files.find(f => f.id === selectedId);
 
   return (
-    <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
+    <section className="section config-editor-wrap" ref={forwardRef as React.RefObject<HTMLElement>}>
       {!hideHeading && (
         <div className="section-head">
           <div>
