@@ -9,9 +9,9 @@ interface KeepaliveCfg {
 
 const AI_OPTIONS = [
   { value: "claude", label: "Claude Code" },
-  { value: "codex", label: "Codex（暂未实现保活）" },
-  { value: "codebuddy", label: "CodeBuddy（暂未实现保活）" },
-  { value: "opencode", label: "OpenCode（暂未实现保活）" },
+  { value: "codex", label: "Codex" },
+  { value: "codebuddy", label: "CodeBuddy" },
+  { value: "opencode", label: "OpenCode" },
 ];
 
 export function SettingsSection({ hideHeading = false }: { hideHeading?: boolean }) {
@@ -67,7 +67,7 @@ export function SettingsSection({ hideHeading = false }: { hideHeading?: boolean
         </div>
         <div className="card-body">
           <p className="form-hint" style={{ marginBottom: 16 }}>
-            定期向选中的 AI 工具发送轻量级请求（只读查询），用来延续 5 小时滚动重置的 token 配额。
+            定期向选中的 AI 工具发送"在吗"，保活 token plan 的 5 小时滚动配额。
             如果不发请求，未使用的配额会被浪费。
           </p>
 
@@ -113,7 +113,7 @@ export function SettingsSection({ hideHeading = false }: { hideHeading?: boolean
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-            <p className="field-tip">目前仅 Claude Code 已实现保活，其他工具占位。</p>
+            <p className="field-tip">所有 AI 工具都通过发送一句"在吗"来保活，消耗约 1 轮配额。</p>
           </div>
 
           <div style={{ marginTop: 16 }}>

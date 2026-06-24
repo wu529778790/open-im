@@ -2,44 +2,76 @@ import { loadFileConfig, saveFileConfig } from "../config/file-io.js";
 import { loadConfig } from "../config.js";
 import type { AiCommand } from "../config/types.js";
 import { createLogger } from "../logger.js";
+import { getAdapter } from "../adapters/registry.js";
+import { ClaudeSDKAdapter } from "../adapters/claude-sdk-adapter.js";
+import { CodexAdapter } from "../adapters/codex-adapter.js";
+import { CodeBuddyAdapter } from "../adapters/codebuddy-adapter.js";
+import { OpenCodeAdapter } from "../adapters/opencode-adapter.js";
+import type { ToolAdapter } from "../adapters/tool-adapter.interface.js";
 
 const log = createLogger("Keepalive");
 
+const PING_PROMPT = "在吗";
+const PING_TIMEOUT_MS = 60_000;
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
-/** 对 Claude SDK 执行一次保活请求 */
-async function pingClaude(workDir: string): Promise<boolean> {
-  try {
-    const { ClaudeSDKAdapter } = await import("../adapters/claude-sdk-adapter.js");
-    const info = await ClaudeSDKAdapter.getAccountInfo(workDir);
-    if (info) {
-      const str = JSON.stringify(info).substring(0, 100);
-      log.info(`Keepalive ping OK: ${str}`);
-      return true;
-    }
-    log.warn("Keepalive ping returned no account info");
-    return false;
-  } catch (err) {
-    log.warn(`Keepalive ping failed: ${err}`);
-    return false;
+/** 按需创建临时 adapter（保活的目标 AI 可能未在 enabledPlatforms 中，registry 不会注册） */
+function resolveAdapter(target: AiCommand): ToolAdapter | null {
+  const cached = getAdapter(target);
+  if (cached) return cached;
+
+  const config = loadConfig();
+  switch (target) {
+    case "claude": return new ClaudeSDKAdapter();
+    case "codex": return new CodexAdapter(config.codexCliPath);
+    case "codebuddy": return new CodeBuddyAdapter(config.codebuddyCliPath);
+    case "opencode": return new OpenCodeAdapter();
+    default:
+      log.warn(`Unknown AI command: ${target}`);
+      return null;
   }
 }
 
-/** 通用保活 ping */
+/** 发送一句保活消息，等待完成或超时 */
 async function ping(target: AiCommand, workDir: string): Promise<boolean> {
-  switch (target) {
-    case "claude":
-      return pingClaude(workDir);
-    // 其他 AI 工具后续可按需实现
-    default:
-      log.info(`Keepalive: ${target} 的保活尚未实现，跳过`);
-      return false;
-  }
+  const adapter = resolveAdapter(target);
+  if (!adapter) return false;
+
+  log.info(`Keepalive ping → ${target}`);
+
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const settle = (ok: boolean, reason: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      log.info(`Keepalive ${target} ${ok ? "OK" : "FAIL"}: ${reason}`);
+      resolve(ok);
+    };
+
+    const handle = adapter.run(
+      PING_PROMPT,
+      undefined,
+      workDir,
+      {
+        onText: () => {},
+        onComplete: (r) => settle(r.success, `${r.numTurns} turn(s), ${r.durationMs}ms`),
+        onError: (e) => settle(false, `error: ${e}`),
+      },
+      { skipPermissions: true, skipAutoResume: true },
+    );
+
+    const timeoutHandle = setTimeout(() => {
+      try { handle.abort(); } catch {}
+      settle(false, `timeout after ${PING_TIMEOUT_MS}ms`);
+    }, PING_TIMEOUT_MS);
+  });
 }
 
 /** 启动保活定时器 */
 export function startKeepalive(): void {
-  stopKeepalive(); // 确保不重复
+  stopKeepalive();
 
   const file = loadFileConfig();
   const ka = file.keepalive ?? {};
@@ -58,15 +90,12 @@ export function startKeepalive(): void {
 
   log.info(`Keepalive 已启动，每 ${intervalHours} 小时 ping ${target}`);
 
-  // 立即执行一次
-  ping(target, workDir);
-
-  // 定时执行
+  // 不立即执行（启动时不打扰），等到第一个间隔
   timer = setInterval(() => {
-    ping(target, workDir);
+    ping(target, workDir).catch((e) => log.warn(`Keepalive ping unhandled: ${e}`));
   }, intervalMs);
 
-  timer.unref?.(); // 不阻止进程退出
+  timer.unref?.();
 }
 
 /** 停止保活定时器 */
@@ -98,6 +127,5 @@ export function saveKeepaliveConfig(cfg: { enabled: boolean; intervalHours: numb
     target: cfg.target as AiCommand,
   };
   saveFileConfig(file);
-  // 保存后立即重启定时器
   startKeepalive();
 }
