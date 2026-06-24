@@ -63,6 +63,7 @@ export interface WebConfigPayload {
     claudeWorkDir: string;
     claudeConfigPath: string;
     claudeProxy: string;
+    claudeSkipPermissions: boolean;
     codexCliPath: string;
     codexProxy: string;
     codexApiKey?: string;

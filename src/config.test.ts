@@ -75,6 +75,7 @@ describe('config', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    delete process.env.OPEN_IM_SKIP_PERMISSIONS;
     existsSyncMock.mockReturnValue(false);
     readFileSyncMock.mockImplementation(() => {
       throw new Error('missing');
@@ -263,5 +264,74 @@ describe('config', () => {
     loadConfig();
 
     expect(loggerWarnMock).toHaveBeenCalledWith(expect.stringContaining('CodeBuddy 模式：未检测到明确的登录态或 API Key'));
+  });
+
+  it('leaves skipPermissions undefined when not explicitly configured', async () => {
+    const { loadConfig } = await import('./config.js');
+    mockConfigJson({
+      tools: {
+        claude: {
+          env: {
+            ANTHROPIC_AUTH_TOKEN: 'token',
+          },
+        },
+      },
+      platforms: {
+        telegram: {
+          enabled: true,
+          botToken: 'tg-token',
+          aiCommand: 'claude',
+        },
+      },
+    });
+
+    existsSyncMock.mockImplementation((path: unknown) => {
+      if (typeof path !== 'string') return false;
+      if (path.endsWith('/config.json')) return true;
+      if (path.endsWith('/.claude/settings.json')) return false;
+      if (path.includes('@anthropic-ai/claude-agent-sdk') && path.endsWith('/cli.js')) return true;
+      return false;
+    });
+
+    const config = loadConfig();
+
+    expect(config.skipPermissions).toBeUndefined();
+  });
+
+  it('loads explicit Claude skipPermissions from config and env', async () => {
+    const { loadConfig } = await import('./config.js');
+    mockConfigJson({
+      tools: {
+        claude: {
+          skipPermissions: true,
+          env: {
+            ANTHROPIC_AUTH_TOKEN: 'token',
+          },
+        },
+      },
+      platforms: {
+        telegram: {
+          enabled: true,
+          botToken: 'tg-token',
+          aiCommand: 'claude',
+        },
+      },
+    });
+
+    existsSyncMock.mockImplementation((path: unknown) => {
+      if (typeof path !== 'string') return false;
+      if (path.endsWith('/config.json')) return true;
+      if (path.endsWith('/.claude/settings.json')) return false;
+      if (path.includes('@anthropic-ai/claude-agent-sdk') && path.endsWith('/cli.js')) return true;
+      return false;
+    });
+
+    expect(loadConfig().skipPermissions).toBe(true);
+
+    process.env.OPEN_IM_SKIP_PERMISSIONS = 'false';
+    expect(loadConfig().skipPermissions).toBe(false);
+
+    process.env.OPEN_IM_SKIP_PERMISSIONS = 'true';
+    expect(loadConfig().skipPermissions).toBe(true);
   });
 });

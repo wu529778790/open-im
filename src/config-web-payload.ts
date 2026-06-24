@@ -30,6 +30,7 @@ export interface WebConfigPayload {
     claudeBaseUrl: string;
     claudeModel: string;
     claudeProxy: string;
+    claudeSkipPermissions: boolean;
     codexCliPath: string;
     codebuddyCliPath: string;
     opencodeCliPath: string;
@@ -134,6 +135,7 @@ export function buildInitialPayload(file: FileConfig): WebConfigPayload {
       claudeBaseUrl: claudeEnv.ANTHROPIC_BASE_URL ?? "",
       claudeModel: claudeEnv.ANTHROPIC_MODEL ?? "",
       claudeProxy: file.tools?.claude?.proxy ?? "",
+      claudeSkipPermissions: file.tools?.claude?.skipPermissions ?? false,
       codexCliPath: file.tools?.codex?.cliPath ?? "codex",
       codebuddyCliPath: file.tools?.codebuddy?.cliPath ?? "codebuddy",
       opencodeCliPath: file.tools?.opencode?.cliPath ?? "opencode",
@@ -203,6 +205,7 @@ export function toFileConfig(payload: WebConfigPayload, existing: FileConfig): F
         ...existing.tools?.claude,
         workDir: clean(payload.ai.claudeWorkDir) ?? process.cwd(),
         proxy: clean(payload.ai.claudeProxy),
+        skipPermissions: payload.ai.claudeSkipPermissions,
         // model is now saved to ~/.claude/settings.json as env var
       },
       codex: {

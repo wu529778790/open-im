@@ -357,9 +357,12 @@ export function loadConfig(): Config {
   const opencodeCliPath = process.env.OPENCODE_CLI_PATH ?? topencode.cliPath ?? resolveWindowsCliPath(AI_TOOL_BY_ID.opencode.cliDefault ?? 'opencode');
   const opencodeModel = process.env.OPENCODE_MODEL ?? topencode.model;
   const claudeWorkDir = process.env.CLAUDE_WORK_DIR ?? tc.workDir ?? process.cwd();
-  const skipPermissions: boolean = process.env.OPEN_IM_SKIP_PERMISSIONS === 'false'
-    ? false
-    : (tc.skipPermissions ?? true);
+  const skipPermissions: boolean | undefined = (() => {
+    const raw = process.env.OPEN_IM_SKIP_PERMISSIONS?.trim().toLowerCase();
+    if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no') return false;
+    return tc.skipPermissions;
+  })();
 
   const envIdleRaw = process.env.OPEN_IM_CLAUDE_SESSION_IDLE_TTL_MINUTES;
   const envIdleParsed =

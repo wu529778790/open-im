@@ -47,7 +47,7 @@ export interface Config {
    */
   claudeSessionIdleTtlMinutes: number;
   claudeModel?: string;
-  /** 是否跳过 AI 工具的权限确认（默认 true） */
+  /** 是否跳过 AI 工具的权限确认。未配置时由具体工具决定默认行为。 */
   skipPermissions?: boolean;
   logDir: string;
   logLevel: LogLevel;
@@ -202,6 +202,7 @@ export interface FilePlatformClawbot {
 export interface FileToolClaude {
   cliPath?: string;
   workDir?: string;
+  /** Claude SDK 是否跳过原生权限确认。默认 false，保留 Claude 自身确认流程。 */
   skipPermissions?: boolean;
   /** 空闲会话回收间隔（分钟），0 表示关闭 */
   sessionIdleTtlMinutes?: number;

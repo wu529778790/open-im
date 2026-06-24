@@ -88,12 +88,30 @@ open-im start
 | `/review` | 代码审查 |
 | `/explain` | 解释项目结构 |
 
-### 权限控制
+### 权限与确认
 
-| 命令 | 说明 |
-|------|------|
-| `/allow` `/y` | 允许操作 |
-| `/deny` `/n` | 拒绝操作 |
+Claude 使用 Agent SDK 集成，open-im 默认不替 Claude 做额外的允许/拒绝协议。Claude 需要用户确认时，会按它自己的原生交互语义发问；你在 IM 里回复选项、确认或补充说明即可继续同一个会话。
+
+如果你希望 Claude 也进入自动执行模式，可以在 Web 控制台的 **AI 工具配置 → Claude Code → 跳过 Claude 权限确认** 打开，或在配置文件里设置：
+
+```json
+{
+  "tools": {
+    "claude": {
+      "skipPermissions": true
+    }
+  }
+}
+```
+
+也可以用环境变量临时覆盖：
+
+```bash
+OPEN_IM_SKIP_PERMISSIONS=true open-im start   # 跳过权限确认
+OPEN_IM_SKIP_PERMISSIONS=false open-im start  # 使用 Claude 原生确认
+```
+
+Codex、CodeBuddy、OpenCode 仍保持原来的自动执行默认行为。
 
 ## 会话接力
 

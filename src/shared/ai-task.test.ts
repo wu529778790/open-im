@@ -414,6 +414,80 @@ describe("runAITask", () => {
     expect(runOptions[0]).toMatchObject({ skipPermissions: false });
   });
 
+  it("respects explicit skipPermissions for native Claude adapters", async () => {
+    const sessionManager = {
+      addTurnsForThread: vi.fn(() => 0),
+      addTurns: vi.fn(() => 0),
+      setSessionIdForThread: vi.fn(),
+      setSessionIdForConv: vi.fn(),
+      clearSessionForConv: vi.fn(),
+      clearActiveToolSession: vi.fn(),
+      getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
+    };
+
+    const runOptions: unknown[] = [];
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      interactionMode: "native",
+      run(_prompt, _sessionId, _workDir, callbacks, options) {
+        runOptions.push(options);
+        callbacks.onComplete({
+          success: true,
+          result: "done",
+          accumulated: "done",
+          cost: 0,
+          durationMs: 1,
+          numTurns: 1,
+          toolStats: {},
+        });
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      {
+        config: {
+          platforms: {
+            telegram: { enabled: true, aiCommand: "claude", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["telegram"],
+          claudeModel: "claude-opus-4-5",
+          codexProxy: "",
+          skipPermissions: true,
+          dingtalkClientId: "",
+          dingtalkClientSecret: "",
+          qqAppId: "",
+          qqSecret: "",
+          weworkCorpId: "",
+          weworkSecret: "",
+          telegramBotToken: "",
+        } as never,
+        sessionManager: sessionManager as never,
+      },
+      {
+        userId: "u1",
+        chatId: "c1",
+        workDir: "/tmp/project",
+        sessionId: undefined,
+        convId: "conv-native-explicit",
+        platform: "telegram",
+        taskKey: "task-native-explicit",
+      },
+      "hello",
+      toolAdapter,
+      {
+        streamUpdate: vi.fn(),
+        sendComplete: vi.fn(async () => {}),
+        sendError: vi.fn(async () => {}),
+        throttleMs: 0,
+        onTaskReady: vi.fn(),
+      }
+    );
+
+    expect(runOptions[0]).toMatchObject({ skipPermissions: true });
+  });
+
   it("keeps skipPermissions enabled for open-mode tools", async () => {
     const sessionManager = {
       addTurnsForThread: vi.fn(() => 0),

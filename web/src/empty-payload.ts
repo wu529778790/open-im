@@ -19,6 +19,7 @@ export function emptyPayload(): WebConfigPayload {
       claudeWorkDir: "",
       claudeConfigPath: "",
       claudeProxy: "",
+      claudeSkipPermissions: false,
       codexCliPath: "codex",
       codexProxy: "",
       codebuddyCliPath: "codebuddy",
