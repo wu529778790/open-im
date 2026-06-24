@@ -344,6 +344,41 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         return;
       }
 
+      // --- Codex config.toml (~/.codex/config.toml) ---
+      function getCodexConfigPath(): string {
+        const home = process.env.CODEX_HOME || join(homedir(), '.codex');
+        return join(home, 'config.toml');
+      }
+
+      if (request.method === "GET" && requestUrl.pathname === "/api/codex/config") {
+        try {
+          const configPath = getCodexConfigPath();
+          let contents = "";
+          if (existsSync(configPath)) {
+            contents = readFileSync(configPath, "utf-8");
+          }
+          json(response, 200, { path: configPath, contents }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/codex/config") {
+        try {
+          const body = await readJson<{ contents?: string }>(request);
+          const raw = body.contents ?? "";
+          const configPath = getCodexConfigPath();
+          const dir = dirname(configPath);
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          writeFileSync(configPath, raw, "utf-8");
+          json(response, 200, { message: "Codex config.toml saved.", path: configPath }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
       // --- CodeBuddy settings (~/.codebuddy/settings.json) ---
       function getCodebuddySettingsPath(): string {
         const home = process.env.CODEBUDDY_HOME || join(homedir(), '.codebuddy');

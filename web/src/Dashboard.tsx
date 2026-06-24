@@ -9,6 +9,7 @@ import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
 import { PlatformCard } from "./components/PlatformCard.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
+import type { ConfigFileEntry } from "./components/ConfigFilesSection.js";
 import { AiConfigSection } from "./components/AiConfigSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
 import type { DashboardNavId } from "./components/dashboard-nav.js";
@@ -40,6 +41,7 @@ export function Dashboard() {
   const [codexJ, setCodexJ] = useState("");
   const [codebuddyJ, setCodebuddyJ] = useState("");
   const [opencodeJ, setOpencodeJ] = useState("");
+  const [codexConfigT, setCodexConfigT] = useState("");
   const [cfgJ, setCfgJ] = useState("");
   const [origCfgJ, setOrigCfgJ] = useState("");
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
@@ -64,17 +66,19 @@ export function Dashboard() {
         if (!ok) return;
         const c = coerce(d.payload); setPl(c); setMeta({ configPath: d.meta.configPath });
         if (!PLATFORM_KEYS.some(k => c.platforms[k].enabled)) setShowWizard(true);
-        const [cl, cx, cb, oc, fj] = await Promise.all([
+        const [cl, cx, cb, oc, ct, fj] = await Promise.all([
           R("/api/claude/settings") as Promise<{ contents?: string }>,
           R("/api/codex/settings") as Promise<{ contents?: string }>,
           R("/api/codebuddy/settings") as Promise<{ contents?: string }>,
           R("/api/opencode/settings") as Promise<{ contents?: string }>,
+          R("/api/codex/config") as Promise<{ contents?: string }>,
           R("/api/config/file") as Promise<{ contents?: string }>,
           refreshSvc(), refreshH(),
         ]);
         if (!ok) return;
         const fmt = (r: string | undefined, fb: string) => { const s = (r ?? "").trim(); if (!s) return fb; try { return pretty(s); } catch { return s; } };
         setClaudeJ(fmt(cl.contents, "{\n}\n")); setCodexJ(fmt(cx.contents, "{\n}\n")); setCodebuddyJ(fmt(cb.contents, "{\n}\n")); setOpencodeJ(fmt(oc.contents, "{\n}\n"));
+        setCodexConfigT((ct.contents ?? "").trim());
         const rj = (fj.contents ?? "").trim(); setOrigCfgJ(rj); setCfgJ(fmt(fj.contents, "{}\n"));
       } catch (e) { if (ok) setMsg({ text: toMsg(e), type: "error" }); } finally { if (ok) setBusy(false); }
     })();
@@ -110,9 +114,10 @@ export function Dashboard() {
   const saveCodex = async () => { await R("/api/codex/settings", { method: "POST", body: JSON.stringify({ contents: codexJ }) }); };
   const saveCodebuddy = async () => { await R("/api/codebuddy/settings", { method: "POST", body: JSON.stringify({ contents: codebuddyJ }) }); };
   const saveOpencode = async () => { await R("/api/opencode/settings", { method: "POST", body: JSON.stringify({ contents: opencodeJ }) }); };
+  const saveCodexConfig = async () => { await R("/api/codex/config", { method: "POST", body: JSON.stringify({ contents: codexConfigT }) }); };
   const saveCfg = async () => { const j = cfgJ.trim(); if (!j) return; JSON.parse(j); await R("/api/config/file", { method: "POST", body: JSON.stringify({ contents: j }) }); setOrigCfgJ(j); };
-  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
-  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onStop = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: t("stopOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onToggle = async () => { if (svc.running) await onStop(); else await onStart(); };
 
@@ -220,32 +225,17 @@ export function Dashboard() {
               </section>
             )}
 
-            {activeNav === "files" && (
-              <ConfigFilesSection
-                configJson={cfgJ}
-                setConfigJson={setCfgJ}
-                claudeSettingsJson={claudeJ}
-                setClaudeSettingsJson={setClaudeJ}
-                codexSettingsJson={codexJ}
-                setCodexSettingsJson={setCodexJ}
-                codebuddySettingsJson={codebuddyJ}
-                setCodebuddySettingsJson={setCodebuddyJ}
-                opencodeSettingsJson={opencodeJ}
-                setOpencodeSettingsJson={setOpencodeJ}
-                jsonValidation={jv}
-                onSaveConfig={saveCfg}
-                onSaveClaude={saveClaude}
-                onSaveCodex={saveCodex}
-                onSaveCodebuddy={saveCodebuddy}
-                onSaveOpencode={saveOpencode}
-                onFormat={fmtJson}
-                onReset={resetJson}
-                meta={meta}
-                setMessage={setMsg}
-                t={t}
-                hideHeading
-              />
-            )}
+            {activeNav === "files" && (() => {
+              const configFiles: ConfigFileEntry[] = [
+                { id: "config", group: "open-im", label: "config.json", hint: "open-im 完整配置。先格式化再保存；JSON 不合法时无法写入。", path: meta.configPath, content: cfgJ, setContent: setCfgJ, onSave: saveCfg, onFormat: fmtJson, onReset: resetJson, validation: jv },
+                { id: "claude", group: "Claude", label: "settings.json", hint: "Claude SDK 环境变量（ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL、ANTHROPIC_MODEL 等）。在此配置 API，无需在终端 export。", path: "~/.claude/settings.json", content: claudeJ, setContent: setClaudeJ, onSave: saveClaude },
+                { id: "codex-auth", group: "Codex", label: "auth.json", hint: "Codex CLI 认证信息（OPENAI_API_KEY 等）。在此配置 API 访问。", path: "~/.codex/auth.json", content: codexJ, setContent: setCodexJ, onSave: saveCodex },
+                { id: "codex-config", group: "Codex", label: "config.toml", hint: "Codex CLI 配置（模型、Base URL、Model Provider 等）。TOML 格式。", path: "~/.codex/config.toml", content: codexConfigT, setContent: setCodexConfigT, onSave: saveCodexConfig },
+                { id: "codebuddy", group: "CodeBuddy", label: "settings.json", hint: "CodeBuddy CLI 配置（模型、插件、沙箱规则等）。直接编辑。", path: "~/.codebuddy/settings.json", content: codebuddyJ, setContent: setCodebuddyJ, onSave: saveCodebuddy },
+                { id: "opencode", group: "OpenCode", label: "opencode.json", hint: "OpenCode SDK 配置（MCP 服务器等）。直接编辑。", path: "~/.config/opencode/opencode.json", content: opencodeJ, setContent: setOpencodeJ, onSave: saveOpencode },
+              ];
+              return <ConfigFilesSection files={configFiles} hideHeading />;
+            })()}
 
             {activeNav === "ai" && (
               <AiConfigSection

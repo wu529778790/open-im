@@ -1,99 +1,100 @@
 import { useState } from "react";
 
+export interface ConfigFileEntry {
+  id: string;
+  group: string;
+  label: string;
+  hint: string;
+  path: string;
+  content: string;
+  setContent: (v: string) => void;
+  onSave: () => Promise<void>;
+  onFormat?: () => void;
+  onReset?: () => void;
+  validation?: { text: string; type: "success" | "error" } | null;
+}
+
 interface Props {
-  configJson: string;
-  setConfigJson: (v: string) => void;
-  claudeSettingsJson: string;
-  setClaudeSettingsJson: (v: string) => void;
-  codexSettingsJson: string;
-  setCodexSettingsJson: (v: string) => void;
-  codebuddySettingsJson: string;
-  setCodebuddySettingsJson: (v: string) => void;
-  opencodeSettingsJson: string;
-  setOpencodeSettingsJson: (v: string) => void;
-  jsonValidation: { text: string; type: "success" | "error" } | null;
-  onSaveConfig: () => Promise<void>;
-  onSaveClaude: () => Promise<void>;
-  onSaveCodex: () => Promise<void>;
-  onSaveCodebuddy: () => Promise<void>;
-  onSaveOpencode: () => Promise<void>;
-  onFormat: () => void;
-  onReset: () => void;
-  meta: { configPath: string };
-  setMessage: (m: { text: string; type: "success" | "error" | "" }) => void;
-  t: (k: string) => string;
+  files: ConfigFileEntry[];
   forwardRef?: React.RefObject<HTMLElement | null>;
   hideHeading?: boolean;
 }
 
 function toMsg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
 
-function JsonCard({ title, hint, json, setJson, onSave, formatBtn, resetBtn, onFormat, onReset, validation, setMessage, t }: {
-  title: string; hint: string; json: string; setJson: (v: string) => void;
-  onSave: () => Promise<void>; formatBtn?: boolean; resetBtn?: boolean;
-  onFormat?: () => void; onReset?: () => void;
-  validation?: { text: string; type: "success" | "error" } | null;
-  setMessage: (m: { text: string; type: "success" | "error" | "" }) => void;
-  t: (k: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="card config-card">
-      <div className="card-head" style={{ cursor: "pointer" }} onClick={() => setOpen(!open)}>
-        <span className="card-title">{title}</span>
-        <span style={{ fontSize: 12, color: "var(--c-text-3)" }}>{open ? "▾" : "▸"}</span>
-      </div>
-      {open && (
-        <div className="card-body">
-          <p className="form-hint">{hint}</p>
-          {(formatBtn || resetBtn) && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
-              {formatBtn && <button type="button" className="btn btn-g btn-sm" onClick={onFormat}>{t("formatJson")}</button>}
-              {resetBtn && <button type="button" className="btn btn-g btn-sm" onClick={onReset}>{t("resetJson")}</button>}
-            </div>
-          )}
-          <textarea className="form-input mono" rows={14} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} style={{ minHeight: 200, resize: "vertical", whiteSpace: "pre" }} />
-          {validation && <div className={`msg mt-4 ${validation.type === "success" ? "msg-ok" : "msg-err"}`}>{validation.text}</div>}
-          <div style={{ marginTop: 10 }}>
-            <button type="button" className="btn btn-s btn-sm" onClick={() => void (async () => { try { await onSave(); setMessage({ text: t("saveOk"), type: "success" }); } catch (e) { setMessage({ text: toMsg(e), type: "error" }); } })()}>
-              {t("saveBtn")}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+export function ConfigFilesSection({ files, forwardRef, hideHeading = false }: Props) {
+  const [selectedId, setSelectedId] = useState<string>(files[0]?.id ?? "");
+  const [msg, setMsg] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
 
-export function ConfigFilesSection({
-  configJson, setConfigJson,
-  claudeSettingsJson, setClaudeSettingsJson,
-  codexSettingsJson, setCodexSettingsJson,
-  codebuddySettingsJson, setCodebuddySettingsJson,
-  opencodeSettingsJson, setOpencodeSettingsJson,
-  jsonValidation,
-  onSaveConfig, onSaveClaude, onSaveCodex, onSaveCodebuddy, onSaveOpencode,
-  onFormat, onReset,
-  meta, setMessage, t, forwardRef, hideHeading = false,
-}: Props) {
+  const groups = new Map<string, ConfigFileEntry[]>();
+  for (const f of files) {
+    if (!groups.has(f.group)) groups.set(f.group, []);
+    groups.get(f.group)!.push(f);
+  }
+
+  const active = files.find(f => f.id === selectedId);
+
   return (
     <section className="section" ref={forwardRef as React.RefObject<HTMLElement>}>
       {!hideHeading && (
         <div className="section-head">
           <div>
-            <h2 className="section-title">{t("configFilesTitle")}</h2>
-            <p className="section-desc">{t("configFilesHint")}</p>
+            <h2 className="section-title">配置文件（JSON）</h2>
+            <p className="section-desc">直接编辑磁盘上的文件，每张卡片有独立保存按钮。</p>
           </div>
         </div>
       )}
-      <div className="config-stack">
-        <JsonCard title={t("configJson")} hint={t("openImConfigCardHint")} json={configJson} setJson={setConfigJson} onSave={onSaveConfig} formatBtn resetBtn onFormat={onFormat} onReset={onReset} validation={jsonValidation} setMessage={setMessage} t={t} />
-        <JsonCard title={t("claudeSettingsLabel")} hint={t("claudeSettingsCardHint")} json={claudeSettingsJson} setJson={setClaudeSettingsJson} onSave={onSaveClaude} setMessage={setMessage} t={t} />
-        <JsonCard title={t("codexSettingsLabel")} hint={t("codexSettingsCardHint")} json={codexSettingsJson} setJson={setCodexSettingsJson} onSave={onSaveCodex} setMessage={setMessage} t={t} />
-        <JsonCard title={t("codebuddySettingsLabel")} hint={t("codebuddySettingsCardHint")} json={codebuddySettingsJson} setJson={setCodebuddySettingsJson} onSave={onSaveCodebuddy} setMessage={setMessage} t={t} />
-        <JsonCard title={t("opencodeSettingsLabel")} hint={t("opencodeSettingsCardHint")} json={opencodeSettingsJson} setJson={setOpencodeSettingsJson} onSave={onSaveOpencode} setMessage={setMessage} t={t} />
+      {msg.text && (
+        <div className={`msg ${msg.type === "success" ? "msg-ok" : "msg-err"}`} style={{ marginBottom: 12 }}>
+          {msg.text}
+          <button type="button" className="toast-close" style={{ float: "right" }} onClick={() => setMsg({ text: "", type: "" })}>×</button>
+        </div>
+      )}
+      <div className="config-editor">
+        <div className="config-editor-sidebar">
+          {[...groups.entries()].map(([group, entries]) => (
+            <div key={group}>
+              {entries.map((f, i) => (
+                <div
+                  key={f.id}
+                  className={`file-item${f.id === selectedId ? " active" : ""}${entries.length > 1 && i > 0 ? " sub" : ""}`}
+                  onClick={() => setSelectedId(f.id)}
+                >
+                  <span className="icon">📄</span>
+                  <span className="label">{f.label}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="config-editor-body">
+          {active ? (
+            <>
+              <p className="file-hint">{active.hint}</p>
+              <p className="file-path">{active.path}</p>
+              {(active.onFormat || active.onReset) && (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
+                  {active.onFormat && <button type="button" className="btn btn-g btn-sm" onClick={active.onFormat}>格式化</button>}
+                  {active.onReset && <button type="button" className="btn btn-g btn-sm" onClick={active.onReset}>重置</button>}
+                </div>
+              )}
+              <textarea
+                spellCheck={false}
+                value={active.content}
+                onChange={(e) => active.setContent(e.target.value)}
+              />
+              {active.validation && <div className={`msg mt-4 ${active.validation.type === "success" ? "msg-ok" : "msg-err"}`}>{active.validation.text}</div>}
+              <div style={{ marginTop: 10 }}>
+                <button type="button" className="btn btn-s btn-sm" onClick={() => void (async () => { try { await active.onSave(); setMsg({ text: "保存成功", type: "success" }); } catch (e) { setMsg({ text: toMsg(e), type: "error" }); } })()}>
+                  保存
+                </button>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: "var(--c-text-3)", padding: 40, textAlign: "center" }}>请从左侧选择配置文件</p>
+          )}
+        </div>
       </div>
-      {meta.configPath && <p className="form-hint" style={{ marginTop: 16 }}>{t("configJson")}: {meta.configPath}</p>}
     </section>
   );
 }
