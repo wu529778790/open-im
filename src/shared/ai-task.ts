@@ -285,10 +285,8 @@ function buildRunOptions(
   aiCommand: string,
   toolAdapter: ToolAdapter,
 ): RunOptions {
-  const defaultSkipPermissions =
-    toolAdapter.interactionMode === 'native'
-      ? (config.skipPermissions ?? true)
-      : (config.skipPermissions ?? true);
+  // 权限 hook 尚未接入 IM，暂时全局跳过
+  const defaultSkipPermissions = true;
 
   return {
     model: aiCommand === 'claude'

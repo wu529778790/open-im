@@ -39,19 +39,6 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading
           {tab === "claude" && (
             <>
               <div className="form-group">
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    className="toggle-input"
-                    checked={ai.claudeSkipPermissions}
-                    onChange={(e) => onUpdate({ claudeSkipPermissions: e.target.checked })}
-                  />
-                  <span className="toggle-track" />
-                  <span className="form-label" style={{ margin: 0 }}>{t("claudeSkipPermissions")}</span>
-                </label>
-                <p className="field-tip">{t("claudeSkipPermissionsTip")}</p>
-              </div>
-              <div className="form-group">
                 <label className="form-label">{t("claudeProxy")}</label>
                 <input className="form-input mono" value={ai.claudeProxy} onChange={(e) => onUpdate({ claudeProxy: e.target.value })} />
               </div>
