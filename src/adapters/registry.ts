@@ -1,4 +1,4 @@
-import { getConfiguredAiCommands, type Config } from '../config.js';
+import { getConfiguredAiCommands, loadConfig, type Config } from '../config.js';
 import type { ToolAdapter } from './tool-adapter.interface.js';
 import { ClaudeSDKAdapter } from './claude-sdk-adapter.js';
 import { CodexAdapter } from './codex-adapter.js';
@@ -43,7 +43,34 @@ export function initAdapters(config: Config): void {
 }
 
 export function getAdapter(aiCommand: string): ToolAdapter | undefined {
-  return adapters.get(aiCommand);
+  const existing = adapters.get(aiCommand);
+  if (existing) return existing;
+
+  // 懒加载：启动时未初始化的工具（例如启动用 claude，运行中切到 opencode）
+  // 按需创建并缓存，避免返回 undefined 导致消息处理失败。
+  const factory = ADAPTER_FACTORIES[aiCommand];
+  if (!factory) return undefined;
+
+  let config: Config;
+  try {
+    config = loadConfig();
+  } catch (err) {
+    log.error(`Lazy-create adapter "${aiCommand}" failed to load config:`, err);
+    return undefined;
+  }
+
+  const adapter = factory(config);
+  adapters.set(aiCommand, adapter);
+  log.info(`${aiCommand} adapter lazy-created (was not enabled at startup)`);
+
+  // SDK 工具需要懒启动 server，与 initAdapters 行为一致
+  if (aiCommand === 'opencode' && !isOpencodeRunning()) {
+    startOpencode().catch((err) => {
+      log.warn(`OpenCode SDK server lazy-start failed (will retry on first use): ${err}`);
+    });
+  }
+
+  return adapter;
 }
 
 export function cleanupAdapters(): void {

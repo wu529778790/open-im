@@ -12,7 +12,7 @@
  *   5. Run AI task via runAITask with platform-specific callbacks
  */
 
-import { resolvePlatformAiCommand, type Config, type Platform } from '../config.js';
+import { resolvePlatformAiCommand, loadConfig, type Config, type Platform } from '../config.js';
 import type { SessionManager } from '../session/session-manager.js';
 import { getAdapter } from '../adapters/registry.js';
 import { runAITask, type TaskRunState, type TaskAdapter } from '../shared/ai-task.js';
@@ -117,7 +117,7 @@ export function createPlatformAIRequestHandler(
 ): (params: HandleAIRequestParams) => Promise<void> {
   const {
     platform,
-    config,
+    config: initialConfig,
     sessionManager,
     sender,
     throttleMs,
@@ -134,6 +134,16 @@ export function createPlatformAIRequestHandler(
     const { userId, chatId, prompt, workDir, convId, replyToMessageId, signal } = params;
 
     log.info(`[${platform}] AI request: userId=${userId}, chatId=${chatId}, promptLength=${prompt.length}`);
+
+    // 每条消息重新读取配置，使平台 aiCommand 的修改无需重启即可生效。
+    // loadFileConfig 有 mtime 缓存，文件未变时几乎零开销；变更后自动返回新值。
+    let config: Config;
+    try {
+      config = loadConfig();
+    } catch (err) {
+      log.warn(`[${platform}] Failed to reload config, using startup snapshot:`, err);
+      config = initialConfig;
+    }
 
     // 1. Resolve AI command and adapter
     const aiCommand = resolvePlatformAiCommand(config, platform);
