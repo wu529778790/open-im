@@ -465,6 +465,29 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
         return;
       }
 
+      // --- 保活设置 ---
+      if (request.method === "GET" && requestUrl.pathname === "/api/keepalive/config") {
+        try {
+          const { getKeepaliveConfig } = await import("./shared/keepalive.js");
+          json(response, 200, getKeepaliveConfig(), request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/keepalive/config") {
+        try {
+          const body = await readJson<{ enabled: boolean; intervalHours: number; target: string }>(request);
+          const { saveKeepaliveConfig } = await import("./shared/keepalive.js");
+          saveKeepaliveConfig(body);
+          json(response, 200, { message: "保活配置已保存" }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
       if (request.method === "GET" && requestUrl.pathname === "/api/health") {
         const file = loadFileConfig();
         const platforms = getHealthPlatformSnapshot(file);

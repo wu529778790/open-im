@@ -635,6 +635,14 @@ export function loadConfig(): Config {
         },
   };
 
+  // 保活配置
+  const keepaliveFile = file.keepalive ?? {};
+  const keepalive = {
+    enabled: keepaliveFile.enabled ?? true,
+    intervalHours: keepaliveFile.intervalHours ?? 5,
+    target: keepaliveFile.target ?? 'claude' as AiCommand,
+  };
+
   return {
     enabledPlatforms,
     telegramBotToken: telegramBotToken ?? '',
@@ -672,6 +680,7 @@ export function loadConfig(): Config {
       enabled: telemetryEnabled,
     },
     autopilot,
+    keepalive,
     platforms,
   };
 }

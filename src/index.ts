@@ -30,6 +30,7 @@ import { setupClawbotHandlers } from "./clawbot/event-handler.js";
 import { sendTextReply as sendClawbotTextReply } from "./clawbot/message-sender.js";
 import { initClawBotSender } from "./clawbot/message-sender.js";
 import { initAdapters, cleanupAdapters } from "./adapters/registry.js";
+import { startKeepalive, stopKeepalive } from "./shared/keepalive.js";
 import { SessionManager } from "./session/session-manager.js";
 import {
   loadActiveChats,
@@ -327,6 +328,7 @@ export async function main() {
   loadActiveChats();
 
   initAdapters(config);
+  startKeepalive();
 
   // 尽早启动 shutdown 并写入 port 文件，使 open-im start 的 8s 就绪超时能通过（平台初始化可能较慢）
   let shutdownServer: ReturnType<typeof createServer> | null = null;
@@ -457,6 +459,7 @@ export async function main() {
 
     sessionManager.destroy();
     cleanupAdapters();
+    stopKeepalive();
     flushActiveChats();
     await flushSentry();
     await closeLogger();

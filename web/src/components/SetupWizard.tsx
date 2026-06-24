@@ -21,7 +21,7 @@ interface Props {
 }
 
 /* ═══════════════════════════════════════════════════════ */
-export function SetupWizard({ request, t, html, onComplete, initialPayload }: Props) {
+export function SetupWizard({ request, onComplete, initialPayload }: Props) {
   const [payload, setPl] = useState<WebConfigPayload>(initialPayload ?? emptyPayload());
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState("");
@@ -87,8 +87,8 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
     try {
       const cfg: Record<string, string> = {}; def.testFields.forEach(f => { cfg[f] = String((payload.platforms[pk] as Record<string, string>)[f] ?? ""); });
       const r = (await request("/api/config/test", { method: "POST", body: JSON.stringify({ platform: pk, config: cfg }) })) as { success?: boolean; message?: string; error?: string };
-      setTestMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || t("testSuccess"), ok: true } : { text: t("testFailed", { error: r.error || "?" }), ok: false } }));
-    } catch (e) { setTestMsg(m => ({ ...m, [pk]: { text: t("testFailed", { error: toMsg(e) }), ok: false } })); }
+      setTestMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || "配置校验通过。", ok: true } : { text: `配置有问题：${error}`, ok: false } }));
+    } catch (e) { setTestMsg(m => ({ ...m, [pk]: { text: `配置有问题：${error}`, ok: false } })); }
     finally { setTestBusy(null); }
   };
 
@@ -109,9 +109,9 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
       <div className="wizard-wrap">
         <div className="wizard" style={{ textAlign: "center", padding: "48px 32px" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-          <h2 className="wizard-title">{t("wizardDoneTitle")}</h2>
-          <p className="wizard-desc">{t("wizardDoneDesc")}</p>
-          <button type="button" className="btn btn-p btn-lg" onClick={onComplete}>{t("wizardGoToDashboard")}</button>
+          <h2 className="wizard-title">{"配置完成！"}</h2>
+          <p className="wizard-desc">{"桥接已运行。你现在可以在任何已启用的平台上向机器人发消息了。"}</p>
+          <button type="button" className="btn btn-p btn-lg" onClick={onComplete}>{"进入概览"}</button>
         </div>
       </div>
     );
@@ -123,22 +123,22 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
       <div className="wizard" style={{ maxWidth: 900 }}>
         {/* ── Header ── */}
         <div style={{ padding: "24px 32px 0" }}>
-          <h2 className="wizard-title">{t("wizardWelcomeTitle")}</h2>
-          <p className="wizard-desc">{t("wizardWelcomeDesc")}</p>
+          <h2 className="wizard-title">{"欢迎使用 open-im"}</h2>
+          <p className="wizard-desc">{"这个向导将引导你配置 AI 编程助手桥接。大约需要 2 分钟。"}</p>
         </div>
 
         {/* ── Claude API ── */}
         <div style={{ padding: "0 32px 24px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{t("wizardClaudeApiTitle")}</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{"Claude API 配置"}</h3>
           {claudeLoading ? (
-            <p className="form-hint">{t("wizardLoading")}</p>
+            <p className="form-hint">{"加载中..."}</p>
           ) : (
             <>
               <div className="wizard-radio-group" style={{ marginBottom: 12 }}>
                 {[
-                  { v: "official" as const,  label: t("wizardApiOfficial"),   desc: t("wizardApiOfficialDesc") },
-                  { v: "thirdparty" as const, label: t("wizardApiThirdparty"), desc: t("wizardApiThirdpartyDesc") },
-                  { v: "skip" as const,       label: t("wizardApiSkip"),       desc: t("wizardApiSkipDesc") },
+                  { v: "official" as const,  label: "官方 Anthropic API",   desc: "使用 Anthropic API Key 或 Auth Token" },
+                  { v: "thirdparty" as const, label: "第三方模型", desc: "使用兼容的第三方 API 端点" },
+                  { v: "skip" as const,       label: "已配置",       desc: "如果已配置 API 访问，可跳过此步" },
                 ].map(o => (
                   <label key={o.v} className={`wizard-radio ${apiType === o.v ? "on" : ""}`}>
                     <input type="radio" name="apiType" value={o.v} checked={apiType === o.v} onChange={() => setApiType(o.v)} />
@@ -176,7 +176,7 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
 
         {/* ── Platforms Desk Grid ── */}
         <div style={{ padding: "0 32px 24px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{t("platformsTitle")}</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{"平台配置"}</h3>
           <div className="platform-grid">
             {PLATFORM_DEFINITIONS.map((def) => {
               const pk = def.key as PlatformKey;
@@ -185,8 +185,6 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
                   key={pk}
                   def={def}
                   values={payload.platforms[pk]}
-                  t={t}
-                  html={html}
                   disabledVisual={false}
                   request={request}
                   onChange={(p) => upP(pk, p as Partial<WebConfigPayload["platforms"][typeof pk]>)}
@@ -202,11 +200,11 @@ export function SetupWizard({ request, t, html, onComplete, initialPayload }: Pr
         {/* ── Footer ── */}
         <div style={{ padding: "16px 32px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span className="form-hint">
-            {PLATFORM_KEYS.filter(k => payload.platforms[k].enabled).length} / {PLATFORM_KEYS.length} {t("platformsTitle")}
+            {PLATFORM_KEYS.filter(k => payload.platforms[k].enabled).length} / {PLATFORM_KEYS.length} {"平台配置"}
           </span>
           {error && <div className="msg msg-err" style={{ flex: 1, marginLeft: 16 }}>{error}</div>}
           <button type="button" className="btn btn-p btn-lg" disabled={busy || !PLATFORM_KEYS.some(k => payload.platforms[k].enabled)} onClick={() => void saveAndStart()}>
-            {busy ? t("wizardWorking") : t("wizardFinish")}
+            {busy ? "处理中..." : "保存并启动"}
           </button>
         </div>
       </div>

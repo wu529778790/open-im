@@ -4,10 +4,9 @@ import { DASHBOARD_NAV_ITEMS, type DashboardNavId } from "./dashboard-nav.js";
 interface Props {
   activeNav: string;
   onNavigate: (id: string) => void;
-  t: (k: string) => string;
 }
 
-export function Sidebar({ activeNav, onNavigate, t }: Props) {
+export function Sidebar({ activeNav, onNavigate }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -24,7 +23,7 @@ export function Sidebar({ activeNav, onNavigate, t }: Props) {
             onClick={() => onNavigate(item.id as DashboardNavId)}
           >
             <item.icon />
-            <span>{t(item.key)}</span>
+            <span>{item.label}</span>
           </button>
         ))}
       </nav>

@@ -11,7 +11,7 @@ interface Props {
   hideHeading?: boolean;
 }
 
-export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading = false }: Props) {
+export function AiConfigSection({ ai, onUpdate, forwardRef, hideHeading = false }: Props) {
   // tab 列表从注册表派生;此前只硬编码了 claude/codex/codebuddy,opencode 无配置入口。
   const [tab, setTab] = useState<AiCommand>("claude");
 
@@ -20,8 +20,8 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading
       {!hideHeading && (
         <div className="section-head">
           <div>
-            <h2 className="section-title">{t("aiTitle")}</h2>
-            <p className="section-desc">{t("aiHint")}</p>
+            <h2 className="section-title">{"AI 工具配置"}</h2>
+            <p className="section-desc">{"Claude SDK：左侧栏「配置文件」→ ~/.claude/settings.json。各渠道用哪个 AI 在上方「平台」里分别设置。若任一平台选 Codex/CodeBuddy，再在下方填对应 CLI 路径。"}</p>
           </div>
         </div>
       )}
@@ -39,11 +39,11 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading
           {tab === "claude" && (
             <>
               <div className="form-group">
-                <label className="form-label">{t("claudeProxy")}</label>
+                <label className="form-label">{"代理（可选）"}</label>
                 <input className="form-input mono" value={ai.claudeProxy} onChange={(e) => onUpdate({ claudeProxy: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">{t("claudeConfigPath")}</label>
+                <label className="form-label">{"配置文件位置"}</label>
                 <input className="form-input mono" readOnly style={{ background: "var(--c-surface-alt)" }} value={ai.claudeConfigPath} />
               </div>
             </>
@@ -51,29 +51,29 @@ export function AiConfigSection({ ai, onUpdate, t, html, forwardRef, hideHeading
           {tab === "codex" && (
             <>
               <div className="form-group">
-                <label className="form-label">{t("codexApiKey")}</label>
+                <label className="form-label">{"OPENAI_API_KEY"}</label>
                 <input className="form-input mono" type="password" value={ai.codexApiKey ?? ""} onChange={(e) => onUpdate({ codexApiKey: e.target.value })} />
-                <p className="field-tip" dangerouslySetInnerHTML={{ __html: t("codexApiKeyTip") }} />
+                <p className="field-tip" dangerouslySetInnerHTML={{ __html: "设置 Codex 使用的 OpenAI API Key。也可以在下方编辑 auth 文件。" }} />
               </div>
               <div className="form-group">
-                <label className="form-label">{t("codexCli")}</label>
+                <label className="form-label">{"Codex CLI 路径"}</label>
                 <input className="form-input mono" value={ai.codexCliPath} onChange={(e) => onUpdate({ codexCliPath: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">{t("codexProxy")}</label>
+                <label className="form-label">{"Codex 代理"}</label>
                 <input className="form-input mono" value={ai.codexProxy} onChange={(e) => onUpdate({ codexProxy: e.target.value })} />
               </div>
             </>
           )}
           {tab === "codebuddy" && (
             <div className="form-group">
-              <label className="form-label">{t("codebuddyCli")}</label>
+              <label className="form-label">{"CodeBuddy CLI 路径"}</label>
               <input className="form-input mono" value={ai.codebuddyCliPath} onChange={(e) => onUpdate({ codebuddyCliPath: e.target.value })} />
             </div>
           )}
           {tab === "opencode" && (
             <div className="form-group">
-              <p className="field-tip" style={{ margin: 0 }}>{t("opencodeSdkInfo")}</p>
+              <p className="field-tip" style={{ margin: 0 }}>{"OpenCode 使用 SDK 集成，无需配置 CLI 路径。"}</p>
             </div>
           )}
         </div>

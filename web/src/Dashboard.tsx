@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE } from "./constants.js";
-import { useI18n } from "./hooks/useI18n.js";
 import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
 import { isAiCommand } from "./tool-definitions.js";
 import { emptyPayload } from "./empty-payload.js";
@@ -10,6 +9,7 @@ import { OverviewStats } from "./components/OverviewStats.js";
 import { PlatformCard } from "./components/PlatformCard.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
 import type { ConfigFileEntry } from "./components/ConfigFilesSection.js";
+import { SettingsSection } from "./components/SettingsSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
 import type { DashboardNavId } from "./components/dashboard-nav.js";
 
@@ -33,7 +33,6 @@ function coerce(raw: WebConfigPayload): WebConfigPayload {
 
 export function Dashboard() {
   const R = useApi();
-  const { t, html } = useI18n("zh");
   const [pl, setPl] = useState<WebConfigPayload>(emptyP);
   const [meta, setMeta] = useState({ configPath: "" });
   const [claudeJ, setClaudeJ] = useState("");
@@ -93,31 +92,31 @@ export function Dashboard() {
     return () => window.clearTimeout(timer);
   }, [msg]);
 
-  const validateJson = useCallback(() => { try { JSON.parse(cfgJ); setJv({ text: t("jsonValid"), type: "success" }); } catch (e) { setJv({ text: t("jsonInvalid", { error: e instanceof Error ? e.message : String(e) }), type: "error" }); } }, [cfgJ, t]);
+  const validateJson = useCallback(() => { try { JSON.parse(cfgJ); setJv({ text: "JSON 有效", type: "success" }); } catch (e) { setJv({ text: "JSON 无效：" + (e instanceof Error ? e.message : String(e)), type: "error" }); } }, [cfgJ]);
   useEffect(() => { validateJson(); }, [cfgJ, validateJson]);
 
   const buildP = useCallback((): WebConfigPayload => ({ ...pl, ai: { ...pl.ai, hookPort: Number(pl.ai.hookPort) || 0 } }), [pl]);
   const clientErrs = useCallback((): string[] => {
     const es: string[] = [];
-    if (!PLATFORM_KEYS.some(k => pl.platforms[k].enabled)) es.push(t("validationNoPlatformEnabled"));
+    if (!PLATFORM_KEYS.some(k => pl.platforms[k].enabled)) es.push("保存前请至少启用一个 IM 平台，并填完必填凭证。");
     PLATFORM_DEFINITIONS.forEach(d => {
       if (!pl.platforms[d.key as PlatformKey].enabled) return;
       const m = d.requiredFields.filter(f => !String((pl.platforms[d.key as PlatformKey] as Record<string, unknown>)[f] ?? "").trim());
-      if (m.length) es.push(t("validationPlatformIncomplete", { platform: d.label, fields: m.join(", ") }));
+      if (m.length) es.push(`平台「${platform}」已启用，但以下必填项为空：${fields}`);
     });
     return es;
-  }, [pl, t]);
+  }, [pl]);
 
-  const onValidate = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await R("/api/config/validate", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("validationOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onValidate = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await R("/api/config/validate", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: "配置校验通过。", type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const saveClaude = async () => { await R("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: claudeJ }) }); };
   const saveCodex = async () => { await R("/api/codex/settings", { method: "POST", body: JSON.stringify({ contents: codexJ }) }); };
   const saveCodebuddy = async () => { await R("/api/codebuddy/settings", { method: "POST", body: JSON.stringify({ contents: codebuddyJ }) }); };
   const saveOpencode = async () => { await R("/api/opencode/settings", { method: "POST", body: JSON.stringify({ contents: opencodeJ }) }); };
   const saveCodexConfig = async () => { await R("/api/codex/config", { method: "POST", body: JSON.stringify({ contents: codexConfigT }) }); };
   const saveCfg = async () => { const j = cfgJ.trim(); if (!j) return; JSON.parse(j); await R("/api/config/file", { method: "POST", body: JSON.stringify({ contents: j }) }); setOrigCfgJ(j); };
-  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
-  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
-  const onStop = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: t("stopOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: "配置已保存。", type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCodexConfig(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: "桥接已启动。", type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onStop = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: "桥接已停止。", type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onToggle = async () => { if (svc.running) await onStop(); else await onStart(); };
 
   const onTest = async (pk: PlatformKey) => {
@@ -126,8 +125,8 @@ export function Dashboard() {
     try {
       const cfg: Record<string, string> = {}; def.testFields.forEach(f => { cfg[f] = String((pl.platforms[pk] as Record<string, string>)[f] ?? ""); });
       const r = (await R("/api/config/test", { method: "POST", body: JSON.stringify({ platform: pk, config: cfg }) })) as { success?: boolean; message?: string; error?: string };
-      setTMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || t("testSuccess"), ok: true } : { text: t("testFailed", { error: r.error || "?" }), ok: false } }));
-    } catch (x) { setTMsg(m => ({ ...m, [pk]: { text: t("testFailed", { error: toMsg(x) }), ok: false } })); }
+      setTMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || "配置校验通过。", ok: true } : { text: "配置有问题：" + (r.error || "?"), ok: false } }));
+    } catch (x) { setTMsg(m => ({ ...m, [pk]: { text: "配置有问题：" + toMsg(x), ok: false } })); }
     finally { setTBusy(null); }
   };
 
@@ -138,7 +137,7 @@ export function Dashboard() {
     const payload = { ...newPl, ai: { ...newPl.ai, hookPort: Number(newPl.ai.hookPort) || 0 } };
     try {
       await R("/api/config/save", { method: "POST", body: JSON.stringify(payload) });
-      setMsg({ text: t("saveOk"), type: "success" });
+      setMsg({ text: "配置已保存。", type: "success" });
       // 配置已写盘，但运行中的 bridge 仍用旧配置。询问用户是否重启以立即生效。
       if (svc.running && window.confirm("配置已保存。需要立即重启 bridge 以使更改生效吗？")) {
         setBusy(true);
@@ -156,8 +155,8 @@ export function Dashboard() {
     } catch (x) {
       setMsg({ text: toMsg(x), type: "error" });
     }
-  }, [pl, R, t, svc, refreshSvc]);
-  const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: t("jsonInvalid", { error: "parse" }), type: "error" }); } };
+  }, [pl, R, svc, refreshSvc]);
+  const fmtJson = () => { try { setCfgJ(pretty(cfgJ)); } catch { setJv({ text: "JSON 无效：parse", type: "error" }); } };
   const resetJson = () => setCfgJ(origCfgJ ? `${origCfgJ}\n` : "{}\n");
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
   const onWizardDone = async () => { setShowWizard(false); try { const d = (await R("/api/config")) as ConfigApiResponse; setPl(coerce(d.payload)); setMeta({ configPath: d.meta.configPath }); await Promise.all([refreshSvc(), refreshH()]); } catch {} };
@@ -165,6 +164,7 @@ export function Dashboard() {
     overview: { title: "概览", hint: "平台与服务状态", actions: false },
     platforms: { title: "平台配置", hint: "禁用平台仍保留已保存的值", actions: true },
     files: { title: "配置文件（JSON）", hint: "直接编辑磁盘上的文件，每个文件有独立保存按钮", actions: true },
+    settings: { title: "设置", hint: "控制 open-im 的全局行为", actions: false },
   };
 
   return (
@@ -181,7 +181,6 @@ export function Dashboard() {
         sectionTitle={sectionMeta[activeNav].title}
         sectionHint={sectionMeta[activeNav].hint}
         showPrimaryActions={sectionMeta[activeNav].actions}
-        t={t}
       />
 
       <div className="content">
@@ -205,11 +204,11 @@ export function Dashboard() {
         )}
 
         {showWizard ? (
-          <SetupWizard request={R} t={t} html={html} onComplete={() => void onWizardDone()} initialPayload={pl} />
+          <SetupWizard request={R} onComplete={() => void onWizardDone()} initialPayload={pl} />
         ) : (
           <>
             {activeNav === "overview" && (
-              <OverviewStats health={health} serviceStatus={svc} t={t} />
+              <OverviewStats health={health} serviceStatus={svc} />
             )}
 
             {activeNav === "platforms" && (
@@ -217,7 +216,7 @@ export function Dashboard() {
                 <div className="platform-grid">
                   {PLATFORM_DEFINITIONS.map((def) => {
                     const pk = def.key as PlatformKey;
-                    return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} t={t} html={html} disabledVisual={false} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
+                    return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} disabledVisual={false} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
                   })}
                 </div>
               </section>
@@ -234,6 +233,8 @@ export function Dashboard() {
               ];
               return <ConfigFilesSection files={configFiles} hideHeading />;
             })()}
+
+            {activeNav === "settings" && <SettingsSection hideHeading />}
 
           </>
         )}

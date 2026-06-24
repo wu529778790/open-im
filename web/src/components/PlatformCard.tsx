@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_KEY, PLATFORM_SUMMARY_KEY, INLINE_TIP_KEY } from "../fieldLabels.js";
+import { PLATFORM_FIELD_LABEL, PLATFORM_HELP_HTML, PLATFORM_SUMMARY, INLINE_TIP_HTML } from "../fieldLabels.js";
 import type { AiCommand, PlatformKey, WebConfigPayload } from "../types.js";
 import { PLATFORM_EMOJI } from "../platform-emoji.js";
 import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
@@ -20,8 +20,6 @@ interface PlatformDef {
 interface Props {
   def: PlatformDef;
   values: WebConfigPayload["platforms"][keyof WebConfigPayload["platforms"]];
-  t: (k: string, p?: Record<string, string | number>) => string;
-  html: (k: string) => string;
   disabledVisual: boolean;
   onChange: (patch: Record<string, unknown>) => void;
   onTest: () => void;
@@ -32,9 +30,9 @@ interface Props {
   onPersist?: (patch: Record<string, unknown>) => void;
 }
 
-export function PlatformCard({ def, values, t, html, disabledVisual, onChange, onTest, testing, testResult, request, onPersist }: Props) {
-  const sk = PLATFORM_SUMMARY_KEY[def.key as keyof typeof PLATFORM_SUMMARY_KEY];
-  const hk = PLATFORM_HELP_KEY[def.key as keyof typeof PLATFORM_HELP_KEY];
+export function PlatformCard({ def, values, disabledVisual, onChange, onTest, testing, testResult, request, onPersist }: Props) {
+  const sk = PLATFORM_SUMMARY[def.key as keyof typeof PLATFORM_SUMMARY];
+  const hk = PLATFORM_HELP_HTML[def.key as keyof typeof PLATFORM_HELP_HTML];
   const enabled = (values as { enabled?: boolean }).enabled ?? false;
   const [expanded, setExpanded] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -99,20 +97,20 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
   const field = (f: string): ReactNode => {
     const labels = PLATFORM_FIELD_LABEL[def.key as keyof typeof PLATFORM_FIELD_LABEL];
     const lk = labels ? (labels as Record<string, string | undefined>)[f] : undefined;
-    const tipK = (INLINE_TIP_KEY as Record<string, string | undefined>)[`${def.key}-${f}`];
+    const tipK = (INLINE_TIP_HTML as Record<string, string | undefined>)[`${def.key}-${f}`];
     const isPwd = def.sensitiveFields.includes(f);
     return (
       <div className="form-group" key={f}>
-        <label className="form-label">{lk ? t(lk) : f}</label>
+        <label className="form-label">{lk ?? f}</label>
         {f === "allowedUserIds" ? (
           <>
             <textarea className="form-textarea mono" value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />
-            <div className="form-hint">{t("commaSeparatedIds")}</div>
+            <div className="form-hint">多个 ID 用逗号分隔</div>
           </>
         ) : f === "aiCommand" ? null : (
           <input className="form-input mono" type={isPwd ? "password" : "text"} value={String((values as Record<string, string>)[f] ?? "")} onChange={(e) => onChange({ [f]: e.target.value })} />
         )}
-        {tipK && <div className="field-tip" dangerouslySetInnerHTML={{ __html: html(tipK) }} />}
+        {tipK && <div className="field-tip" dangerouslySetInnerHTML={{ __html: tipK }} />}
       </div>
     );
   };
@@ -126,7 +124,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
           <div className="platform-card-icon">{PLATFORM_EMOJI[def.key as PlatformKey]}</div>
           <div className="platform-card-title-block">
             <div className="platform-card-name">{def.label}</div>
-            {sk && <div className="platform-card-desc">{t(sk)}</div>}
+            {sk && <div className="platform-card-desc">{sk}</div>}
           </div>
         </div>
         <div className="platform-card-right">
@@ -162,8 +160,8 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
           <div className="platform-card-control platform-card-control-status">
             <span className={`platform-status-badge ${bound ? "on" : "off"}`}>
               {isQr
-                ? (bound ? t("platformBound") : t("platformUnbound"))
-                : (enabled ? t("platformStatusOn") : t("platformStatusOff"))}
+                ? (bound ? "已绑定" : "未绑定")
+                : (enabled ? "已连接" : "未连接")}
             </span>
           </div>
 
@@ -219,9 +217,9 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
       {/* 字段平台：展开的字段表单 */}
       {!isQr && expanded && (
         <div className="platform-card-body">
-          {sk && <p className="platform-card-hint">{t(sk)}</p>}
+          {sk && <p className="platform-card-hint">{sk}</p>}
           {def.fields.map(field)}
-          {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: html(hk) }} />}
+          {hk && <div className="platform-card-help" dangerouslySetInnerHTML={{ __html: hk }} />}
           {(def as Record<string, unknown>).docUrl && (
             <div style={{ marginTop: 12 }}>
               <a href={(def as Record<string, string>).docUrl} target="_blank" rel="noreferrer" className="btn btn-g btn-sm" style={{ textDecoration: "none" }}>
@@ -231,7 +229,7 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
           )}
           <div className="platform-card-actions">
             <button type="button" className="btn btn-s btn-sm" disabled={testing} onClick={onTest}>
-              {testing ? t("testing") : t("test")}
+              {testing ? "校验中..." : "校验配置"}
             </button>
           </div>
           {testResult?.text && <div className={`msg mt-4 ${testResult.ok ? "msg-ok" : "msg-err"}`}>{testResult.text}</div>}
@@ -258,7 +256,6 @@ export function PlatformCard({ def, values, t, html, disabledVisual, onChange, o
             onPersist?.(patch);
           }}
           request={request}
-          t={t}
         />
       )}
     </div>

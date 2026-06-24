@@ -13,7 +13,6 @@ interface Props {
   sectionTitle: string;
   sectionHint: string;
   showPrimaryActions: boolean;
-  t: (k: string) => string;
 }
 
 export function Header({
@@ -21,7 +20,6 @@ export function Header({
   serviceStatus, busy,
   onValidate, onSave, onToggleService,
   activeNav, onNavigate, sectionTitle, sectionHint, showPrimaryActions,
-  t,
 }: Props) {
   return (
     <header className="app-header">
@@ -31,7 +29,7 @@ export function Header({
           <span className="app-header-brand-text">open-im</span>
         </div>
 
-        <nav className="app-nav" aria-label={t("controlCenter")}>
+        <nav className="app-nav" aria-label="控制中心">
           {DASHBOARD_NAV_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -41,7 +39,7 @@ export function Header({
               onClick={() => onNavigate(item.id)}
             >
               <item.icon />
-              <span>{t(item.key)}</span>
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -50,7 +48,7 @@ export function Header({
 
         <div className={`app-header-status ${serviceStatus.running ? "running" : "idle"}`}>
           <span className={`dot ${serviceStatus.running ? "running" : "idle"}`} />
-          <span>{serviceStatus.running ? t("serviceRunningShort") : t("serviceIdleShort")}</span>
+          <span>{serviceStatus.running ? "运行中" : "未启动"}</span>
           {serviceStatus.running && serviceStatus.pid ? (
             <span className="app-header-status-meta mono">pid {serviceStatus.pid}</span>
           ) : null}
@@ -58,7 +56,7 @@ export function Header({
 
         <div className="app-header-tools">
           <a href="https://github.com/wu529778790/open-im" target="_blank" rel="noreferrer" className="btn btn-g btn-sm">GitHub</a>
-          <button type="button" className="dark-btn" onClick={toggleDark} aria-label={t("darkModeToggle")}>◐</button>
+          <button type="button" className="dark-btn" onClick={toggleDark} aria-label="切换暗黑模式">◐</button>
         </div>
       </div>
 
@@ -67,18 +65,18 @@ export function Header({
           <h1 className="app-context-title">{sectionTitle}</h1>
           <p className="app-context-hint">{sectionHint}</p>
         </div>
-        <div className="app-context-actions" aria-label={t("headerToolbarAria")}>
+        <div className="app-context-actions" aria-label="桥接：校验、保存、启动、停止">
           {showPrimaryActions ? (
             <>
-              <button type="button" className="btn btn-w btn-sm" disabled={busy} onClick={onValidate}>{t("validate")}</button>
-              <button type="button" className="btn btn-s btn-sm" disabled={busy} onClick={onSave}>{t("save")}</button>
+              <button type="button" className="btn btn-w btn-sm" disabled={busy} onClick={onValidate}>校验配置</button>
+              <button type="button" className="btn btn-s btn-sm" disabled={busy} onClick={onSave}>保存配置</button>
               <button
                 type="button"
                 className={`btn btn-sm ${serviceStatus.running ? "btn-d" : "btn-p"}`}
                 disabled={busy}
                 onClick={onToggleService}
               >
-                {serviceStatus.running ? t("stop") : t("start")}
+                {serviceStatus.running ? "停止桥接" : "启动桥接"}
               </button>
             </>
           ) : null}

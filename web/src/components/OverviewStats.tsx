@@ -6,10 +6,9 @@ interface HealthPlatform { configured?: boolean; enabled?: boolean }
 interface Props {
   health: Record<string, unknown> | null;
   serviceStatus: { running: boolean; pid?: number };
-  t: (k: string) => string;
 }
 
-export function OverviewStats({ health, serviceStatus, t }: Props) {
+export function OverviewStats({ health, serviceStatus }: Props) {
   const platforms = (health?.platforms ?? {}) as Record<string, HealthPlatform>;
   let configured = 0;
   let enabled = 0;
@@ -22,19 +21,19 @@ export function OverviewStats({ health, serviceStatus, t }: Props) {
   return (
     <div className="stats-grid">
       <div className="stat-card">
-        <div className="stat-label">{t("statConfiguredLabel")}</div>
+        <div className="stat-label">已配置</div>
         <div className="stat-value">{configured}/{PLATFORM_KEYS.length}</div>
-        <div className="stat-meta">{t("statConfiguredMeta")}</div>
+        <div className="stat-meta">已填写凭证的平台数量</div>
       </div>
       <div className="stat-card">
-        <div className="stat-label">{t("statEnabledLabel")}</div>
+        <div className="stat-label">已启用</div>
         <div className="stat-value">{enabled}</div>
-        <div className="stat-meta">{t("statEnabledMeta")}</div>
+        <div className="stat-meta">会随服务启动的平台数量</div>
       </div>
       <div className="stat-card">
-        <div className="stat-label">{t("statServiceLabel")}</div>
-        <div className="stat-value">{serviceStatus.running ? t("serviceRunningShort") : t("serviceIdleShort")}</div>
-        <div className="stat-meta">{serviceStatus.running ? t("serviceRunningMeta") : t("serviceIdleMeta")}</div>
+        <div className="stat-label">服务</div>
+        <div className="stat-value">{serviceStatus.running ? "运行中" : "未启动"}</div>
+        <div className="stat-meta">{serviceStatus.running ? "本地桥接进程正在运行" : "桥接服务尚未启动"}</div>
       </div>
     </div>
   );

@@ -2,15 +2,12 @@ import { useEffect, useRef } from "react";
 import type { JsonRequest } from "../api.js";
 import { useQrLogin, type QrLoginResult } from "../hooks/useQrLogin.js";
 
-type T = (k: string, p?: Record<string, string | number>) => string;
-
 interface Props {
   open: boolean;
   onClose: () => void;
   onSuccess: (result: QrLoginResult) => void;
   request: JsonRequest;
   platform: string;
-  t: T;
 }
 
 /**
@@ -19,7 +16,7 @@ interface Props {
  *
  * 后端把登录 URL 编码成 base64 PNG，前端直接 <img src> 显示，无跨域问题。
  */
-export function QrBindModal({ open, onClose, onSuccess, request, platform, t }: Props) {
+export function QrBindModal({ open, onClose, onSuccess, request, platform }: Props) {
   const lastResultRef = useRef<QrLoginResult | null>(null);
   const { state, qrImg, message, start, reset } = useQrLogin(request, platform, (r) => {
     lastResultRef.current = r;
@@ -65,15 +62,15 @@ export function QrBindModal({ open, onClose, onSuccess, request, platform, t }: 
         <button
           type="button"
           className="qr-modal-close"
-          aria-label={t("qrModalClose")}
+          aria-label="关闭"
           onClick={onClose}
         >
           ×
         </button>
-        <div className="qr-modal-title">{t("qrModalTitle")}</div>
+        <div className="qr-modal-title">扫码绑定</div>
 
         {state === "loading" && (
-          <div className="qr-modal-status">{t("qrModalGenerating")}</div>
+          <div className="qr-modal-status">正在生成二维码...</div>
         )}
 
         {state === "scanning" && (
@@ -82,22 +79,22 @@ export function QrBindModal({ open, onClose, onSuccess, request, platform, t }: 
               {qrImg ? (
                 <img className="qr-modal-img" src={qrImg} alt="QR" />
               ) : (
-                <div className="qr-modal-status">{t("qrModalGenerating")}</div>
+                <div className="qr-modal-status">正在生成二维码...</div>
               )}
             </div>
-            <div className="qr-modal-hint">{t("qrModalHint")}</div>
-            <div className="qr-modal-status muted">{t("qrModalScanning")}</div>
+            <div className="qr-modal-hint">请用微信扫描下方二维码完成绑定</div>
+            <div className="qr-modal-status muted">等待扫码...</div>
           </>
         )}
 
         {state === "success" && (
-          <div className="qr-modal-status ok">✅ {t("qrModalSuccess")}</div>
+          <div className="qr-modal-status ok">✅ 绑定成功</div>
         )}
 
         {state === "error" && (
           <>
             <div className="qr-modal-status err">
-              {message || t("qrModalError")}
+              {message || "绑定失败"}
             </div>
             <div className="qr-modal-actions">
               <button
@@ -105,14 +102,14 @@ export function QrBindModal({ open, onClose, onSuccess, request, platform, t }: 
                 className="btn btn-p btn-sm"
                 onClick={start}
               >
-                {t("qrModalRetry")}
+                重新扫码
               </button>
               <button
                 type="button"
                 className="btn btn-s btn-sm"
                 onClick={onClose}
               >
-                {t("qrModalClose")}
+                关闭
               </button>
             </div>
           </>

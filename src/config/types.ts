@@ -76,6 +76,12 @@ export interface Config {
     autoResumePrompt: string;
   };
 
+  keepalive?: {
+    enabled: boolean;
+    intervalHours: number;
+    target: AiCommand;
+  };
+
   platforms: {
     telegram?: {
       enabled: boolean;
@@ -237,6 +243,12 @@ export interface FileToolOpenCode {
   model?: string;
 }
 
+export interface KeepaliveConfig {
+  enabled?: boolean;
+  intervalHours?: number;
+  target?: AiCommand;
+}
+
 export interface FileConfig {
   telegramBotToken?: string;
   feishuAppId?: string;
@@ -270,4 +282,6 @@ export interface FileConfig {
     url?: string;
     token?: string;
   };
+
+  keepalive?: KeepaliveConfig;
 }

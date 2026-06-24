@@ -4,7 +4,6 @@ import { AI_TOOL_DEFINITIONS } from "../tool-definitions.js";
 interface AiCommandPickerProps {
   value: AiCommand;
   onChange: (v: AiCommand) => void;
-  t: (k: string) => string;
 }
 
 /**
@@ -12,11 +11,11 @@ interface AiCommandPickerProps {
  * 把"这个渠道用什么 AI 回复"提升为视觉层级最高的字段，
  * 传达"每个渠道独立配置 AI"的心智模型。
  */
-export function AiCommandPicker({ value, onChange, t }: AiCommandPickerProps) {
+export function AiCommandPicker({ value, onChange }: AiCommandPickerProps) {
   return (
     <div className="ai-command-picker">
-      <div className="ai-command-picker-title">{t("aiCommandPickerTitle")}</div>
-      <div className="ai-command-picker-hint">{t("aiCommandPickerHint")}</div>
+      <div className="ai-command-picker-title">🤖 AI 工具</div>
+      <div className="ai-command-picker-hint">这个渠道收到的消息会用上面的 AI 回复</div>
       <select
         className="form-select"
         value={String(value || "claude")}

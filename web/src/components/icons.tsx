@@ -51,6 +51,15 @@ export function IcoWizard() {
   );
 }
 
+export function IcoSettings() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="2.5" />
+      <path d="M16.5 12.5l1.5.8-1 2-1.7-.5a6.5 6.5 0 0 1-1.4.8l-.4 1.7h-2.2l-.4-1.7a6.5 6.5 0 0 1-1.4-.8l-1.7.5-1-2 1.5-.8a6.5 6.5 0 0 1 0-1.6L2.5 9.6l1-2 1.7.5a6.5 6.5 0 0 1 1.4-.8l.4-1.7h2.2l.4 1.7a6.5 6.5 0 0 1 1.4.8l1.7-.5 1 2-1.5.8a6.5 6.5 0 0 1 0 1.6z" />
+    </svg>
+  );
+}
+
 export function IcoLogo() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
