@@ -69,7 +69,8 @@ export function processEnvForNonClaudeCliChild(): Record<string, string> {
 let cachedConfig: { config: FileConfig; mtime: number } | null = null;
 let cachedClaudeEnv: { env: Record<string, string>; fingerprint: string } | null = null;
 
-// 保存进程启动时 shell 环境中的 Claude 相关 key 原始值（优先级最高，不可被文件配置覆盖）
+// 保存进程启动时 shell 环境中的 Claude 相关 key 原始值
+// 作为兜底（当 ~/.claude/settings.json 未配置该 key 时使用）
 const originalShellEnv: Partial<Record<string, string>> = {};
 for (const key of CLAUDE_AUTH_ENV_KEYS) {
   if (process.env[key] !== undefined) {
@@ -379,18 +380,19 @@ export function refreshClaudeEnvToProcess(): void {
   const claudeSettingsEnv = loadClaudeSettingsEnv();
 
   for (const key of CLAUDE_AUTH_ENV_KEYS) {
-    if (key in originalShellEnv) {
-      process.env[key] = originalShellEnv[key];
-      continue;
-    }
-    // 优先读取 ~/.claude/settings.json（与 Claude Code CLI 共用同一配置）
+    // 优先读 ~/.claude/settings.json（与 Claude Code CLI / CC switch 实时同步）
     if (key in claudeSettingsEnv) {
       process.env[key] = claudeSettingsEnv[key];
       continue;
     }
-    // 兜底：config.json tools.claude.env（仅在没有本地 Claude 安装时需要）
+    // 其次：config.json tools.claude.env（仅在没有本地 Claude 安装时需要）
     if (key in claudeToolEnv) {
       process.env[key] = claudeToolEnv[key];
+      continue;
+    }
+    // 兜底：进程启动时 shell 里的原始值
+    if (key in originalShellEnv) {
+      process.env[key] = originalShellEnv[key];
       continue;
     }
     delete process.env[key];
