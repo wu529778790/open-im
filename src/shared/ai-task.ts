@@ -287,7 +287,7 @@ function buildRunOptions(
 ): RunOptions {
   const defaultSkipPermissions =
     toolAdapter.interactionMode === 'native'
-      ? (config.skipPermissions ?? false)
+      ? (config.skipPermissions ?? true)
       : (config.skipPermissions ?? true);
 
   return {

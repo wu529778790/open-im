@@ -38,6 +38,8 @@ export function Dashboard() {
   const [meta, setMeta] = useState({ configPath: "" });
   const [claudeJ, setClaudeJ] = useState("");
   const [codexJ, setCodexJ] = useState("");
+  const [codebuddyJ, setCodebuddyJ] = useState("");
+  const [opencodeJ, setOpencodeJ] = useState("");
   const [cfgJ, setCfgJ] = useState("");
   const [origCfgJ, setOrigCfgJ] = useState("");
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
@@ -62,15 +64,17 @@ export function Dashboard() {
         if (!ok) return;
         const c = coerce(d.payload); setPl(c); setMeta({ configPath: d.meta.configPath });
         if (!PLATFORM_KEYS.some(k => c.platforms[k].enabled)) setShowWizard(true);
-        const [cl, cx, fj] = await Promise.all([
+        const [cl, cx, cb, oc, fj] = await Promise.all([
           R("/api/claude/settings") as Promise<{ contents?: string }>,
           R("/api/codex/settings") as Promise<{ contents?: string }>,
+          R("/api/codebuddy/settings") as Promise<{ contents?: string }>,
+          R("/api/opencode/settings") as Promise<{ contents?: string }>,
           R("/api/config/file") as Promise<{ contents?: string }>,
           refreshSvc(), refreshH(),
         ]);
         if (!ok) return;
         const fmt = (r: string | undefined, fb: string) => { const s = (r ?? "").trim(); if (!s) return fb; try { return pretty(s); } catch { return s; } };
-        setClaudeJ(fmt(cl.contents, "{\n}\n")); setCodexJ(fmt(cx.contents, "{\n}\n"));
+        setClaudeJ(fmt(cl.contents, "{\n}\n")); setCodexJ(fmt(cx.contents, "{\n}\n")); setCodebuddyJ(fmt(cb.contents, "{\n}\n")); setOpencodeJ(fmt(oc.contents, "{\n}\n"));
         const rj = (fj.contents ?? "").trim(); setOrigCfgJ(rj); setCfgJ(fmt(fj.contents, "{}\n"));
       } catch (e) { if (ok) setMsg({ text: toMsg(e), type: "error" }); } finally { if (ok) setBusy(false); }
     })();
@@ -104,9 +108,11 @@ export function Dashboard() {
   const onValidate = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await R("/api/config/validate", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("validationOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const saveClaude = async () => { await R("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: claudeJ }) }); };
   const saveCodex = async () => { await R("/api/codex/settings", { method: "POST", body: JSON.stringify({ contents: codexJ }) }); };
+  const saveCodebuddy = async () => { await R("/api/codebuddy/settings", { method: "POST", body: JSON.stringify({ contents: codebuddyJ }) }); };
+  const saveOpencode = async () => { await R("/api/opencode/settings", { method: "POST", body: JSON.stringify({ contents: opencodeJ }) }); };
   const saveCfg = async () => { const j = cfgJ.trim(); if (!j) return; JSON.parse(j); await R("/api/config/file", { method: "POST", body: JSON.stringify({ contents: j }) }); setOrigCfgJ(j); };
-  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
-  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onSave = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), saveCfg()]); await R("/api/config/save?final=1", { method: "POST", body: JSON.stringify(buildP()) }); setMsg({ text: t("saveOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
+  const onStart = async () => { const e = clientErrs(); if (e.length) { setMsg({ text: e.join(" "), type: "error" }); return; } setBusy(true); try { await Promise.all([saveClaude(), saveCodex(), saveCodebuddy(), saveOpencode(), R("/api/config/save", { method: "POST", body: JSON.stringify(buildP()) })]); await R("/api/service/start", { method: "POST" }); await Promise.all([refreshSvc(), refreshH()]); setMsg({ text: t("startOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onStop = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: t("stopOk"), type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onToggle = async () => { if (svc.running) await onStop(); else await onStart(); };
 
@@ -222,10 +228,16 @@ export function Dashboard() {
                 setClaudeSettingsJson={setClaudeJ}
                 codexSettingsJson={codexJ}
                 setCodexSettingsJson={setCodexJ}
+                codebuddySettingsJson={codebuddyJ}
+                setCodebuddySettingsJson={setCodebuddyJ}
+                opencodeSettingsJson={opencodeJ}
+                setOpencodeSettingsJson={setOpencodeJ}
                 jsonValidation={jv}
                 onSaveConfig={saveCfg}
                 onSaveClaude={saveClaude}
                 onSaveCodex={saveCodex}
+                onSaveCodebuddy={saveCodebuddy}
+                onSaveOpencode={saveOpencode}
                 onFormat={fmtJson}
                 onReset={resetJson}
                 meta={meta}

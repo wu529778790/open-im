@@ -411,7 +411,7 @@ describe("runAITask", () => {
       }
     );
 
-    expect(runOptions[0]).toMatchObject({ skipPermissions: false });
+    expect(runOptions[0]).toMatchObject({ skipPermissions: true });
   });
 
   it("respects explicit skipPermissions for native Claude adapters", async () => {

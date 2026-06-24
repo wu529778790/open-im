@@ -7,10 +7,16 @@ interface Props {
   setClaudeSettingsJson: (v: string) => void;
   codexSettingsJson: string;
   setCodexSettingsJson: (v: string) => void;
+  codebuddySettingsJson: string;
+  setCodebuddySettingsJson: (v: string) => void;
+  opencodeSettingsJson: string;
+  setOpencodeSettingsJson: (v: string) => void;
   jsonValidation: { text: string; type: "success" | "error" } | null;
   onSaveConfig: () => Promise<void>;
   onSaveClaude: () => Promise<void>;
   onSaveCodex: () => Promise<void>;
+  onSaveCodebuddy: () => Promise<void>;
+  onSaveOpencode: () => Promise<void>;
   onFormat: () => void;
   onReset: () => void;
   meta: { configPath: string };
@@ -63,8 +69,10 @@ export function ConfigFilesSection({
   configJson, setConfigJson,
   claudeSettingsJson, setClaudeSettingsJson,
   codexSettingsJson, setCodexSettingsJson,
+  codebuddySettingsJson, setCodebuddySettingsJson,
+  opencodeSettingsJson, setOpencodeSettingsJson,
   jsonValidation,
-  onSaveConfig, onSaveClaude, onSaveCodex,
+  onSaveConfig, onSaveClaude, onSaveCodex, onSaveCodebuddy, onSaveOpencode,
   onFormat, onReset,
   meta, setMessage, t, forwardRef, hideHeading = false,
 }: Props) {
@@ -82,6 +90,8 @@ export function ConfigFilesSection({
         <JsonCard title={t("configJson")} hint={t("openImConfigCardHint")} json={configJson} setJson={setConfigJson} onSave={onSaveConfig} formatBtn resetBtn onFormat={onFormat} onReset={onReset} validation={jsonValidation} setMessage={setMessage} t={t} />
         <JsonCard title={t("claudeSettingsLabel")} hint={t("claudeSettingsCardHint")} json={claudeSettingsJson} setJson={setClaudeSettingsJson} onSave={onSaveClaude} setMessage={setMessage} t={t} />
         <JsonCard title={t("codexSettingsLabel")} hint={t("codexSettingsCardHint")} json={codexSettingsJson} setJson={setCodexSettingsJson} onSave={onSaveCodex} setMessage={setMessage} t={t} />
+        <JsonCard title={t("codebuddySettingsLabel")} hint={t("codebuddySettingsCardHint")} json={codebuddySettingsJson} setJson={setCodebuddySettingsJson} onSave={onSaveCodebuddy} setMessage={setMessage} t={t} />
+        <JsonCard title={t("opencodeSettingsLabel")} hint={t("opencodeSettingsCardHint")} json={opencodeSettingsJson} setJson={setOpencodeSettingsJson} onSave={onSaveOpencode} setMessage={setMessage} t={t} />
       </div>
       {meta.configPath && <p className="form-hint" style={{ marginTop: 16 }}>{t("configJson")}: {meta.configPath}</p>}
     </section>

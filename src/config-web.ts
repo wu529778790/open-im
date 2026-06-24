@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import { URL } from "node:url";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 import { WEB_CONFIG_PORT, getPublicWebDashboardUrl } from "./constants.js";
 import {
   CONFIG_PATH,
@@ -337,6 +338,92 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
           }
           writeFileSync(settingsPath, raw, "utf-8");
           json(response, 200, { message: "Codex settings saved.", path: settingsPath }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      // --- CodeBuddy settings (~/.codebuddy/settings.json) ---
+      function getCodebuddySettingsPath(): string {
+        const home = process.env.CODEBUDDY_HOME || join(homedir(), '.codebuddy');
+        return join(home, 'settings.json');
+      }
+
+      if (request.method === "GET" && requestUrl.pathname === "/api/codebuddy/settings") {
+        try {
+          const settingsPath = getCodebuddySettingsPath();
+          let contents = "{}";
+          if (existsSync(settingsPath)) {
+            contents = readFileSync(settingsPath, "utf-8");
+          }
+          json(response, 200, { path: settingsPath, contents }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/codebuddy/settings") {
+        try {
+          const body = await readJson<{ contents?: string }>(request);
+          const raw = body.contents ?? "";
+          if (!raw.trim()) {
+            json(response, 400, { error: "contents is required" }, request);
+            return;
+          }
+          try { JSON.parse(raw); } catch (err) {
+            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` }, request);
+            return;
+          }
+          const settingsPath = getCodebuddySettingsPath();
+          const dir = dirname(settingsPath);
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          writeFileSync(settingsPath, raw, "utf-8");
+          json(response, 200, { message: "CodeBuddy settings saved.", path: settingsPath }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      // --- OpenCode settings (~/.config/opencode/opencode.json) ---
+      function getOpencodeSettingsPath(): string {
+        const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+        return join(xdgConfig, 'opencode', 'opencode.json');
+      }
+
+      if (request.method === "GET" && requestUrl.pathname === "/api/opencode/settings") {
+        try {
+          const settingsPath = getOpencodeSettingsPath();
+          let contents = "{}";
+          if (existsSync(settingsPath)) {
+            contents = readFileSync(settingsPath, "utf-8");
+          }
+          json(response, 200, { path: settingsPath, contents }, request);
+        } catch (error) {
+          json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
+        }
+        return;
+      }
+
+      if (request.method === "POST" && requestUrl.pathname === "/api/opencode/settings") {
+        try {
+          const body = await readJson<{ contents?: string }>(request);
+          const raw = body.contents ?? "";
+          if (!raw.trim()) {
+            json(response, 400, { error: "contents is required" }, request);
+            return;
+          }
+          try { JSON.parse(raw); } catch (err) {
+            json(response, 400, { error: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}` }, request);
+            return;
+          }
+          const settingsPath = getOpencodeSettingsPath();
+          const dir = dirname(settingsPath);
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          writeFileSync(settingsPath, raw, "utf-8");
+          json(response, 200, { message: "OpenCode settings saved.", path: settingsPath }, request);
         } catch (error) {
           json(response, 500, { error: error instanceof Error ? error.message : String(error) }, request);
         }
