@@ -1,4 +1,11 @@
-import { resolvePlatformAiCommand, type Config, type Platform } from '../config.js';
+import {
+  resolvePlatformAiCommand,
+  loadConfig,
+  loadFileConfig,
+  saveFileConfig,
+  type Config,
+  type Platform,
+} from '../config.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { RequestQueue } from '../queue/request-queue.js';
 import { escapePathForMarkdown } from '../shared/utils.js';
@@ -7,7 +14,7 @@ import { TERMINAL_ONLY_COMMANDS } from '../constants.js';
 import { createLogger } from '../logger.js';
 import { ClaudeSDKAdapter } from '../adapters/claude-sdk-adapter.js';
 import type { SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
-import { AI_TOOL_BY_ID, type AiCommand } from '../adapters/tool-registry.js';
+import { AI_TOOL_BY_ID, AI_TOOLS, isAiCommand, type AiCommand } from '../adapters/tool-registry.js';
 
 const log = createLogger('Commands');
 
@@ -128,6 +135,7 @@ export class CommandHandler {
       if (t === '/context') return this.handleContext(chatId, userId, platform);
       if (t === '/pwd') return this.handlePwd(chatId, userId);
       if (t === '/status') return this.handleStatus(chatId, userId, platform);
+      if (t === '/a' || t.startsWith('/a ')) return this.handleSwitchAi(chatId, t.slice(2).trim(), platform);
       if (t === '/autopilot') return this.handleAutopilotStatus(chatId, userId);
 
       // 快捷命令 — 直接发送预设 prompt 给 AI
@@ -206,6 +214,7 @@ export class CommandHandler {
       '/plugins - 查看已安装插件',
       '/context - 查看上下文窗口占用',
       '/status - 显示状态',
+      '/a [工具名] - 查看或切换 AI 工具（claude/codex/codebuddy/opencode）',
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
       '/autopilot - 查看限流自动恢复状态',
@@ -336,7 +345,9 @@ export class CommandHandler {
   }
 
   private async handleStatus(chatId: string, userId: string, platform: Platform): Promise<boolean> {
-    const aiCommand = resolvePlatformAiCommand(this.deps.config, platform);
+    // 重新读取配置，使 /a 切换后立即反映新工具（与 AI 请求路径一致）
+    const config = loadConfig();
+    const aiCommand = resolvePlatformAiCommand(config, platform);
     const version = await this.getAiVersion(aiCommand);
     const workDir = this.deps.sessionManager.getWorkDir(userId);
     const convId = this.deps.sessionManager.getConvId(userId);
@@ -363,6 +374,50 @@ export class CommandHandler {
     }
 
     await this.replySender().sendTextReply(chatId, lines.join('\n'));
+    return true;
+  }
+
+  private async handleSwitchAi(chatId: string, arg: string, platform: Platform): Promise<boolean> {
+    // 无参数：显示当前工具 + 可选列表
+    if (!arg) {
+      const current = resolvePlatformAiCommand(loadConfig(), platform);
+      const lines = ['🔄 切换 AI 工具:', '', `当前 (${platform}): ${current}`, '', '可选:'];
+      for (const tool of AI_TOOLS) {
+        const mark = tool.id === current ? ' (当前)' : '';
+        lines.push(`  /a ${tool.id} - ${tool.label}${mark}`);
+      }
+      lines.push('', '用法: /a <工具名>');
+      await this.replySender().sendTextReply(chatId, lines.join('\n'));
+      return true;
+    }
+
+    // 校验工具名
+    if (!isAiCommand(arg)) {
+      const valid = AI_TOOLS.map((t) => t.id).join(', ');
+      await this.replySender().sendTextReply(chatId, `❌ 未知工具: ${arg}\n\n可选: ${valid}`);
+      return true;
+    }
+
+    // 持久化到 config.json（load→mutate→save 模式，与 saveKeepaliveConfig 一致）
+    try {
+      const file = loadFileConfig();
+      if (!file.platforms) file.platforms = {};
+      // 所有平台配置都含 aiCommand?: AiCommand，按此最小契约写入即可
+      const platforms = file.platforms as Record<string, { aiCommand?: AiCommand }>;
+      const platCfg = platforms[platform] ?? {};
+      platCfg.aiCommand = arg;
+      platforms[platform] = platCfg;
+      saveFileConfig(file);
+
+      const label = AI_TOOL_BY_ID[arg]?.label ?? arg;
+      await this.replySender().sendTextReply(
+        chatId,
+        `✅ 已将 ${platform} 的 AI 工具切换为 ${label} (${arg})\n下一条消息生效，无需重启。`,
+      );
+    } catch (err) {
+      log.error('Failed to switch aiCommand:', err);
+      await this.replySender().sendTextReply(chatId, '❌ 切换失败，请查看日志。');
+    }
     return true;
   }
 
