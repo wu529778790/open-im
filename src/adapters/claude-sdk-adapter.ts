@@ -225,6 +225,7 @@ function enrichClaudeErrorMessage(message: string, stderr: string): string {
 
 export class ClaudeSDKAdapter implements ToolAdapter {
   readonly toolId = 'claude-sdk';
+  readonly interactionMode = 'native';
 
   /**
    * 清理所有活跃的查询

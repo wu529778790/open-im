@@ -189,6 +189,26 @@ describe('handleTextFlow', () => {
     });
   });
 
+  it('treats Telegram numeric follow-up input as a normal queued AI message', async () => {
+    const enqueue = vi.fn(() => 'running' as const);
+    const handleAIRequest = vi.fn(async () => {});
+
+    await handleTextFlow(makeParams({
+      text: '2',
+      handleAIRequest,
+      ctx: makeCtx({
+        requestQueue: { enqueue, clear: vi.fn() } as unknown as PlatformEventContext['requestQueue'],
+      }),
+    }));
+
+    expect(enqueue).toHaveBeenCalledWith(
+      'user-1',
+      'conv-1',
+      '2',
+      expect.any(Function),
+    );
+  });
+
   it('returns true without enqueuing when text is empty', async () => {
     const sendTextReply = vi.fn(async () => {});
     const enqueue = vi.fn(() => 'running' as const);

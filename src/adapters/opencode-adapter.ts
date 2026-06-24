@@ -9,6 +9,7 @@ import type {
 
 export class OpenCodeAdapter implements ToolAdapter {
   readonly toolId = 'opencode';
+  readonly interactionMode = 'open';
 
   run(
     prompt: string,

@@ -13,6 +13,7 @@ import type {
 
 export class CodexAdapter implements ToolAdapter {
   readonly toolId = "codex";
+  readonly interactionMode = "open";
 
   constructor(private cliPath: string) {}
 

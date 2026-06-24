@@ -42,6 +42,7 @@ describe("runAITask", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "codex",
+      interactionMode: "open",
       run(_prompt, _sessionId, _workDir, callbacks) {
         callbacks.onError("You've hit your usage limit. To get more access now, send a request to your admin or try again at 12:56 PM.");
         return { abort: vi.fn() };
@@ -116,6 +117,7 @@ describe("runAITask", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_prompt, _sessionId, _workDir, callbacks, _options) {
         // Simulate text streaming then completion
         callbacks.onText("Hello from AI");
@@ -204,6 +206,7 @@ describe("runAITask", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "codex",
+      interactionMode: "open",
       run(_prompt, _sessionId, _workDir, callbacks) {
         callbacks.onError("Network connection failed");
         return { abort: vi.fn() };
@@ -277,6 +280,7 @@ describe("runAITask", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "codex",
+      interactionMode: "open",
       run(_prompt, _sessionId, _workDir, callbacks, options) {
         runOptions.push(options);
         callbacks.onComplete({
@@ -337,6 +341,152 @@ describe("runAITask", () => {
     expect(sendError).not.toHaveBeenCalled();
   });
 
+  it("does not force skipPermissions for native Claude adapters", async () => {
+    const sessionManager = {
+      addTurnsForThread: vi.fn(() => 0),
+      addTurns: vi.fn(() => 0),
+      setSessionIdForThread: vi.fn(),
+      setSessionIdForConv: vi.fn(),
+      clearSessionForConv: vi.fn(),
+      clearActiveToolSession: vi.fn(),
+      getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
+    };
+
+    const runOptions: unknown[] = [];
+    const toolAdapter: ToolAdapter = {
+      toolId: "claude",
+      interactionMode: "native",
+      run(_prompt, _sessionId, _workDir, callbacks, options) {
+        runOptions.push(options);
+        callbacks.onComplete({
+          success: true,
+          result: "done",
+          accumulated: "done",
+          cost: 0,
+          durationMs: 1,
+          numTurns: 1,
+          toolStats: {},
+        });
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      {
+        config: {
+          platforms: {
+            telegram: { enabled: true, aiCommand: "claude", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["telegram"],
+          claudeModel: "claude-opus-4-5",
+          codexProxy: "",
+          dingtalkClientId: "",
+          dingtalkClientSecret: "",
+          qqAppId: "",
+          qqSecret: "",
+          weworkCorpId: "",
+          weworkSecret: "",
+          telegramBotToken: "",
+        } as never,
+        sessionManager: sessionManager as never,
+      },
+      {
+        userId: "u1",
+        chatId: "c1",
+        workDir: "/tmp/project",
+        sessionId: undefined,
+        convId: "conv-native",
+        platform: "telegram",
+        taskKey: "task-native",
+      },
+      "hello",
+      toolAdapter,
+      {
+        streamUpdate: vi.fn(),
+        sendComplete: vi.fn(async () => {}),
+        sendError: vi.fn(async () => {}),
+        throttleMs: 0,
+        onTaskReady: vi.fn(),
+      }
+    );
+
+    expect(runOptions[0]).toMatchObject({ skipPermissions: false });
+  });
+
+  it("keeps skipPermissions enabled for open-mode tools", async () => {
+    const sessionManager = {
+      addTurnsForThread: vi.fn(() => 0),
+      addTurns: vi.fn(() => 0),
+      setSessionIdForThread: vi.fn(),
+      setSessionIdForConv: vi.fn(),
+      clearSessionForConv: vi.fn(),
+      clearActiveToolSession: vi.fn(),
+      getModel: vi.fn(() => undefined),
+      isFreshSession: vi.fn(() => false),
+    };
+
+    const runOptions: unknown[] = [];
+    const toolAdapter: ToolAdapter = {
+      toolId: "codex",
+      interactionMode: "open",
+      run(_prompt, _sessionId, _workDir, callbacks, options) {
+        runOptions.push(options);
+        callbacks.onComplete({
+          success: true,
+          result: "done",
+          accumulated: "ok",
+          cost: 0,
+          durationMs: 1,
+          numTurns: 1,
+          toolStats: {},
+        });
+        return { abort: vi.fn() };
+      },
+    };
+
+    await runAITask(
+      {
+        config: {
+          platforms: {
+            qq: { enabled: true, aiCommand: "codex", allowedUserIds: [] },
+          },
+          enabledPlatforms: ["qq"],
+          claudeModel: "claude-opus-4-5",
+          codexProxy: "",
+          dingtalkClientId: "",
+          dingtalkClientSecret: "",
+          qqAppId: "",
+          qqSecret: "",
+          weworkCorpId: "",
+          weworkSecret: "",
+          telegramBotToken: "",
+        } as never,
+        sessionManager: sessionManager as never,
+      },
+      {
+        userId: "u1",
+        chatId: "c1",
+        workDir: "/tmp/project",
+        sessionId: undefined,
+        convId: "conv-open",
+        platform: "qq",
+        taskKey: "task-open",
+      },
+      "hello",
+      toolAdapter,
+      {
+        streamUpdate: vi.fn(),
+        sendComplete: vi.fn(async () => {}),
+        sendError: vi.fn(async () => {}),
+        throttleMs: 0,
+        onTaskReady: vi.fn(),
+      }
+    );
+
+    expect(runOptions[0]).toMatchObject({ skipPermissions: true });
+  });
+
   it("edits the placeholder to a terminal state and emits aborted telemetry on abort", async () => {
     const sessionManager = {
       addTurnsForThread: vi.fn(() => 0),
@@ -355,6 +505,7 @@ describe("runAITask", () => {
     // Adapter that starts but never completes on its own — only abort ends it.
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run() {
         return { abort: vi.fn() };
       },
@@ -565,6 +716,7 @@ describe("autopilot interceptor", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_p, _s, _w, cb) {
         cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
         return { abort: vi.fn() };
@@ -605,6 +757,7 @@ describe("autopilot interceptor", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_p, _s, _w, cb) {
         cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
         return { abort: vi.fn() };
@@ -629,6 +782,7 @@ describe("autopilot interceptor", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_p, _s, _w, cb) {
         cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
         return { abort: vi.fn() };
@@ -653,6 +807,7 @@ describe("autopilot interceptor", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_p, _s, _w, cb) {
         cb.onError("529 overloaded");
         return { abort: vi.fn() };
@@ -691,6 +846,7 @@ describe("autopilot interceptor", () => {
 
     const toolAdapter: ToolAdapter = {
       toolId: "claude",
+      interactionMode: "native",
       run(_p, _s, _w, cb) {
         cb.onError("You've hit your usage limit. Try again at 3:00 PM.");
         return { abort: vi.fn() };

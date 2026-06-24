@@ -45,8 +45,11 @@ export interface RunHandle {
   abort: () => void;
 }
 
+export type InteractionMode = 'native' | 'open';
+
 export interface ToolAdapter {
   readonly toolId: string;
+  readonly interactionMode: InteractionMode;
   run(
     prompt: string,
     sessionId: string | undefined,

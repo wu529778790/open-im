@@ -4,7 +4,7 @@
 
 import type { Config } from '../config.js';
 import type { SessionManager } from '../session/session-manager.js';
-import type { ToolAdapter } from '../adapters/tool-adapter.interface.js';
+import type { RunOptions, ToolAdapter } from '../adapters/tool-adapter.interface.js';
 import type { ParsedResult } from '../adapters/tool-adapter.interface.js';
 import { resolvePlatformAiCommand, type Platform } from '../config.js';
 import { captureError } from './sentry.js';
@@ -276,6 +276,31 @@ function buildCompletionNote(
   if (ctxWarning) parts.push(ctxWarning);
 
   return parts.join(' | ');
+}
+
+function buildRunOptions(
+  config: Config,
+  sessionManager: SessionManager,
+  ctx: TaskContext,
+  aiCommand: string,
+  toolAdapter: ToolAdapter,
+): RunOptions {
+  const defaultSkipPermissions =
+    toolAdapter.interactionMode === 'native'
+      ? false
+      : (config.skipPermissions ?? true);
+
+  return {
+    model: aiCommand === 'claude'
+      ? (sessionManager.getModel(ctx.userId, ctx.threadId) ?? config.claudeModel)
+      : aiCommand === 'opencode'
+        ? config.opencodeModel
+        : undefined,
+    chatId: ctx.chatId,
+    skipPermissions: defaultSkipPermissions,
+    skipAutoResume: sessionManager.isFreshSession(ctx.userId),
+    ...(aiCommand === 'codex' && config.codexProxy ? { proxy: config.codexProxy } : {}),
+  };
 }
 
 export function runAITask(
@@ -582,19 +607,7 @@ export function runAITask(
           resolve();
         },
         },
-        {
-          model: aiCommand === 'claude'
-            ? (sessionManager.getModel(ctx.userId, ctx.threadId) ?? config.claudeModel)
-            : aiCommand === 'opencode'
-              ? config.opencodeModel
-              : undefined,
-          chatId: ctx.chatId,
-          // 默认跳过权限确认，保持全自动执行（可通过 config 或环境变量关闭）
-          skipPermissions: config.skipPermissions ?? true,
-          // /new 后跳过自动恢复 CLI session
-          skipAutoResume: sessionManager.isFreshSession(ctx.userId),
-          ...(aiCommand === 'codex' && config.codexProxy ? { proxy: config.codexProxy } : {}),
-        }
+        buildRunOptions(config, sessionManager, ctx, aiCommand, toolAdapter)
       );
       return activeHandle;
     };

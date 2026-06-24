@@ -102,14 +102,14 @@ export function setupTelegramHandlers(
   sessionManager: SessionManager,
 ): TelegramEventHandlerHandle {
   // Create shared platform event context
-  const ctx = createPlatformEventContext({
+  const platformCtx = createPlatformEventContext({
     platform: 'telegram',
     allowedUserIds: config.telegramAllowedUserIds,
     config,
     sessionManager,
     sender: { sendTextReply, sendDirectorySelection },
   });
-  const { accessControl, requestQueue, runningTasks } = ctx;
+  const { accessControl, requestQueue, runningTasks } = platformCtx;
 
   // Telegram-specific sender callbacks for the factory
   const telegramSender: PlatformSender = {
@@ -421,25 +421,14 @@ export function setupTelegramHandlers(
       if (parts.length >= 3) {
         const choiceNum = parts[2];
         const chatId = String(ctx.chat?.id ?? "");
-        // 将用户选择作为消息发送给 AI
-        const { handleTextFlow } = await import("../platform/handle-text-flow.js");
-
         await handleTextFlow({
           platform: "telegram",
           userId,
           chatId,
           text: choiceNum,
-          ctx: createPlatformEventContext({
-            platform: "telegram",
-            allowedUserIds: config.telegramAllowedUserIds,
-            config,
-            sessionManager,
-            sender: { sendTextReply: async () => {} },
-          }),
-          handleAIRequest: async () => {},
-          sendTextReply: async (c, t) => {
-            await sendTextReply(c, t);
-          },
+          ctx: platformCtx,
+          handleAIRequest,
+          sendTextReply,
           workDir: sessionManager.getWorkDir(userId),
           convId: sessionManager.getConvId(userId),
         });
@@ -461,7 +450,7 @@ export function setupTelegramHandlers(
         userId,
         chatId,
         text,
-        ctx,
+        ctx: platformCtx,
         handleAIRequest,
         sendTextReply,
         replyToMessageId: messageId,

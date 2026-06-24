@@ -79,7 +79,7 @@ describe('createPlatformAIRequestHandler', () => {
 
   it('sends thinking message and uses msgId for default taskKey', async () => {
     const sender = makeSender();
-    const adapter = { toolId: 'claude', run: vi.fn() };
+    const adapter = { toolId: 'claude', interactionMode: 'native', run: vi.fn() };
     vi.mocked(getAdapter).mockReturnValue(adapter as never);
     vi.mocked(runAITask).mockResolvedValue(undefined);
 
@@ -112,6 +112,37 @@ describe('createPlatformAIRequestHandler', () => {
     const runCall = vi.mocked(runAITask).mock.calls[0];
     const taskCtx = runCall[1];
     expect(taskCtx.taskKey).toBe('user-1:msg-001');
+  });
+
+  it('still sends the thinking message and invokes runAITask for native adapters', async () => {
+    const sender = makeSender();
+    const adapter = {
+      toolId: 'claude',
+      interactionMode: 'native',
+      run: vi.fn(),
+    };
+    vi.mocked(getAdapter).mockReturnValue(adapter as never);
+    vi.mocked(runAITask).mockResolvedValue(undefined);
+
+    const handler = createPlatformAIRequestHandler({
+      platform: 'telegram',
+      config: makeConfig(),
+      sessionManager: makeSessionManager(),
+      sender,
+      throttleMs: 1000,
+      runningTasks: new Map(),
+    });
+
+    await handler({
+      userId: 'user-1',
+      chatId: 'chat-1',
+      prompt: 'hello',
+      workDir: '/tmp',
+      convId: 'conv-1',
+    });
+
+    expect(sender.sendThinkingMessage).toHaveBeenCalledWith('chat-1', undefined, 'claude');
+    expect(runAITask).toHaveBeenCalledTimes(1);
   });
 
   it('sends error reply when adapter is null', async () => {

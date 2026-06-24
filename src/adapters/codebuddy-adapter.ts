@@ -9,6 +9,7 @@ import type {
 
 export class CodeBuddyAdapter implements ToolAdapter {
   readonly toolId = 'codebuddy';
+  readonly interactionMode = 'open';
 
   constructor(private cliPath: string) {}
 
