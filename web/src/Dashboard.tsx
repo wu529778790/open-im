@@ -10,7 +10,6 @@ import { OverviewStats } from "./components/OverviewStats.js";
 import { PlatformCard } from "./components/PlatformCard.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
 import type { ConfigFileEntry } from "./components/ConfigFilesSection.js";
-import { AiConfigSection } from "./components/AiConfigSection.js";
 import { SetupWizard } from "./components/SetupWizard.js";
 import type { DashboardNavId } from "./components/dashboard-nav.js";
 
@@ -163,10 +162,9 @@ export function Dashboard() {
   const toggleDark = () => { const n = !document.documentElement.classList.contains("dark"); document.documentElement.classList.toggle("dark", n); localStorage.setItem(STORAGE_KEY_DARK_MODE, n ? "true" : "false"); };
   const onWizardDone = async () => { setShowWizard(false); try { const d = (await R("/api/config")) as ConfigApiResponse; setPl(coerce(d.payload)); setMeta({ configPath: d.meta.configPath }); await Promise.all([refreshSvc(), refreshH()]); } catch {} };
   const sectionMeta: Record<DashboardNavId, { title: string; hint: string; actions: boolean }> = {
-    overview: { title: t("dashboardTitle"), hint: t("dashboardSubtitleFull"), actions: false },
-    platforms: { title: t("platformsTitle"), hint: t("platformsHint"), actions: true },
-    files: { title: t("configFilesTitle"), hint: t("configFilesHint"), actions: true },
-    ai: { title: t("aiTitle"), hint: t("aiHint"), actions: true },
+    overview: { title: "概览", hint: "平台与服务状态", actions: false },
+    platforms: { title: "平台配置", hint: "禁用平台仍保留已保存的值", actions: true },
+    files: { title: "配置文件（JSON）", hint: "直接编辑磁盘上的文件，每个文件有独立保存按钮", actions: true },
   };
 
   return (
@@ -237,15 +235,6 @@ export function Dashboard() {
               return <ConfigFilesSection files={configFiles} hideHeading />;
             })()}
 
-            {activeNav === "ai" && (
-              <AiConfigSection
-                ai={pl.ai}
-                onUpdate={(patch) => setPl((prev) => ({ ...prev, ai: { ...prev.ai, ...patch } }))}
-                t={t}
-                html={html}
-                hideHeading
-              />
-            )}
           </>
         )}
       </div>
