@@ -30,11 +30,11 @@ const PATTERNS: Array<[RegExp, (m: string) => string]> = [
   [/\b(bot)[-_][a-zA-Z0-9_-]{20,}\b/gi, (m) => 'bot_****'],
   
   // 通用 API Key (更严格的匹配，避免误报)
-  [/\b(api_key|apikey|api-key|API_KEY|APIKEY)["\s]*[:=]["\s]*[a-zA-Z0-9_\-]{16,}\b/gi, 
+  [/\b(api_key|apikey|api-key|API_KEY|APIKEY)[\s]*[:=][\s]*[a-zA-Z0-9_-]{16,}\b/gi, 
      (m) => m.split(/[:=]/)[0] + '=****'],
      
   // 密码模式
-  [/\b(password|passwd|pwd)["\s]*[:=]["\s]*[^\s]{8,}\b/gi, 
+  [/\b(password|passwd|pwd)[\s]*[:=][\s]*[^\s]{8,}\b/gi, 
      (m) => m.split(/[:=]/)[0] + '=****'],
 ];
 

@@ -1,12 +1,15 @@
-import { createWriteStream, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { createWriteStream, mkdirSync, existsSync, readdirSync, statSync, unlinkSync, createReadStream } from 'node:fs';
 import { join } from 'node:path';
 import type { WriteStream } from 'node:fs';
 import { finished } from 'node:stream/promises';
+import { pipeline } from 'node:stream';
+import { createGzip } from 'node:zlib';
 import { sanitize } from './sanitize.js';
 import { APP_HOME } from './constants.js';
 
 const DEFAULT_LOG_DIR = join(APP_HOME, 'logs');
 const MAX_LOG_FILES = 10;
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
 const LOG_LEVELS = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 } as const;
 export type LogLevel = keyof typeof LOG_LEVELS;
 
@@ -37,11 +40,6 @@ function getLogFileName(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.log`;
 }
 
-function getEventsFileName(): string {
-  const d = new Date();
-  return `events-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.jsonl`;
-}
-
 function rotateOldLogs() {
   try {
     const files = readdirSync(logDir)
@@ -57,33 +55,67 @@ function rotateOldLogs() {
   }
 }
 
-function rotateOldJsonl() {
+/**
+ * 压缩日志文件
+ */
+function compressFile(filePath: string): void {
   try {
-    const files = readdirSync(logDir)
-      .filter((f) => f.endsWith('.jsonl'))
-      .map((f) => ({ name: f, time: statSync(join(logDir, f)).mtimeMs }))
-      .sort((a, b) => b.time - a.time);
-    for (let i = MAX_LOG_FILES; i < files.length; i++) {
-      unlinkSync(join(logDir, files[i].name));
+    const gzip = createGzip();
+    const source = createReadStream(filePath);
+    const destination = createWriteStream(filePath + '.gz');
+    
+    pipeline(source, gzip, destination, (err) => {
+      if (err) {
+        console.error('Failed to compress log file:', err);
+      } else {
+        // 压缩成功，删除原文件
+        try {
+          unlinkSync(filePath);
+        } catch (e) {
+          console.error('Failed to delete original log file:', e);
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to compress log file:', err);
+  }
+}
+
+/**
+ * 检查日志文件大小，必要时轮转
+ */
+function checkLogSize(): void {
+  if (!logStream) return;
+  
+  try {
+    const currentLogPath = join(logDir, getLogFileName());
+    const stats = statSync(currentLogPath);
+    
+    if (stats.size > MAX_LOG_SIZE) {
+      // 关闭当前日志流
+      logStream.end();
+      logStream = undefined;
+      
+      // 压缩当前日志文件
+      compressFile(currentLogPath);
+      
+      // 创建新的日志文件
+      logStream = createWriteStream(join(logDir, getLogFileName()), { flags: 'a' });
     }
   } catch (err) {
-    // 日志轮转失败不影响主流程
-    console.error('Failed to rotate JSONL files:', err);
+    console.error('Failed to check log size:', err);
   }
 }
 
 export function initLogger(dirOrOpts?: string | LoggerInitOptions, level?: LogLevel, telemetry?: TelemetryInitOptions) {
   let dir: string | undefined;
   let lev: LogLevel | undefined;
-  let tel: TelemetryInitOptions | undefined;
   if (dirOrOpts && typeof dirOrOpts === 'object' && !Array.isArray(dirOrOpts)) {
     dir = dirOrOpts.logDir;
     lev = dirOrOpts.logLevel;
-    tel = dirOrOpts.telemetry;
   } else {
     dir = dirOrOpts as string | undefined;
     lev = level;
-    tel = telemetry;
   }
 
   if (dir) logDir = dir;
@@ -106,6 +138,9 @@ function write(level: keyof typeof LOG_LEVELS, tag: string, msg: string, ...args
   if (level === 'ERROR') process.stderr.write(line);
   else process.stdout.write(line);
   logStream?.write(line);
+  
+  // 检查日志文件大小
+  checkLogSize();
 }
 
 export function createLogger(tag: string) {

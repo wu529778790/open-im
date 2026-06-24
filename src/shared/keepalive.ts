@@ -63,7 +63,11 @@ async function ping(target: AiCommand, workDir: string): Promise<boolean> {
     );
 
     const timeoutHandle = setTimeout(() => {
-      try { handle.abort(); } catch {}
+      try { 
+        handle.abort(); 
+      } catch (err) {
+        // 中止失败，忽略错误
+      }
       settle(false, `timeout after ${PING_TIMEOUT_MS}ms`);
     }, PING_TIMEOUT_MS);
   });
