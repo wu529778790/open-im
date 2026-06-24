@@ -54,10 +54,11 @@ export function ConfigFilesSection({ files, forwardRef, hideHeading = false }: P
         <div className="config-editor-sidebar">
           {[...groups.entries()].map(([group, entries]) => (
             <div key={group}>
+              <div className="file-group-label">{group}</div>
               {entries.map((f, i) => (
                 <div
                   key={f.id}
-                  className={`file-item${f.id === selectedId ? " active" : ""}${entries.length > 1 && i > 0 ? " sub" : ""}`}
+                  className={`file-item${f.id === selectedId ? " active" : ""}${entries.length > 1 || true ? "" : ""}`}
                   onClick={() => setSelectedId(f.id)}
                 >
                   <span className="icon">📄</span>

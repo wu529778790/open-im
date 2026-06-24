@@ -228,7 +228,7 @@ export function Dashboard() {
             {activeNav === "files" && (() => {
               const configFiles: ConfigFileEntry[] = [
                 { id: "config", group: "open-im", label: "config.json", hint: "open-im 完整配置。先格式化再保存；JSON 不合法时无法写入。", path: meta.configPath, content: cfgJ, setContent: setCfgJ, onSave: saveCfg, onFormat: fmtJson, onReset: resetJson, validation: jv },
-                { id: "claude", group: "Claude", label: "settings.json", hint: "Claude SDK 环境变量（ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL、ANTHROPIC_MODEL 等）。在此配置 API，无需在终端 export。", path: "~/.claude/settings.json", content: claudeJ, setContent: setClaudeJ, onSave: saveClaude },
+                { id: "claude", group: "Claude Code", label: "settings.json", hint: "Claude SDK 环境变量（ANTHROPIC_API_KEY、ANTHROPIC_BASE_URL、ANTHROPIC_MODEL 等）。在此配置 API，无需在终端 export。", path: "~/.claude/settings.json", content: claudeJ, setContent: setClaudeJ, onSave: saveClaude },
                 { id: "codex-auth", group: "Codex", label: "auth.json", hint: "Codex CLI 认证信息（OPENAI_API_KEY 等）。在此配置 API 访问。", path: "~/.codex/auth.json", content: codexJ, setContent: setCodexJ, onSave: saveCodex },
                 { id: "codex-config", group: "Codex", label: "config.toml", hint: "Codex CLI 配置（模型、Base URL、Model Provider 等）。TOML 格式。", path: "~/.codex/config.toml", content: codexConfigT, setContent: setCodexConfigT, onSave: saveCodexConfig },
                 { id: "codebuddy", group: "CodeBuddy", label: "settings.json", hint: "CodeBuddy CLI 配置（模型、插件、沙箱规则等）。直接编辑。", path: "~/.codebuddy/settings.json", content: codebuddyJ, setContent: setCodebuddyJ, onSave: saveCodebuddy },
