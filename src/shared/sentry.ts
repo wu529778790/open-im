@@ -12,7 +12,9 @@ import { createLogger } from '../logger.js';
 const log = createLogger('Sentry');
 
 // 开发者的 Sentry DSN（所有 open-im 实例共享）
-const DEFAULT_DSN = 'https://cc5ad094c1229b2a2ff23ab54b0fd807@o4508612762861568.ingest.us.sentry.io/4511583989727232';
+// 注意：此 DSN 仅用于 open-im 自身的错误追踪
+// 用户可在环境变量中配置自己的 DSN
+const DEFAULT_DSN = process.env.OPEN_IM_SENTRY_DSN ?? 'https://cc5ad094c1229b2a2ff23ab54b0fd807@o4508612762861568.ingest.us.sentry.io/4511583989727232';
 
 let initialized = false;
 
