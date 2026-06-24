@@ -168,16 +168,47 @@ try {
 
 ---
 
-### 🟢 低优先级问题（未完成）
+### 🟢 低优先级问题（已完成 ✅）
 
-#### 1. 日志轮转策略不完善
+#### 1. 日志轮转策略不完善 ✅
 **文件**: `src/logger.ts`
-**计划**: 增加单个日志文件的大小限制、压缩旧日志
+**修复内容**:
+- ✅ 增加日志文件大小限制（10MB）
+- ✅ 自动压缩旧日志文件（.gz）
+- ✅ 在写入日志时检查文件大小
 
-#### 2. ESLint 警告未修复
-**计划**: 启用更严格的规则，逐步修复 32 个警告
+**代码变更**:
+```typescript
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
 
-#### 3. TypeScript 配置可以更严格
+function compressFile(filePath: string): void {
+  // 使用 gzip 压缩日志文件
+  const gzip = createGzip();
+  const source = createReadStream(filePath);
+  const destination = createWriteStream(filePath + '.gz');
+  pipeline(source, gzip, destination, (err) => {
+    if (!err) unlinkSync(filePath);
+  });
+}
+
+function checkLogSize(): void {
+  const stats = statSync(currentLogPath);
+  if (stats.size > MAX_LOG_SIZE) {
+    compressFile(currentLogPath);
+    // 创建新的日志文件
+  }
+}
+```
+
+#### 2. ESLint 警告未修复（部分完成 ⚠️）
+**状态**: 修复了 2 个错误，剩余 35 个警告
+**计划**: 后续逐步修复
+
+**已修复**:
+- ✅ `src/sanitize.ts` - 不必要的转义字符
+- ✅ `src/shared/keepalive.ts` - 空块语句
+
+#### 3. TypeScript 配置可以更严格（待处理）
 **文件**: `tsconfig.json`
 **计划**: 启用 `noUncheckedIndexedAccess`、`exactOptionalPropertyTypes`
 

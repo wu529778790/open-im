@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PLATFORM_DEFINITIONS, PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE } from "./constants.js";
+import { PLATFORM_KEYS, POLLING_INTERVAL_MS, STORAGE_KEY_DARK_MODE } from "./constants.js";
 import type { AiCommand, ConfigApiResponse, PlatformKey, WebConfigPayload } from "./types.js";
 import { isAiCommand } from "./tool-definitions.js";
 import { emptyPayload } from "./empty-payload.js";
 import { useApi } from "./context/ApiContext.js";
 import { Header } from "./components/Header.js";
 import { OverviewStats } from "./components/OverviewStats.js";
-import { PlatformCard } from "./components/PlatformCard.js";
+import { PlatformSection } from "./components/PlatformSection.js";
 import { ConfigFilesSection } from "./components/ConfigFilesSection.js";
 import type { ConfigFileEntry } from "./components/ConfigFilesSection.js";
 import { SettingsSection } from "./components/SettingsSection.js";
@@ -119,17 +119,6 @@ export function Dashboard() {
   const onStop = async () => { setBusy(true); try { await R("/api/service/stop", { method: "POST" }); await refreshSvc(); setMsg({ text: "桥接已停止。", type: "success" }); } catch (x) { setMsg({ text: toMsg(x), type: "error" }); } finally { setBusy(false); } };
   const onToggle = async () => { if (svc.running) await onStop(); else await onStart(); };
 
-  const onTest = async (pk: PlatformKey) => {
-    const def = PLATFORM_DEFINITIONS.find(d => d.key === pk); if (!def) return;
-    setTBusy(pk); setTMsg(m => ({ ...m, [pk]: { text: "", ok: true } }));
-    try {
-      const cfg: Record<string, string> = {}; def.testFields.forEach(f => { cfg[f] = String((pl.platforms[pk] as Record<string, string>)[f] ?? ""); });
-      const r = (await R("/api/config/test", { method: "POST", body: JSON.stringify({ platform: pk, config: cfg }) })) as { success?: boolean; message?: string; error?: string };
-      setTMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || "配置校验通过。", ok: true } : { text: "配置有问题：" + (r.error || "?"), ok: false } }));
-    } catch (x) { setTMsg(m => ({ ...m, [pk]: { text: "配置有问题：" + toMsg(x), ok: false } })); }
-    finally { setTBusy(null); }
-  };
-
   const upP = <K extends PlatformKey>(k: K, p: Partial<WebConfigPayload["platforms"][K]>) => { setPl(prev => ({ ...prev, platforms: { ...prev.platforms, [k]: { ...prev.platforms[k], ...p } } })); };
   const persistPatch = useCallback(async (pk: PlatformKey, patch: Record<string, unknown>) => {
     const newPl: WebConfigPayload = { ...pl, platforms: { ...pl.platforms, [pk]: { ...pl.platforms[pk], ...patch } } };
@@ -213,12 +202,13 @@ export function Dashboard() {
 
             {activeNav === "platforms" && (
               <section className="section">
-                <div className="platform-grid">
-                  {PLATFORM_DEFINITIONS.map((def) => {
-                    const pk = def.key as PlatformKey;
-                    return <PlatformCard key={pk} def={def} values={pl.platforms[pk]} disabledVisual={false} request={R} onChange={(p) => upP(pk, p)} onPersist={(p) => void persistPatch(pk, p)} onTest={() => void onTest(pk)} testing={tBusy === pk} testResult={tMsg[pk]} />;
-                  })}
-                </div>
+                <PlatformSection
+                  payload={pl}
+                  request={R}
+                  onChange={upP}
+                  onPersist={(pk, p) => void persistPatch(pk, p)}
+                  mode="dashboard"
+                />
               </section>
             )}
 

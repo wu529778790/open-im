@@ -9,12 +9,14 @@ import type { JsonRequest } from "../api.js";
 interface PlatformDef {
   key: string;
   label: string;
+  description?: string;
   fields: readonly string[];
   testFields: readonly string[];
   requiredFields: readonly string[];
   sensitiveFields: readonly string[];
   qrLogin?: boolean;
   bindField?: string;
+  recommended?: boolean;
 }
 
 interface Props {
@@ -118,15 +120,27 @@ export function PlatformCard({ def, values, disabledVisual, onChange, onTest, te
   const hasConfig = isQr ? bound : def.sensitiveFields.some((f) => String((values as Record<string, string>)[f] ?? "").trim() !== "");
 
   return (
-    <div className={`platform-card ${disabledVisual ? "disabled" : ""} ${enabled ? "enabled" : ""} ${expanded ? "expanded" : ""}`}>
+    <div className={`platform-card ${disabledVisual ? "disabled" : ""} ${enabled ? "enabled" : ""} ${expanded ? "expanded" : ""} ${def.recommended ? "recommended" : ""}`}>
       <div className="platform-card-head">
+        {/* 左侧：图标 + 名称 + 推荐标签 + 描述 */}
         <div className="platform-card-meta">
           <div className="platform-card-icon">{PLATFORM_EMOJI[def.key as PlatformKey]}</div>
           <div className="platform-card-title-block">
-            <div className="platform-card-name">{def.label}</div>
-            {sk && <div className="platform-card-desc">{sk}</div>}
+            <div className="platform-card-name-row">
+              <span className="platform-card-name">{def.label}</span>
+              {def.recommended && (
+                <span className="platform-recommended-badge">
+                  推荐
+                </span>
+              )}
+            </div>
+            {(def.description || sk) && (
+              <div className="platform-card-desc">{def.description || sk}</div>
+            )}
           </div>
         </div>
+
+        {/* 右侧：操作区 */}
         <div className="platform-card-right">
           {/* AI 标签 */}
           <div className="platform-card-control platform-card-control-ai">
@@ -194,13 +208,22 @@ export function PlatformCard({ def, values, disabledVisual, onChange, onTest, te
             </div>
           </div>
 
-          {/* 已配置：显示开关；未配置：显示「配置」按钮 */}
+          {/* 已配置：显示开关；未配置：显示「配置」或「扫码绑定」按钮 */}
           <div className="platform-card-control platform-card-control-action">
             {hasConfig ? (
               <label className="toggle" onClick={(e) => e.stopPropagation()}>
                 <input type="checkbox" className="toggle-input sr-only" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
                 <span className="toggle-track" />
               </label>
+            ) : isQr ? (
+              /* 扫码平台：显示醒目的扫码按钮 */
+              <button
+                type="button"
+                className="btn btn-p btn-sm platform-card-qr-btn"
+                onClick={onEdit}
+              >
+                📱 扫码绑定
+              </button>
             ) : (
               <button
                 type="button"

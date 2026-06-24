@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
-import { PLATFORM_DEFINITIONS, PLATFORM_KEYS } from "../constants.js";
+import { PLATFORM_KEYS, PLATFORM_DEFINITIONS } from "../constants.js";
 import type { PlatformKey, WebConfigPayload } from "../types.js";
-import { PlatformCard } from "./PlatformCard.js";
+import { PlatformSection } from "./PlatformSection.js";
 import { emptyPayload } from "../empty-payload.js";
 
 /* ─── helpers ─── */
@@ -11,6 +11,9 @@ function toMsg(e: unknown): string { return e instanceof Error ? e.message : Str
 type T    = (k: string, p?: Record<string, string | number>) => string;
 type Html = (k: string) => string;
 type Req  = (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
+
+/* 向导步骤 */
+type WizardStep = "platforms" | "ai-config" | "complete";
 
 interface Props {
   request: Req;
@@ -25,9 +28,11 @@ export function SetupWizard({ request, onComplete, initialPayload }: Props) {
   const [payload, setPl] = useState<WebConfigPayload>(initialPayload ?? emptyPayload());
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-
-  /* ── Claude API state ── */
+  
+  /* 当前步骤 */
+  const [step, setStep] = useState<WizardStep>("platforms");
+  
+  /* AI 配置状态 */
   const [apiType, setApiType]       = useState<"official"|"thirdparty"|"skip">("skip");
   const [authType, setAuthType]     = useState<"apikey"|"token">("apikey");
   const [apiKey, setApiKey]         = useState("");
@@ -35,10 +40,6 @@ export function SetupWizard({ request, onComplete, initialPayload }: Props) {
   const [baseUrl, setBaseUrl]       = useState("");
   const [model, setModel]           = useState("");
   const [claudeLoading, setClaudeLoading] = useState(true);
-
-  /* ── Test state ── */
-  const [testBusy, setTestBusy] = useState<PlatformKey | null>(null);
-  const [testMsg, setTestMsg]   = useState<Partial<Record<PlatformKey, { text: string; ok: boolean }>>>({});
 
   /* load existing Claude settings */
   useEffect(() => {
@@ -80,31 +81,45 @@ export function SetupWizard({ request, onComplete, initialPayload }: Props) {
     await request("/api/claude/settings", { method: "POST", body: JSON.stringify({ contents: JSON.stringify({ ...existing, env }, null, 2) }) });
   };
 
-  /* ── test platform ── */
-  const testPlatform = async (pk: PlatformKey) => {
-    const def = PLATFORM_DEFINITIONS.find(d => d.key === pk); if (!def) return;
-    setTestBusy(pk); setTestMsg(m => ({ ...m, [pk]: { text: "", ok: true } }));
-    try {
-      const cfg: Record<string, string> = {}; def.testFields.forEach(f => { cfg[f] = String((payload.platforms[pk] as Record<string, string>)[f] ?? ""); });
-      const r = (await request("/api/config/test", { method: "POST", body: JSON.stringify({ platform: pk, config: cfg }) })) as { success?: boolean; message?: string; error?: string };
-      setTestMsg(m => ({ ...m, [pk]: r.success ? { text: r.message || "配置校验通过。", ok: true } : { text: `配置有问题：${error}`, ok: false } }));
-    } catch (e) { setTestMsg(m => ({ ...m, [pk]: { text: `配置有问题：${error}`, ok: false } })); }
-    finally { setTestBusy(null); }
+  /* ── Step 1: 完成平台配置 → 进入 AI 配置 ── */
+  const handlePlatformsNext = () => {
+    if (!PLATFORM_KEYS.some(k => payload.platforms[k].enabled)) {
+      setError("请至少选择并配置一个 IM 平台。");
+      return;
+    }
+    setError("");
+    setStep("ai-config");
   };
 
-  /* ── save + start ── */
+  /* ── Step 2: 完成 AI 配置 → 保存并启动 ── */
   const saveAndStart = async () => {
     setError(""); setBusy(true);
     try {
       await saveClaudeApi();
       await request("/api/config/save", { method: "POST", body: JSON.stringify(payload) });
       await request("/api/service/start", { method: "POST" });
-      setSuccess(true);
+      setStep("complete");
     } catch (e) { setError(toMsg(e)); } finally { setBusy(false); }
   };
 
+  /* ── 跳过 AI 配置（直接保存） ── */
+  const skipAiAndStart = async () => {
+    setError(""); setBusy(true);
+    try {
+      if (apiType !== "skip") {
+        await saveClaudeApi();
+      }
+      await request("/api/config/save", { method: "POST", body: JSON.stringify(payload) });
+      await request("/api/service/start", { method: "POST" });
+      setStep("complete");
+    } catch (e) { setError(toMsg(e)); } finally { setBusy(false); }
+  };
+
+  /* ── 已配置平台数量 ── */
+  const enabledCount = PLATFORM_KEYS.filter(k => payload.platforms[k].enabled).length;
+
   /* ═══════════════════════════════════════════════════════ */
-  if (success) {
+  if (step === "complete") {
     return (
       <div className="wizard-wrap">
         <div className="wizard" style={{ textAlign: "center", padding: "48px 32px" }}>
@@ -120,93 +135,240 @@ export function SetupWizard({ request, onComplete, initialPayload }: Props) {
   /* ═══════════════════════════════════════════════════════ */
   return (
     <div className="wizard-wrap">
-      <div className="wizard" style={{ maxWidth: 900 }}>
+      <div className="wizard" style={{ maxWidth: 960 }}>
         {/* ── Header ── */}
         <div style={{ padding: "24px 32px 0" }}>
           <h2 className="wizard-title">{"欢迎使用 open-im"}</h2>
-          <p className="wizard-desc">{"这个向导将引导你配置 AI 编程助手桥接。大约需要 2 分钟。"}</p>
-        </div>
-
-        {/* ── Claude API ── */}
-        <div style={{ padding: "0 32px 24px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{"Claude API 配置"}</h3>
-          {claudeLoading ? (
-            <p className="form-hint">{"加载中..."}</p>
-          ) : (
-            <>
-              <div className="wizard-radio-group" style={{ marginBottom: 12 }}>
-                {[
-                  { v: "official" as const,  label: "官方 Anthropic API",   desc: "使用 Anthropic API Key 或 Auth Token" },
-                  { v: "thirdparty" as const, label: "第三方模型", desc: "使用兼容的第三方 API 端点" },
-                  { v: "skip" as const,       label: "已配置",       desc: "如果已配置 API 访问，可跳过此步" },
-                ].map(o => (
-                  <label key={o.v} className={`wizard-radio ${apiType === o.v ? "on" : ""}`}>
-                    <input type="radio" name="apiType" value={o.v} checked={apiType === o.v} onChange={() => setApiType(o.v)} />
-                    <span className="wizard-radio-body">
-                      <span className="wizard-radio-label">{o.label}</span>
-                      <span className="wizard-radio-desc">{o.desc}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {apiType === "official" && (
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <label className={`wizard-radio ${authType === "apikey" ? "on" : ""}`} style={{ flex: 1 }}>
-                    <input type="radio" name="authType" value="apikey" checked={authType === "apikey"} onChange={() => setAuthType("apikey")} />
-                    <span className="wizard-radio-body"><span className="wizard-radio-label">API Key</span><span className="wizard-radio-desc">sk-ant-...</span></span>
-                  </label>
-                  <label className={`wizard-radio ${authType === "token" ? "on" : ""}`} style={{ flex: 1 }}>
-                    <input type="radio" name="authType" value="token" checked={authType === "token"} onChange={() => setAuthType("token")} />
-                    <span className="wizard-radio-body"><span className="wizard-radio-label">Auth Token</span><span className="wizard-radio-desc">claude setup-token</span></span>
-                  </label>
-                </div>
-              )}
-              {apiType === "official" && authType === "apikey" && <input className="form-input mono" type="password" placeholder="sk-ant-..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} />}
-              {apiType === "official" && authType === "token" && <input className="form-input mono" type="password" placeholder="Auth Token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} />}
-              {apiType === "thirdparty" && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input className="form-input mono" placeholder="Token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} />
-                  <input className="form-input mono" placeholder="Base URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-                  <input className="form-input mono" placeholder="Model" value={model} onChange={(e) => setModel(e.target.value)} />
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* ── Platforms Desk Grid ── */}
-        <div style={{ padding: "0 32px 24px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>{"平台配置"}</h3>
-          <div className="platform-grid">
-            {PLATFORM_DEFINITIONS.map((def) => {
-              const pk = def.key as PlatformKey;
-              return (
-                <PlatformCard
-                  key={pk}
-                  def={def}
-                  values={payload.platforms[pk]}
-                  disabledVisual={false}
-                  request={request}
-                  onChange={(p) => upP(pk, p as Partial<WebConfigPayload["platforms"][typeof pk]>)}
-                  onTest={() => void testPlatform(pk)}
-                  testing={testBusy === pk}
-                  testResult={testMsg[pk]}
-                />
-              );
-            })}
+          <p className="wizard-desc">{"这个向导将引导你完成 AI 编程助手桥接配置。大约需要 2 分钟。"}</p>
+          
+          {/* 步骤指示器 */}
+          <div className="wizard-steps">
+            {[
+              { key: "platforms" as const, label: "1. 选择平台" },
+              { key: "ai-config" as const, label: "2. AI 工具" },
+              { key: "complete" as const, label: "3. 完成" },
+            ].map(s => (
+              <button
+                key={s.key}
+                type="button"
+                className={`wizard-step-btn ${step === s.key ? "active" : step === "complete" || (step === "ai-config" && s.key === "platforms") ? "done" : ""}`}
+                disabled={s.key === "complete"}
+                onClick={() => { if (s.key === "platforms") setStep("platforms"); }}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* ── Footer ── */}
-        <div style={{ padding: "16px 32px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span className="form-hint">
-            {PLATFORM_KEYS.filter(k => payload.platforms[k].enabled).length} / {PLATFORM_KEYS.length} {"平台配置"}
-          </span>
-          {error && <div className="msg msg-err" style={{ flex: 1, marginLeft: 16 }}>{error}</div>}
-          <button type="button" className="btn btn-p btn-lg" disabled={busy || !PLATFORM_KEYS.some(k => payload.platforms[k].enabled)} onClick={() => void saveAndStart()}>
-            {busy ? "处理中..." : "保存并启动"}
-          </button>
-        </div>
+        {/* ═══ Step 1: 平台选择 ═══ */}
+        {step === "platforms" && (
+          <div style={{ padding: "0 32px 24px" }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>
+              {"选择要连接的 IM 平台"}
+            </h3>
+            <p style={{ fontSize: 13, color: "var(--c-text-2)", marginBottom: 16 }}>
+              {"选择一个或多个你想接入的聊天平台，微信推荐扫码一键绑定。"}
+            </p>
+            
+            {/* 使用共享的平台配置区域 */}
+            <PlatformSection
+              payload={payload}
+              request={request}
+              onChange={upP}
+              mode="wizard"
+            />
+
+            {/* Footer */}
+            <div style={{ 
+              padding: "16px 0 0", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center" 
+            }}>
+              <span className="form-hint">
+                {enabledCount} / {PLATFORM_KEYS.length} 个平台已配置
+              </span>
+              {error && <div className="msg msg-err" style={{ flex: 1, marginLeft: 16 }}>{error}</div>}
+              <button 
+                type="button" 
+                className="btn btn-p btn-lg" 
+                disabled={enabledCount === 0} 
+                onClick={() => void handlePlatformsNext()}
+              >
+                {"下一步：AI 工具配置 →"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ Step 2: AI 工具配置 ═══ */}
+        {step === "ai-config" && (
+          <div style={{ padding: "0 32px 24px" }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--c-text)" }}>
+              {"AI 工具配置（可选）"}
+            </h3>
+            <p style={{ fontSize: 13, color: "var(--c-text-2)", marginBottom: 16 }}>
+              {"配置 AI 编程助手的 API 凭证。如果已在其他地方配置过，可以跳过此步。"}
+            </p>
+
+            {/* AI 工具选择卡片 */}
+            <div className="wizard-ai-options">
+              {[
+                { v: "official" as const, label: "官方 Anthropic API", desc: "使用 Anthropic API Key 或 Auth Token", icon: "🤖" },
+                { v: "thirdparty" as const, label: "第三方模型", desc: "使用兼容的第三方 API 端点", icon: "🔗" },
+                { v: "skip" as const, label: "跳过", desc: "稍后在设置页面配置", icon: "⏭️" },
+              ].map(o => (
+                <label key={o.v} className={`wizard-radio ${apiType === o.v ? "on" : ""}`} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "16px",
+                  cursor: "pointer",
+                  transition: "all var(--fast)",
+                }}>
+                  <input type="radio" name="apiType" value={o.v} checked={apiType === o.v} onChange={() => setApiType(o.v)} />
+                  <span style={{ fontSize: 24 }}>{o.icon}</span>
+                  <span className="wizard-radio-body">
+                    <span className="wizard-radio-label">{o.label}</span>
+                    <span className="wizard-radio-desc">{o.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {/* API 详细配置表单 */}
+            {apiType !== "skip" && (
+              <div className="wizard-api-form" style={{
+                background: "var(--c-surface-alt)",
+                borderRadius: var => var?.r_l,
+                padding: 20,
+                marginTop: 16,
+                marginBottom: 20,
+                border: "1px solid var(--c-border)",
+              }}>
+                {claudeLoading ? (
+                  <p className="form-hint">{"加载中..."}</p>
+                ) : (
+                  <>
+                    {apiType === "official" && (
+                      <>
+                        <div className="wizard-radio-group" style={{ marginBottom: 12 }}>
+                          {[
+                            { v: "apikey" as const, label: "API Key", hint: "sk-ant-..." },
+                            { v: "token" as const, label: "Auth Token", hint: "claude setup-token" },
+                          ].map(o => (
+                            <label key={o.v} className={`wizard-radio ${authType === o.v ? "on" : ""}`} style={{ flex: 1 }}>
+                              <input type="radio" name="authType" value={o.v} checked={authType === o.v} onChange={() => setAuthType(o.v)} />
+                              <span className="wizard-radio-body">
+                                <span className="wizard-radio-label">{o.label}</span>
+                                <span className="wizard-radio-desc">{o.hint}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                        {authType === "apikey" && (
+                          <input 
+                            className="form-input mono" 
+                            type="password" 
+                            placeholder="sk-ant-..." 
+                            value={apiKey} 
+                            onChange={(e) => setApiKey(e.target.value)}
+                          />
+                        )}
+                        {authType === "token" && (
+                          <input 
+                            className="form-input mono" 
+                            type="password" 
+                            placeholder="Auth Token" 
+                            value={authToken} 
+                            onChange={(e) => setAuthToken(e.target.value)}
+                          />
+                        )}
+                      </>
+                    )}
+                    
+                    {apiType === "thirdparty" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <input className="form-input mono" placeholder="Auth Token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} />
+                        <input className="form-input mono" placeholder="Base URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+                        <input className="form-input mono" placeholder="Model（如 glm-4.7）" value={model} onChange={(e) => setModel(e.target.value)} />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 已选平台摘要 */}
+            <div style={{
+              background: "var(--c-surface-alt)",
+              borderRadius: 8,
+              padding: "14px 18px",
+              marginBottom: 16,
+              border: "1px solid var(--c-border)",
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>已选择的平台：</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {PLATFORM_KEYS.filter(k => payload.platforms[k].enabled).map(k => {
+                  const def = PLATFORM_DEFINITIONS.find(d => d.key === k);
+                  return (
+                    <span key={k} style={{
+                      background: "var(--c-accent-bg)",
+                      color: "var(--c-accent)",
+                      padding: "4px 10px",
+                      borderRadius: 9999,
+                      fontSize: 12,
+                      fontWeight: 500,
+                    }}>
+                      {def?.label || k}
+                    </span>
+                  );
+                })}
+                {enabledCount === 0 && (
+                  <span style={{ fontSize: 12, color: "var(--c-text-3)" }}>尚未选择任何平台</span>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ 
+              padding: "16px 0 0", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center" 
+            }}>
+              <button
+                type="button"
+                className="btn btn-g btn-lg"
+                onClick={() => setStep("platforms")}
+              >
+                {"← 返回修改平台"}
+              </button>
+              
+              {error && <div className="msg msg-err" style={{ flex: 1, marginLeft: 16 }}>{error}</div>}
+              
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-s btn-lg"
+                  onClick={() => void skipAiAndStart()}
+                  disabled={busy}
+                >
+                  {busy ? "处理中..." : "以后再配"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-p btn-lg"
+                  disabled={busy || (apiType === "skip")}
+                  onClick={() => void saveAndStart()}
+                >
+                  {busy ? "处理中..." : "保存并启动 →"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

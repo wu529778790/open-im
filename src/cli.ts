@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { main, needsSetup, runInteractiveSetup } from "./index.js";
+import { main, needsSetup } from "./index.js";
 import { loadConfig } from "./config.js";
 import { checkAndUpdate } from "./check-update.js";
 import { getPublicWebDashboardUrl } from "./constants.js";
@@ -21,25 +21,7 @@ function logWebDashboardAndApi(): void {
   }
 }
 
-async function ensureConfigured(mode: "init" | "start" | "dev"): Promise<boolean> {
-  if (mode === "init") {
-    if (!process.stdin.isTTY) {
-      console.error("CLI setup requires an interactive terminal.");
-      return false;
-    }
-
-    const saved = await runInteractiveSetup();
-    if (!saved) return false;
-
-    try {
-      loadConfig();
-      return true;
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      return false;
-    }
-  }
-
+async function ensureConfigured(mode: "start" | "dev"): Promise<boolean> {
   if (!needsSetup()) {
     try {
       loadConfig();
@@ -134,21 +116,6 @@ async function cmdRestart(): Promise<void> {
   process.exit(0);
 }
 
-async function cmdInit(): Promise<void> {
-  console.log("\nopen-im CLI setup\n");
-
-  const saved = await ensureConfigured("init");
-  if (!saved) {
-    console.log("\nConfiguration was not completed.");
-    process.exit(1);
-  }
-
-  console.log("\nConfiguration saved.");
-  console.log("\nYou can start the app with:");
-  console.log("  open-im start");
-  console.log("  open-im dev");
-}
-
 async function cmdDev(): Promise<void> {
   if (!(await ensureConfigured("dev"))) {
     console.log("Configuration was not completed.");
@@ -181,7 +148,6 @@ Commands:
   start     Run the full app in the background and serve the dashboard
   stop      Stop the full app
   restart   Restart the full app in the background
-  init      Run CLI setup
   dev       Run in the foreground for debugging
   dashboard Open the web dashboard (keeps running until Ctrl+C)
 
@@ -203,7 +169,6 @@ const commands: Record<string, () => Promise<void>> = {
   start: cmdStart,
   stop: cmdStop,
   restart: cmdRestart,
-  init: cmdInit,
   dev: cmdDev,
   dashboard: cmdDashboard,
 };

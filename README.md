@@ -74,6 +74,8 @@ open-im start
 | `/context` | 查看上下文用量 |
 | `/plugins` | 查看已安装插件 |
 | `/status` | 显示状态信息 |
+| `/a` | 查看当前 AI 工具及可选列表 |
+| `/a <工具名>` | 切换当前平台的 AI 工具（claude/codex/codebuddy/opencode） |
 | `/cd <路径>` / `/pwd` | 切换/查看工作目录 |
 
 ### 快捷命令
@@ -90,28 +92,25 @@ open-im start
 
 ### 权限与确认
 
-Claude 使用 Agent SDK 集成，open-im 默认不替 Claude 做额外的允许/拒绝协议。Claude 需要用户确认时，会按它自己的原生交互语义发问；你在 IM 里回复选项、确认或补充说明即可继续同一个会话。
+Claude（Agent SDK）、Codex、CodeBuddy、OpenCode 默认都进入**自动执行模式**：AI 工具需要权限时直接放行，不会在 IM 里卡住等待确认。
 
-如果你希望 Claude 也进入自动执行模式，可以在 Web 控制台的 **AI 工具配置 → Claude Code → 跳过 Claude 权限确认** 打开，或在配置文件里设置：
+> ⚠️ open-im 目前没有把 Claude SDK 的权限确认弹窗转发到 IM。一旦开启原生确认流程，请求会因无人应答而卡死，所以默认全部跳过。未来接入权限 hook 后会提供细粒度控制。
+
+如果需要恢复 Claude 的原生确认流程，可在配置文件里设置：
 
 ```json
 {
   "tools": {
     "claude": {
-      "skipPermissions": true
+      "skipPermissions": false
     }
   }
 }
 ```
 
-也可以用环境变量临时覆盖：
-
 ```bash
-OPEN_IM_SKIP_PERMISSIONS=true open-im start   # 跳过权限确认
-OPEN_IM_SKIP_PERMISSIONS=false open-im start  # 使用 Claude 原生确认
+OPEN_IM_SKIP_PERMISSIONS=false open-im start  # 恢复 Claude 原生确认
 ```
-
-Codex、CodeBuddy、OpenCode 仍保持原来的自动执行默认行为。
 
 ## 会话接力
 
@@ -136,10 +135,13 @@ claude -c             # 接上手机端的对话
 
 - 配置所有平台凭证
 - 启动/停止桥接服务
-- 编辑配置文件
+- 编辑配置文件（open-im / Claude / Codex / CodeBuddy / OpenCode，含 Codex 的 `auth.json` 与 `config.toml`）
+- API 保活设置（定期发送请求延续 5 小时滚动配额，避免 token 浪费）
 - 首次运行自动弹出设置向导
 - 平台卡片支持展开/折叠
 - 一键保存并启动
+
+> 💡 通过 IM 命令 `/a <工具名>` 切换 AI 工具，或 Web 控制台修改平台配置后，**下一条消息立即生效，无需重启**桥接服务。
 
 局域网访问：`export OPEN_IM_WEB_HOST=0.0.0.0`
 
