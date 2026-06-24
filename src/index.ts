@@ -439,8 +439,8 @@ export async function main() {
     const portFile = join(APP_HOME, "open-im.port");
     try {
       if (existsSync(portFile)) unlinkSync(portFile);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      log.debug('Failed to remove port file:', err);
     }
 
     // Stop each platform: abort running tasks, then handle.stop() then module.stop()

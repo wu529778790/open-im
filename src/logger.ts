@@ -51,8 +51,9 @@ function rotateOldLogs() {
     for (let i = MAX_LOG_FILES; i < files.length; i++) {
       unlinkSync(join(logDir, files[i].name));
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    // 日志轮转失败不影响主流程
+    console.error('Failed to rotate log files:', err);
   }
 }
 
@@ -65,8 +66,9 @@ function rotateOldJsonl() {
     for (let i = MAX_LOG_FILES; i < files.length; i++) {
       unlinkSync(join(logDir, files[i].name));
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    // 日志轮转失败不影响主流程
+    console.error('Failed to rotate JSONL files:', err);
   }
 }
 

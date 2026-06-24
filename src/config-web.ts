@@ -111,7 +111,9 @@ export async function startWebConfigServer(options: { mode: WebFlowMode; cwd: st
             // 有效的一次性登录 token：创建会话，设置 Cookie，并重定向到去掉 login_token 的 URL
             const sessionTtlMs = 24 * 60 * 60 * 1000; // 24 小时
             const sessionId = createSession(request, sessionTtlMs);
-            const cookie = buildSessionCookie(sessionId, sessionTtlMs);
+            // 检查是否通过 HTTPS 反代访问
+            const isHttps = request.headers["x-forwarded-proto"] === "https";
+            const cookie = buildSessionCookie(sessionId, sessionTtlMs, isHttps);
 
             requestUrl.searchParams.delete("login_token");
             const redirectPath = requestUrl.pathname + (requestUrl.search ? requestUrl.search : "");

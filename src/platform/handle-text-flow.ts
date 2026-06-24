@@ -26,23 +26,23 @@ import { createLogger, auditLog } from '../logger.js';
 import { handleEnqueueResult, DEFAULT_QUEUE_FULL_MESSAGE, DEFAULT_QUEUED_MESSAGE } from '../shared/utils.js';
 import type { MessageSender } from '../commands/handler.js';
 import { walWrite, walCommit } from '../shared/message-wal.js';
+import { TTLCache } from '@isaacs/ttlcache';
 
 /* ── 幂等性：消息去重 ── */
 const DEDUP_TTL_MS = 60_000; // 1 分钟内的相同 msgId 视为重复
-const dedupCache = new Map<string, number>(); // msgId → timestamp
+const DEDUP_MAX_SIZE = 1000; // 最大缓存条目数
+
+// 使用 TTLCache 自动管理过期条目，避免内存泄漏
+const dedupCache = new TTLCache<string, boolean>({
+  max: DEDUP_MAX_SIZE,
+  ttl: DEDUP_TTL_MS,
+  updateAgeOnGet: false, // 访问时不更新过期时间
+});
 
 function isDuplicate(msgId: string | undefined): boolean {
   if (!msgId) return false;
-  const now = Date.now();
-  const prev = dedupCache.get(msgId);
-  if (prev && now - prev < DEDUP_TTL_MS) return true;
-  dedupCache.set(msgId, now);
-  // 清理过期条目
-  if (dedupCache.size > 1000) {
-    for (const [k, v] of dedupCache) {
-      if (now - v > DEDUP_TTL_MS) dedupCache.delete(k);
-    }
-  }
+  if (dedupCache.has(msgId)) return true;
+  dedupCache.set(msgId, true);
   return false;
 }
 

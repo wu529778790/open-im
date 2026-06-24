@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { randomBytes } from "node:crypto";
+import { parse, serialize } from "cookie";
 
 export interface LoginTokenInfo {
   expiresAt: number;
@@ -72,16 +73,16 @@ export function createSession(request: IncomingMessage, ttlMs: number): string {
 function parseCookies(request: IncomingMessage): Record<string, string> {
   const header = request.headers.cookie;
   if (!header) return {};
-  const cookies: Record<string, string> = {};
-  const parts = header.split(";");
-  for (const part of parts) {
-    const [rawKey, ...rest] = part.split("=");
-    const key = rawKey.trim();
-    if (!key) continue;
-    const value = rest.join("=").trim();
-    cookies[key] = decodeURIComponent(value);
+  // 使用成熟的 cookie 库，更安全可靠
+  const cookies = parse(header);
+  // 转换为 Record<string, string>，过滤掉 undefined 值
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(cookies)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
   }
-  return cookies;
+  return result;
 }
 
 function getSessionIdFromRequest(request: IncomingMessage): string | null {
@@ -108,17 +109,23 @@ export function isSessionValid(request: IncomingMessage): boolean {
   return true;
 }
 
-export function buildSessionCookie(sessionId: string, ttlMs: number): string {
+export function buildSessionCookie(sessionId: string, ttlMs: number, isHttps = false): string {
   const maxAgeSec = Math.floor(ttlMs / 1000);
-  const parts = [
-    `openim_session=${encodeURIComponent(sessionId)}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAgeSec}`,
-  ];
-  // 不设置 Secure，方便本地 http 使用；如果放在 https 反代后，可以在代理层加 Secure
-  return parts.join("; ");
+  const options: Parameters<typeof serialize>[2] = {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: maxAgeSec,
+  };
+  
+  // 根据请求协议动态设置 Secure 标志
+  // 在生产环境（HTTPS 反代后）应该设置为 true
+  if (isHttps || process.env.NODE_ENV === "production") {
+    options.secure = true;
+  }
+  
+  // 使用成熟的 cookie 库的 serialize 函数
+  return serialize("openim_session", sessionId, options);
 }
 
 export function generateLoginUrl(host: string, port: number, loginTtlMs: number): string {
