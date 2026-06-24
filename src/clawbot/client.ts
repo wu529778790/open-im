@@ -353,7 +353,7 @@ function extractTextContent(msg: ILinkMessage): string | null {
       }
       case MessageItemType.VOICE: {
         const transcript = item.voice_item?.text;
-        if (transcript) return `[语音转文字] ${transcript}`;
+        if (transcript) return transcript;
         return '[语音消息（无文字转录）]';
       }
       case MessageItemType.IMAGE:
