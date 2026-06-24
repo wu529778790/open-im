@@ -241,7 +241,7 @@ export function SetupWizard({ request, onComplete, initialPayload }: Props) {
             {apiType !== "skip" && (
               <div className="wizard-api-form" style={{
                 background: "var(--c-surface-alt)",
-                borderRadius: var => var?.r_l,
+                borderRadius: 8,
                 padding: 20,
                 marginTop: 16,
                 marginBottom: 20,
