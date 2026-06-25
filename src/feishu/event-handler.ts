@@ -18,7 +18,7 @@ import { createMediaTargetPath } from '../shared/media-storage.js';
 import { buildSavedMediaPrompt } from '../shared/media-analysis-prompt.js';
 import { buildMediaContext } from '../shared/media-context.js';
 import { buildProgressNote } from '../shared/message-note.js';
-import { createPlatformEventContext } from '../platform/create-event-context.js';
+import { createPlatformEventContext, type RequestRestartFn } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
 import { handleEnqueueResult } from '../shared/utils.js';
@@ -56,7 +56,8 @@ export interface FeishuEventHandlerHandle {
 
 export function setupFeishuHandlers(
   config: Config,
-  sessionManager: SessionManager
+  sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): FeishuEventHandlerHandle {
   // Create shared platform event context
   const ctx = createPlatformEventContext({
@@ -65,6 +66,7 @@ export function setupFeishuHandlers(
     config,
     sessionManager,
     sender: { sendTextReply },
+    requestRestart,
   });
 
   // Feishu-specific streaming state for error recovery

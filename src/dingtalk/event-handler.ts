@@ -13,7 +13,7 @@ import {
   sendDirectorySelection,
 } from './message-sender.js';
 import { ackMessage, downloadRobotMessageFile, registerSessionWebhook } from './client.js';
-import { createPlatformEventContext } from '../platform/create-event-context.js';
+import { createPlatformEventContext, type RequestRestartFn } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
 import { handleEnqueueResult } from '../shared/utils.js';
@@ -187,6 +187,7 @@ async function buildMediaPrompt(
 export function setupDingTalkHandlers(
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): DingTalkEventHandlerHandle {
   configureDingTalkMessageSender({
     cardTemplateId: config.dingtalkCardTemplateId,
@@ -208,6 +209,7 @@ export function setupDingTalkHandlers(
     config,
     sessionManager,
     sender: { sendTextReply, sendDirectorySelection },
+    requestRestart,
   });
   const { accessControl, requestQueue, runningTasks } = ctx;
 

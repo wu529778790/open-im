@@ -8,7 +8,7 @@ import { sendTextReply, sendErrorReply } from './message-sender.js';
 import { startTaskCleanup } from '../shared/task-cleanup.js';
 import { WORKBUDDY_THROTTLE_MS } from '../constants.js';
 import { createLogger } from '../logger.js';
-import { createPlatformEventContext } from '../platform/create-event-context.js';
+import { createPlatformEventContext, type RequestRestartFn } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
 
@@ -24,6 +24,7 @@ export interface WorkBuddyEventHandlerHandle {
 export function setupWorkBuddyHandlers(
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): WorkBuddyEventHandlerHandle {
   // Create shared platform event context
   const ctx = createPlatformEventContext({
@@ -36,6 +37,7 @@ export function setupWorkBuddyHandlers(
         await sendTextReply(null, chatId, text, '');
       },
     },
+    requestRestart,
   });
 
   // Start task cleanup

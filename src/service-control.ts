@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,10 +8,43 @@ import { resolveNodeExecutable } from "./node-exec.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PID_FILE = join(APP_HOME, "open-im-worker.pid");
 const PORT_FILE = join(APP_HOME, "open-im.port");
+/** 重启请求标志文件：worker 优雅退出前置于此文件，manager 的 exit 监听据此判断是否重生 worker。 */
+const RESTART_REQUESTED_FILE = join(APP_HOME, "open-im.restart-requested");
 
 function removePortFile(): void {
   try {
     if (existsSync(PORT_FILE)) unlinkSync(PORT_FILE);
+  } catch {
+    /* ignore */
+  }
+}
+
+// ─── 重启请求标志文件（worker ↔ manager 协作） ───
+
+/** 写入重启请求标志。reason 与时间戳一并记录，便于日志追溯。供 worker 的 /restart 调用。 */
+export function markRestartRequest(reason: string): void {
+  try {
+    const dir = dirname(RESTART_REQUESTED_FILE);
+    if (!existsSync(dir)) return; // APP_HOME 通常已存在；防御性
+    writeFileSync(
+      RESTART_REQUESTED_FILE,
+      JSON.stringify({ reason, at: new Date().toISOString() }, null, 2),
+      "utf-8",
+    );
+  } catch {
+    /* 写失败则 manager 不会重生，退化为普通关闭 */
+  }
+}
+
+/** 是否存在待处理的重启请求。供 manager 的 worker exit 监听判断是否重生。 */
+export function hasRestartRequested(): boolean {
+  return existsSync(RESTART_REQUESTED_FILE);
+}
+
+/** 清除重启请求标志。manager 重生 worker 前调用，避免重复触发。 */
+export function clearRestartRequest(): void {
+  try {
+    if (existsSync(RESTART_REQUESTED_FILE)) unlinkSync(RESTART_REQUESTED_FILE);
   } catch {
     /* ignore */
   }
@@ -82,10 +115,16 @@ export function getServiceStatus(): { running: boolean; pid: number | null } {
   return { running: true, pid };
 }
 
-export function startBackgroundService(cwd: string): { pid: number } {
+/**
+ * Spawn the background service (worker).
+ * Returns the child handle so the manager can supervise it.
+ * If a worker is already running, returns its pid with a null child (manager supervision
+ * already has a child from the initial spawn; web UI callers only need the pid).
+ */
+export function startBackgroundService(cwd: string): { pid: number; child: ChildProcess | null } {
   const current = getServiceStatus();
   if (current.running && current.pid) {
-    return { pid: current.pid };
+    return { pid: current.pid, child: null };
   }
 
   removePid();
@@ -109,7 +148,7 @@ export function startBackgroundService(cwd: string): { pid: number } {
   }
 
   writePid(child.pid);
-  return { pid: child.pid };
+  return { pid: child.pid, child };
 }
 
 export async function waitForBackgroundServiceReady(

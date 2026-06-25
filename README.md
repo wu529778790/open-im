@@ -77,6 +77,7 @@ open-im start
 | `/a` | 查看当前 AI 工具及可选列表 |
 | `/a <工具名>` | 切换当前平台的 AI 工具（claude/codex/codebuddy/opencode） |
 | `/cd <路径>` / `/pwd` | 切换/查看工作目录 |
+| `/restart` | 重启服务（需 `/restart confirm` 确认） |
 
 ### 快捷命令
 

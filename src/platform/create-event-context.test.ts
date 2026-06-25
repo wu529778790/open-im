@@ -52,6 +52,8 @@ function makeSender() {
   };
 }
 
+const noopRequestRestart = vi.fn(async () => {});
+
 describe('createPlatformEventContext', () => {
   it('creates all 4 objects', () => {
     const ctx = createPlatformEventContext({
@@ -60,6 +62,7 @@ describe('createPlatformEventContext', () => {
       config: makeConfig(),
       sessionManager: makeSessionManager(),
       sender: makeSender(),
+      requestRestart: noopRequestRestart,
     });
 
     // accessControl is created via AccessControl constructor
@@ -89,6 +92,7 @@ describe('createPlatformEventContext', () => {
       config: makeConfig(),
       sessionManager: makeSessionManager(),
       sender: makeSender(),
+      requestRestart: noopRequestRestart,
     });
 
     // The CommandHandler was constructed with a getRunningTasksSize function.

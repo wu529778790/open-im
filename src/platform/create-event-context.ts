@@ -14,12 +14,17 @@ import { RequestQueue } from '../queue/request-queue.js';
 import { CommandHandler, type MessageSender } from '../commands/handler.js';
 import type { TaskRunState } from '../shared/ai-task.js';
 
+/** 触发 worker 重启（写重启标志 + 优雅关闭）。由 worker 注入，命令处理器调用。 */
+export type RequestRestartFn = (reason: string) => Promise<void>;
+
 export interface CreateEventContextDeps {
   platform: Platform;
   allowedUserIds: string[];
   config: Config;
   sessionManager: SessionManager;
   sender: MessageSender;
+  /** 触发 /restart 的回调。 */
+  requestRestart: RequestRestartFn;
 }
 
 export interface PlatformEventContext {
@@ -32,7 +37,7 @@ export interface PlatformEventContext {
 export function createPlatformEventContext(
   deps: CreateEventContextDeps,
 ): PlatformEventContext {
-  const { allowedUserIds, config, sessionManager, sender } = deps;
+  const { allowedUserIds, config, sessionManager, sender, requestRestart } = deps;
 
   const accessControl = new AccessControl(allowedUserIds);
   const requestQueue = new RequestQueue();
@@ -44,6 +49,7 @@ export function createPlatformEventContext(
     requestQueue,
     sender,
     getRunningTasksSize: () => runningTasks.size,
+    requestRestart,
   });
 
   return {
