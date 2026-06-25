@@ -6,15 +6,10 @@ import { isFatalReconnectError, jitteredDelay } from "../shared/reconnect.js";
 const log = createLogger("Telegram");
 
 let bot: Telegraf;
-let botUsername: string | undefined;
 
 export function getBot(): Telegraf {
   if (!bot) throw new Error("Telegram bot not initialized");
   return bot;
-}
-
-function getBotUsername(): string | undefined {
-  return botUsername;
 }
 
 export async function initTelegram(
@@ -27,8 +22,7 @@ export async function initTelegram(
   }
   bot = new Telegraf(token);
   setupHandlers(bot);
-  const me = (await bot.telegram.getMe()) as { username?: string };
-  botUsername = me.username;
+  await bot.telegram.getMe();
 
   const launchWithRetry = async (attempt = 1): Promise<void> => {
     try {

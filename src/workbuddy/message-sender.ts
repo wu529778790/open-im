@@ -60,21 +60,3 @@ export async function sendErrorReply(
     stop_reason: 'error',
   });
 }
-
-/**
- * Send streaming chunk to WeChat KF
- */
-function sendStreamingChunk(
-  _client: WorkBuddyCentrifugeClient | null,
-  chatId: string,
-  text: string,
-  msgId: string,
-): void {
-  const client = _client ?? getCentrifugeClient();
-  if (!client) {
-    log.warn('WorkBuddy client not available, cannot send chunk');
-    return;
-  }
-
-  client.sendMessageChunk(chatId, msgId, { type: 'text', text: toReplyPlainText(text) });
-}

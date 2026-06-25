@@ -47,10 +47,6 @@ const reconnectManager = new ReconnectManager({
   },
 });
 
-function getChannelState(): WorkBuddyState {
-  return stateManager.current;
-}
-
 export async function initWorkBuddy(
   config: Config,
   eventHandler: (chatId: string, msgId: string, content: string) => Promise<void>,
@@ -266,10 +262,6 @@ async function connect(): Promise<void> {
 
 export function getCentrifugeClient(): WorkBuddyCentrifugeClient | null {
   return centrifugeClient;
-}
-
-function getOAuth(): WorkBuddyOAuth | null {
-  return oauthClient;
 }
 
 /**

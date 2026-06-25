@@ -16,7 +16,6 @@ import {
   toReplyPlainText,
 } from './utils.js';
 import { createLogger } from '../logger.js';
-import { sanitize } from '../sanitize.js';
 
 const log = createLogger('AITask');
 
@@ -283,7 +282,6 @@ function buildRunOptions(
   sessionManager: SessionManager,
   ctx: TaskContext,
   aiCommand: string,
-  toolAdapter: ToolAdapter,
 ): RunOptions {
   // 权限 hook 尚未接入 IM，暂时全局跳过
   const defaultSkipPermissions = true;
@@ -605,7 +603,7 @@ export function runAITask(
           resolve();
         },
         },
-        buildRunOptions(config, sessionManager, ctx, aiCommand, toolAdapter)
+        buildRunOptions(config, sessionManager, ctx, aiCommand)
       );
       return activeHandle;
     };
