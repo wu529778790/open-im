@@ -56,6 +56,8 @@ export interface CommandHandlerDeps {
   requestQueue: RequestQueue;
   sender: MessageSender;
   getRunningTasksSize: () => number;
+  /** 触发 worker 重启（写重启标志 + 优雅关闭）。供 /restart 调用。 */
+  requestRestart: (reason: string) => Promise<void>;
 }
 
 export type ClaudeRequestHandler = (
@@ -138,6 +140,10 @@ export class CommandHandler {
       if (t === '/a' || t.startsWith('/a ')) return this.handleSwitchAi(chatId, t.slice(2).trim(), platform);
       if (t === '/autopilot') return this.handleAutopilotStatus(chatId, userId);
 
+      // 重启 worker（需 /restart confirm 二次确认，避免误触中断所有任务）
+      if (t === '/restart') return this.handleRestart(chatId, userId, false);
+      if (t === '/restart confirm') return this.handleRestart(chatId, userId, true);
+
       // 快捷命令 — 直接发送预设 prompt 给 AI
       if (t === '/git commit') return this.handleQuickCommand(chatId, userId, 'git commit -m "AI generated commit"', platform);
       if (t === '/git push') return this.handleQuickCommand(chatId, userId, 'git push origin main', platform);
@@ -166,9 +172,44 @@ export class CommandHandler {
     return runBody();
   }
 
+  /**
+   * 重启 worker（IM 桥）：写重启标志文件 + 优雅关闭，由 manager 监督重生。
+   * 需二次确认（/restart confirm）以避免误触中断所有用户的进行中任务。
+   */
+  private async handleRestart(chatId: string, userId: string, confirmed: boolean): Promise<boolean> {
+    if (!confirmed) {
+      const running = this.deps.getRunningTasksSize();
+      const taskLine = running > 0
+        ? `⚠️ 当前有 ${running} 个进行中的任务，重启将全部中断。`
+        : '当前无进行中的任务。';
+      await this.replySender().sendTextReply(
+        chatId,
+        [
+          '🔄 重启服务',
+          '',
+          taskLine,
+          '重启会短暂断开 IM 连接（数秒后自动恢复），Web 面板保持在线。',
+          '',
+          '确认请发送：/restart confirm',
+        ].join('\n'),
+      );
+      return true;
+    }
+
+    // 必须先回复用户，否则 requestRestart 触发的关闭流程会让进程退出、回复发不出去。
+    await this.replySender().sendTextReply(
+      chatId,
+      '🔄 正在重启服务，IM 连接将短暂断开，稍后自动恢复…',
+    );
+    // 不 await：关闭流程会结束当前进程；await 反而可能因连接断开而抛错。
+    this.deps.requestRestart(`/restart by user ${userId}`).catch((err) => {
+      log.error('requestRestart failed:', err);
+    });
+    return true;
+  }
+
   private async handleAutopilotStatus(chatId: string, userId: string): Promise<boolean> {
-    const ap = this.deps.config.autopilot;
-    const lines: string[] = [
+    const ap = this.deps.config.autopilot;    const lines: string[] = [
       '🤖 限流自动恢复 (Autopilot)',
       '',
       `状态: ${ap.enabled ? '✅ 已启用' : '❌ 已禁用'}`,
@@ -218,6 +259,7 @@ export class CommandHandler {
       '/cd <路径> - 切换工作目录',
       '/pwd - 当前工作目录',
       '/autopilot - 查看限流自动恢复状态',
+      '/restart - 重启服务（需 /restart confirm 确认）',
       '',
       '⚡ 快捷命令:',
       '/git commit - 提交代码',

@@ -17,7 +17,7 @@ import { buildMediaContext } from "../shared/media-context.js";
 import { downloadMediaFromUrl } from "../shared/media-storage.js";
 import { setActiveChatId } from "../shared/active-chats.js";
 import { setChatUser } from "../shared/chat-user-map.js";
-import { createPlatformEventContext } from "../platform/create-event-context.js";
+import { createPlatformEventContext, type RequestRestartFn } from "../platform/create-event-context.js";
 import { createPlatformAIRequestHandler } from "../platform/handle-ai-request.js";
 import { handleTextFlow } from "../platform/handle-text-flow.js";
 import { handleEnqueueResult } from "../shared/utils.js";
@@ -137,6 +137,7 @@ export interface QQEventHandlerHandle {
 export function setupQQHandlers(
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): QQEventHandlerHandle {
   // Use shared platform event context factory
   const platformContext = createPlatformEventContext({
@@ -145,6 +146,7 @@ export function setupQQHandlers(
     config,
     sessionManager,
     sender: { sendTextReply, sendDirectorySelection },
+    requestRestart,
   });
 
   const { accessControl, requestQueue, runningTasks } = platformContext;

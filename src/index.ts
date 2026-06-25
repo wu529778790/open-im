@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { getConfiguredAiCommands, loadConfig, needsSetup, resolvePlatformAiCommand, type Platform } from "./config.js";
 import { runInteractiveSetup, runClaudeApiSetup } from "./setup.js";
 import { runWebConfigFlow } from "./config-web.js";
+import { markRestartRequest } from "./service-control.js";
+import type { RequestRestartFn } from "./platform/create-event-context.js";
 
 // 导出供 cli.ts 使用
 export { needsSetup, runInteractiveSetup };
@@ -66,7 +68,11 @@ interface PlatformHandle {
 }
 
 interface PlatformModule {
-  init: (config: ReturnType<typeof loadConfig>, sessionManager: SessionManager) => Promise<PlatformHandle>;
+  init: (
+    config: ReturnType<typeof loadConfig>,
+    sessionManager: SessionManager,
+    requestRestart: RequestRestartFn,
+  ) => Promise<PlatformHandle>;
   stop: () => void | Promise<void>;
   sendNotification?: (chatId: string, message: string) => Promise<void>;
   formatError?: (err: unknown) => string;
@@ -74,18 +80,18 @@ interface PlatformModule {
 
 const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
   telegram: {
-    init: (config, sessionManager) =>
+    init: (config, sessionManager, requestRestart) =>
       new Promise<PlatformHandle>((resolve, reject) => {
         initTelegram(config, (bot) => {
-          resolve(setupTelegramHandlers(bot, config, sessionManager));
+          resolve(setupTelegramHandlers(bot, config, sessionManager, requestRestart));
         }).catch(reject);
       }),
     stop: () => stopTelegram(),
     sendNotification: (chatId, msg) => sendTelegramTextReply(chatId, msg),
   },
   feishu: {
-    init: async (config, sessionManager) => {
-      const handle = setupFeishuHandlers(config, sessionManager);
+    init: async (config, sessionManager, requestRestart) => {
+      const handle = setupFeishuHandlers(config, sessionManager, requestRestart);
       await initFeishu(config, handle.handleEvent);
       return handle;
     },
@@ -94,8 +100,8 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     formatError: (err) => formatFeishuInitError(err),
   },
   qq: {
-    init: async (config, sessionManager) => {
-      const handle = setupQQHandlers(config, sessionManager);
+    init: async (config, sessionManager, requestRestart) => {
+      const handle = setupQQHandlers(config, sessionManager, requestRestart);
       await initQQ(config, handle.handleEvent);
       return handle;
     },
@@ -103,8 +109,8 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     sendNotification: (chatId, msg) => sendQQTextReply(chatId, msg),
   },
   wework: {
-    init: async (config, sessionManager) => {
-      const handle = setupWeWorkHandlers(config, sessionManager);
+    init: async (config, sessionManager, requestRestart) => {
+      const handle = setupWeWorkHandlers(config, sessionManager, requestRestart);
       await initWeWork(config, handle.handleEvent);
       return handle;
     },
@@ -112,8 +118,8 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     sendNotification: (chatId, msg) => sendWeWorkTextReply(chatId, msg),
   },
   dingtalk: {
-    init: async (config, sessionManager) => {
-      const handle = setupDingTalkHandlers(config, sessionManager);
+    init: async (config, sessionManager, requestRestart) => {
+      const handle = setupDingTalkHandlers(config, sessionManager, requestRestart);
       await initDingTalk(config, handle.handleEvent);
       return handle;
     },
@@ -122,8 +128,8 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     // No sendNotification — DingTalk doesn't support proactive messaging
   },
   workbuddy: {
-    init: async (config, sessionManager) => {
-      const handle = setupWorkBuddyHandlers(config, sessionManager);
+    init: async (config, sessionManager, requestRestart) => {
+      const handle = setupWorkBuddyHandlers(config, sessionManager, requestRestart);
       await initWorkBuddy(config, handle.handleEvent);
       return handle;
     },
@@ -131,12 +137,12 @@ const PLATFORM_MODULES: Record<Platform, PlatformModule> = {
     sendNotification: (chatId, msg) => sendWorkBuddyTextReply(null, chatId, msg, randomUUID()),
   },
   clawbot: {
-    init: async (config, sessionManager) => {
+    init: async (config, sessionManager, requestRestart) => {
       const pc = config.platforms.clawbot;
       if (pc?.apiUrl && pc?.apiToken) {
         initClawBotSender(pc.apiUrl, pc.apiToken);
       }
-      const handle = setupClawbotHandlers(config, sessionManager);
+      const handle = setupClawbotHandlers(config, sessionManager, requestRestart);
       await initClawbot(config, handle.handleEvent);
       return handle;
     },
@@ -369,6 +375,14 @@ export async function main() {
   const activeHandles = new Map<Platform, PlatformHandle>();
   const successfulPlatforms: Platform[] = [];
 
+  // restart 触发 worker 重启：写重启标志 + 走优雅关闭（shutdown 见下方，运行时调用时已定义）。
+  // init 时把引用传给各平台，实际调用发生在用户触发 /restart 之后。
+  const restart: RequestRestartFn = async (reason) => {
+    markRestartRequest(reason);
+    log.info(`Restart requested: ${reason}`);
+    await shutdown();
+  };
+
   for (const platform of config.enabledPlatforms) {
     const mod = PLATFORM_MODULES[platform];
     if (!mod) {
@@ -376,7 +390,7 @@ export async function main() {
       continue;
     }
     try {
-      const handle = await mod.init(config, sessionManager);
+      const handle = await mod.init(config, sessionManager, restart);
       activeHandles.set(platform, handle);
       successfulPlatforms.push(platform);
     } catch (err) {

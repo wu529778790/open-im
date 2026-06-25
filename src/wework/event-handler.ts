@@ -23,7 +23,7 @@ import { buildMediaMetadataPrompt } from '../shared/media-prompt.js';
 import { buildSavedMediaPrompt } from '../shared/media-analysis-prompt.js';
 import { buildMediaContext } from '../shared/media-context.js';
 import { buildErrorNote, buildProgressNote } from '../shared/message-note.js';
-import { createPlatformEventContext } from '../platform/create-event-context.js';
+import { createPlatformEventContext, type RequestRestartFn } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
 import { handleEnqueueResult } from '../shared/utils.js';
@@ -227,6 +227,7 @@ export async function buildMediaPrompt(data: WeWorkCallbackMessage, kind: MediaK
 export function setupWeWorkHandlers(
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): WeWorkEventHandlerHandle {
   // Mutable ref that captures the req_id of the message currently being handled.
   // WeWork requires req_id to reply; CommandHandler doesn't carry it, so we inject
@@ -240,6 +241,7 @@ export function setupWeWorkHandlers(
     allowedUserIds: config.weworkAllowedUserIds,
     config,
     sessionManager,
+    requestRestart,
     sender: {
       sendTextReply: (chatId: string, text: string) =>
         sendTextReply(chatId, text, senderCtx.reqId),

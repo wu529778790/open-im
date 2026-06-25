@@ -76,7 +76,8 @@ Each platform: `client.ts` (connect), `event-handler.ts` (parse → delegate), `
 
 **Slash commands** (`src/commands/handler.ts`):
 - Session: `/help`, `/new`, `/sessions`, `/resume`, `/history`, `/delete`, `/rename`, `/fork`
-- Info: `/models`, `/context`, `/plugins`, `/status`, `/cd`, `/pwd`, `/mode`
+- Info: `/models`, `/context`, `/plugins`, `/status`, `/cd`, `/pwd`, `/mode`, `/a`, `/autopilot`
+- Restart: `/restart` (needs `/restart confirm`) — respawns the worker (IM bridge) via the manager supervisor; web dashboard stays online
 - Quick: `/git commit`, `/git push`, `/git pull`, `/test`, `/build`, `/review`, `/explain`
 
 **Quick commands** send predefined prompts to the AI (e.g., `/git commit` → "git commit -m 'AI generated'").

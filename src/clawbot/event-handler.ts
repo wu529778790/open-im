@@ -8,7 +8,7 @@ import { sendTextReply, sendErrorReply } from './message-sender.js';
 import { startTaskCleanup } from '../shared/task-cleanup.js';
 import { CLAWBOT_THROTTLE_MS } from '../constants.js';
 import { createLogger } from '../logger.js';
-import { createPlatformEventContext } from '../platform/create-event-context.js';
+import { createPlatformEventContext, type RequestRestartFn } from '../platform/create-event-context.js';
 import { createPlatformAIRequestHandler, type PlatformSender } from '../platform/handle-ai-request.js';
 import { handleTextFlow } from '../platform/handle-text-flow.js';
 
@@ -24,6 +24,7 @@ export interface ClawBotEventHandlerHandle {
 export function setupClawbotHandlers(
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): ClawBotEventHandlerHandle {
   const ctx = createPlatformEventContext({
     platform: 'clawbot',
@@ -35,6 +36,7 @@ export function setupClawbotHandlers(
         await sendTextReply(chatId, text);
       },
     },
+    requestRestart,
   });
 
   const stopTaskCleanup = startTaskCleanup(ctx.runningTasks);

@@ -17,7 +17,7 @@ import { downloadMediaFromUrl } from "../shared/media-storage.js";
 import { buildSavedMediaPrompt } from "../shared/media-analysis-prompt.js";
 import { buildMediaContext } from "../shared/media-context.js";
 import { buildErrorNote, buildProgressNote } from "../shared/message-note.js";
-import { createPlatformEventContext } from "../platform/create-event-context.js";
+import { createPlatformEventContext, type RequestRestartFn } from "../platform/create-event-context.js";
 import { createPlatformAIRequestHandler, type PlatformSender, type PlatformTaskCallbacks } from "../platform/handle-ai-request.js";
 import { handleTextFlow } from "../platform/handle-text-flow.js";
 import { handleEnqueueResult } from "../shared/utils.js";
@@ -100,6 +100,7 @@ export function setupTelegramHandlers(
   bot: Telegraf,
   config: Config,
   sessionManager: SessionManager,
+  requestRestart: RequestRestartFn,
 ): TelegramEventHandlerHandle {
   // Create shared platform event context
   const platformCtx = createPlatformEventContext({
@@ -108,6 +109,7 @@ export function setupTelegramHandlers(
     config,
     sessionManager,
     sender: { sendTextReply, sendDirectorySelection },
+    requestRestart,
   });
   const { accessControl, requestQueue, runningTasks } = platformCtx;
 
