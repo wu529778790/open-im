@@ -108,7 +108,7 @@ async function connect(): Promise<void> {
     log.error('Host workspace registration failed:', err);
     if (isFatalReconnectError(err)) {
       reconnectManager.setFatal(true);
-      log.warn('WorkBuddy 致命错误（鉴权失败），转慢探测（token 可能已过期）:', err);
+      log.warn('WorkBuddy 致命错误（鉴权失败），转慢探测（token 可能已过期）。请运行 open-im init 重新登录 WorkBuddy。:', err);
     }
     reconnectManager.schedule();
     return;

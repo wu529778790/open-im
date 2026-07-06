@@ -408,7 +408,18 @@ export function runCodeBuddy(
     cliTimeoutHandle = null;
     if (completed) return;
     completed = true;
-    callbacks.onError(`Failed to start CodeBuddy CLI: ${err.message}`);
+    const errorCode = (err as NodeJS.ErrnoException).code;
+    const cliPath = (child as unknown as { spawnfile?: string }).spawnfile ?? 'codebuddy';
+    const cliHint =
+      errorCode === 'ENOENT'
+        ? `CodeBuddy CLI 路径不存在：${cliPath}。请检查 config.tools.codebuddy.cliPath 或重新 open-im init。`
+        : errorCode === 'EFTYPE'
+          ? `CodeBuddy CLI 不是有效的可执行文件：${cliPath}（macOS 可执行性/Shebang 检查失败）。请确认 cliPath 指向二进制或带 shebang 的脚本。`
+          : errorCode === 'EACCES'
+            ? `CodeBuddy CLI 没有执行权限：${cliPath}。请 chmod +x 或检查文件所有者。`
+            : null;
+    log.error(`CodeBuddy CLI spawn error: ${err.message}, code=${errorCode}, path=${cliPath}${cliHint ? ` — ${cliHint}` : ''}`);
+    callbacks.onError(cliHint ?? `无法启动 CodeBuddy：${err.message}`);
   });
 
   // 墙钟超时：防止 CLI 挂死永久占用用户队列槽

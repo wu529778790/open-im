@@ -459,10 +459,22 @@ export function runCodex(
 
   child.on('error', (err) => {
     const errorCode = (err as NodeJS.ErrnoException).code;
-    log.error(`Codex CLI spawn error: ${err.message}, code=${errorCode}, path=${cliPath}`);
+    // EFTYPE / ENOENT / EACCES：cliPath 不可执行、不存在或没有权限。
+    // macOS 上缺少 shebang 的脚本会收到 EFTYPE；Windows 上通常是 ENOENT。
+    // 给出可操作的修复建议，避免用户只看到冷冰冰的 fork/exec 错误。
+    const cliHint =
+      errorCode === 'ENOENT'
+        ? `Codex CLI 路径不存在：${cliPath}。请检查 config.tools.codex.cliPath 或重新 open-im init。`
+        : errorCode === 'EFTYPE'
+          ? `Codex CLI 不是有效的可执行文件：${cliPath}（macOS 可执行性/Shebang 检查失败）。请确认 cliPath 指向二进制或带 shebang 的脚本。`
+          : errorCode === 'EACCES'
+            ? `Codex CLI 没有执行权限：${cliPath}。请 chmod +x 或检查文件所有者。`
+            : null;
+    log.error(`Codex CLI spawn error: ${err.message}, code=${errorCode}, path=${cliPath}${cliHint ? ` — ${cliHint}` : ''}`);
     if (!completed) {
       completed = true;
-      callbacks.onError(`Failed to start Codex CLI: ${err.message}`);
+      const friendlyMsg = cliHint ?? `无法启动 Codex：${err.message}`;
+      callbacks.onError(friendlyMsg);
     }
     gate.childClosed = true;
     finalize();

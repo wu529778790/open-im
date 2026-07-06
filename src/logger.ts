@@ -89,6 +89,10 @@ function checkLogSize(): void {
   
   try {
     const currentLogPath = join(logDir, getLogFileName());
+    // ENOENT 防御：上次轮转刚 unlink 当前文件、新流尚未建立时，
+    // write() 可能追入旧 stream 后立刻触发 checkLogSize()。此时文件不存在，
+    // 直接跳过，下一轮 write() 会自动建好新文件。
+    if (!existsSync(currentLogPath)) return;
     const stats = statSync(currentLogPath);
     
     if (stats.size > MAX_LOG_SIZE) {

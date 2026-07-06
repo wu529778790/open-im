@@ -336,14 +336,28 @@ export async function main() {
   initAdapters(config);
   startKeepalive();
 
-  // 尽早启动 shutdown 并写入 port 文件，使 open-im start 的 8s 就绪超时能通过（平台初始化可能较慢）
+  // 尽早启动 shutdown 并写入 port 文件，使 open-im start 的 8s 就绪超时能通过（平台初始化可能较慢）。
+  // HTTP handler 可能在 platform 初始化完成前被外部调用（如 open-im stop / 探测脚本），
+  // 此时 shutdown 尚未定义。用占位函数兜底：把请求排进队列，shutdown 就绪后执行。
+  const shutdownQueue: Array<() => void> = [];
+  let shutdownImpl: (() => Promise<void>) | null = null;
+  const runShutdown = () => {
+    const fn = shutdownImpl;
+    if (!fn) throw new Error('shutdown not ready');
+    return fn().catch(() => process.exit(1));
+  };
+  const requestShutdown = () => {
+    if (shutdownImpl) runShutdown();
+    else shutdownQueue.push(() => runShutdown());
+  };
+
   let shutdownServer: ReturnType<typeof createServer> | null = null;
   await new Promise<void>((resolve, reject) => {
     shutdownServer = createServer((req, res) => {
       if (req.url === "/shutdown" || req.url === "/") {
         res.writeHead(200, { "Content-Type": "text/plain" });
         res.end("ok");
-        shutdown().catch(() => process.exit(1));
+        requestShutdown();
       } else {
         res.writeHead(404);
         res.end();
@@ -428,6 +442,13 @@ export async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info("Shutting down...");
+
+    // shutdown 已就绪：放行 platform 初始化期间排队的 stop 请求
+    shutdownImpl = shutdown;
+    for (const pending of shutdownQueue.splice(0)) pending();
+
+    // 排队请求已全部触发并 await 完成 → 主动退出，避免进程空转
+    if (shuttingDown) return;
     const uptimeSec = Math.floor((Date.now() - startedAt) / 1000);
     const m = Math.floor(uptimeSec / 60);
     const shutdownMsg = buildShutdownMessage(m);
